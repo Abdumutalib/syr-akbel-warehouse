@@ -637,6 +637,36 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (u.pathname === "/warehouse/sw.js" && req.method === "GET") {
+    serveStatic("public/warehouse-sw.js", res);
+    return;
+  }
+
+  if (u.pathname === "/warehouse/manifest.json" && req.method === "GET") {
+    const access = u.searchParams.get("access") || "";
+    const page = u.searchParams.get("page") || "seller";
+    const pageMap = {
+      seller: "/warehouse/seller",
+      customers: "/warehouse/customers",
+      sale: "/warehouse/seller/sale/cash",
+    };
+    const startPath = pageMap[page] || "/warehouse/seller";
+    const startUrl = access ? `${startPath}?access=${encodeURIComponent(access)}` : startPath;
+    const manifest = {
+      name: "Сыр АКБЕЛ",
+      short_name: "АКБЕЛ",
+      start_url: startUrl,
+      scope: "/warehouse/",
+      display: "standalone",
+      background_color: "#f8f3eb",
+      theme_color: "#9f6b2f",
+      icons: [{ src: "/favicon.svg", sizes: "any", type: "image/svg+xml" }],
+    };
+    res.writeHead(200, { "Content-Type": "application/manifest+json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify(manifest));
+    return;
+  }
+
   if (u.pathname === "/warehouse/assets/warehouse-auth-pin.js" && req.method === "GET") {
     serveWarehouseAsset("warehouse-auth-pin.js", res);
     return;
