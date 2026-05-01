@@ -142,10 +142,11 @@ function requestOriginAllowed(req) {
 
 function staticResponseHeaders(contentType, filePath) {
   const extension = path.extname(filePath).toLowerCase();
-  const isHtml = extension === ".html";
   return {
     "Content-Type": contentType,
-    "Cache-Control": isHtml ? "no-store" : "public, max-age=3600",
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    Pragma: "no-cache",
+    Expires: "0",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
