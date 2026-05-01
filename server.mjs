@@ -91,7 +91,7 @@ function loadWarehouse() {
   return loadWarehouseState(WAREHOUSE_STATE_PATH);
 }
 
-function buildCsvContent(state) {
+function buildCsvContent(state, mode = "all") {
   const userMap = new Map(state.users.map((u) => [u.id, u.fullName]));
   const KIND_LABELS = { sale: "Savdo", payment: "To'lov", "pending-sale": "Kutilayotgan" };
   const STATUS_LABELS = { approved: "Tasdiqlangan", pending: "Kutilayotgan" };
@@ -104,6 +104,11 @@ function buildCsvContent(state) {
   const rows = (state.transactions || [])
     .slice()
     .sort((a, b) => new Date(a.approvedAt || a.createdAt || 0) - new Date(b.approvedAt || b.createdAt || 0))
+    .filter((tx) => {
+      if (mode === "cash") return Number(tx.cashPaidAmount || 0) > 0;
+      if (mode === "transfer") return Number(tx.transferPaidAmount || 0) > 0;
+      return true;
+    })
     .map((tx) => {
       const name = userMap.get(tx.userId) || "Noma'lum";
       const kind = KIND_LABELS[tx.kind || (tx.status === "pending" ? "pending-sale" : "sale")] || tx.kind || "";
@@ -124,19 +129,25 @@ async function uploadCsvToYandex(state) {
   const password = process.env.YANDEX_DISK_PASSWORD?.trim();
   if (!login || !password) return;
   try {
-    const csv = buildCsvContent(state);
     const auth = "Basic " + Buffer.from(`${login}:${password}`).toString("base64");
-    const url = "https://webdav.yandex.ru/akbel-export.csv";
-    const resp = await fetch(url, {
-      method: "PUT",
-      headers: {
-        Authorization: auth,
-        "Content-Type": "text/csv; charset=utf-8",
-      },
-      body: csv,
-    });
-    if (!resp.ok) {
-      console.error("[YandexDisk] Upload failed:", resp.status, await resp.text());
+    const uploads = [
+      { url: "https://webdav.yandex.ru/akbel-export.csv", csv: buildCsvContent(state, "all") },
+      { url: "https://webdav.yandex.ru/akbel-naqd.csv", csv: buildCsvContent(state, "cash") },
+      { url: "https://webdav.yandex.ru/akbel-otkazma.csv", csv: buildCsvContent(state, "transfer") },
+    ];
+
+    for (const item of uploads) {
+      const resp = await fetch(item.url, {
+        method: "PUT",
+        headers: {
+          Authorization: auth,
+          "Content-Type": "text/csv; charset=utf-8",
+        },
+        body: item.csv,
+      });
+      if (!resp.ok) {
+        console.error("[YandexDisk] Upload failed:", item.url, resp.status, await resp.text());
+      }
     }
   } catch (e) {
     console.error("[YandexDisk] Upload error:", e.message);
