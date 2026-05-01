@@ -689,6 +689,16 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (u.pathname === "/icon-192.png" && req.method === "GET") {
+    serveStatic("public/icon-192.png", res);
+    return;
+  }
+
+  if (u.pathname === "/icon-512.png" && req.method === "GET") {
+    serveStatic("public/icon-512.png", res);
+    return;
+  }
+
   if (u.pathname === "/warehouse/sw.js" && req.method === "GET") {
     serveStatic("public/warehouse-sw.js", res);
     return;
@@ -708,6 +718,7 @@ const server = http.createServer(async (req, res) => {
     const startPath = pageMap[page] || "/warehouse/seller";
     const startUrl = access ? `${startPath}?access=${encodeURIComponent(access)}` : startPath;
     const manifest = {
+      id: "/warehouse/app",
       name: "Сыр АКБЕЛ",
       short_name: "АКБЕЛ",
       start_url: startUrl,
@@ -715,7 +726,11 @@ const server = http.createServer(async (req, res) => {
       display: "standalone",
       background_color: "#f8f3eb",
       theme_color: "#9f6b2f",
-      icons: [{ src: "/favicon.svg", sizes: "any", type: "image/svg+xml" }],
+      icons: [
+        { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+        { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+        { src: "/favicon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
+      ],
     };
     res.writeHead(200, { "Content-Type": "application/manifest+json", "Cache-Control": "no-store" });
     res.end(JSON.stringify(manifest));
