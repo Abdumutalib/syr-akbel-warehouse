@@ -1041,6 +1041,7 @@
         authHeader();
         await loadPending();
         authUi.markAuthenticated({ username: usernameEl.value.trim(), password: passwordEl.value });
+        window.dispatchEvent(new CustomEvent('warehouse:operator-profile-changed'));
       } catch (error) {
         setStatus(error.message, true);
       }
@@ -1051,6 +1052,7 @@
         const credentials = await pinAuth.unlockWithPin();
         await loadPending();
         authUi.markAuthenticated(credentials);
+        window.dispatchEvent(new CustomEvent('warehouse:operator-profile-changed'));
       } catch (error) {
         setStatus(error.message, true);
       }
