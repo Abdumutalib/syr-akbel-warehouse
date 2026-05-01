@@ -804,6 +804,90 @@
     };
   }
 
+  function setupWarehouseInstallButton() {
+    const ua = String(window.navigator && window.navigator.userAgent ? window.navigator.userAgent : '').toLowerCase();
+    const isIos = /iphone|ipad|ipod/.test(ua);
+    const isSafari = isIos && /safari/.test(ua) && !/crios|fxios|edgios/.test(ua);
+
+    function isStandalone() {
+      return Boolean(
+        (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+        || window.navigator.standalone === true
+      );
+    }
+
+    if (isStandalone()) {
+      return;
+    }
+
+    let deferredPrompt = null;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.hidden = true;
+    button.textContent = 'Ilovani o\'rnatish';
+    button.setAttribute('aria-label', 'Ilovani o\'rnatish');
+    button.style.position = 'fixed';
+    button.style.right = '14px';
+    button.style.bottom = '14px';
+    button.style.zIndex = '10000';
+    button.style.border = '0';
+    button.style.borderRadius = '999px';
+    button.style.padding = '10px 14px';
+    button.style.font = '600 14px/1.2 system-ui, -apple-system, Segoe UI, sans-serif';
+    button.style.color = '#fff';
+    button.style.background = '#7d501d';
+    button.style.boxShadow = '0 8px 24px rgba(0,0,0,.2)';
+    button.style.cursor = 'pointer';
+
+    function mountButton() {
+      if (!button.isConnected && document.body) {
+        document.body.appendChild(button);
+      }
+    }
+
+    function setVisible(visible, text) {
+      mountButton();
+      if (text) {
+        button.textContent = text;
+      }
+      button.hidden = !visible;
+    }
+
+    if (isSafari) {
+      setVisible(true, 'Home screenga qo\'shish');
+    }
+
+    window.addEventListener('beforeinstallprompt', function (event) {
+      event.preventDefault();
+      deferredPrompt = event;
+      setVisible(true, 'Ilovani o\'rnatish');
+    });
+
+    window.addEventListener('appinstalled', function () {
+      deferredPrompt = null;
+      setVisible(false);
+    });
+
+    button.addEventListener('click', async function () {
+      if (deferredPrompt) {
+        try {
+          await deferredPrompt.prompt();
+          await deferredPrompt.userChoice;
+        } catch (error) {
+        }
+        deferredPrompt = null;
+        setVisible(false);
+        return;
+      }
+
+      if (isSafari) {
+        window.alert('Safari menyusidan Share ni bosing, keyin Add to Home Screen ni tanlang.');
+      }
+    });
+  }
+
+  setupWarehouseInstallButton();
+
   window.createWarehousePinAuth = createWarehousePinAuth;
   window.createWarehouseAuthUi = createWarehouseAuthUi;
   window.getWarehouseOperatorProfile = readOperatorProfile;
