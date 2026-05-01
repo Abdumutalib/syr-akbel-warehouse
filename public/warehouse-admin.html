@@ -427,6 +427,7 @@
             <button id="clear-pin" class="secondary">PINni o'chirish</button>
             <button id="show-login" class="secondary hidden">Login bilan kirish</button>
             <button id="reload" class="secondary">Qayta yuklash</button>
+            <button id="export-excel" class="secondary">Excel eksport</button>
           </div>
           <div id="authHint" style="color: #6d6255; font-size: 14px; margin-top: 8px;">Birinchi marta login/password bilan kiring. PIN yozib saqlasangiz, keyingi safar шу PIN билан кириш мумкин.</div>
         </div>
@@ -593,6 +594,7 @@
     const unlockPinButtonEl = document.getElementById("unlock-pin");
     const clearPinButtonEl = document.getElementById("clear-pin");
     const showLoginButtonEl = document.getElementById("show-login");
+    const exportExcelButtonEl = document.getElementById("export-excel");
     const authHintEl = document.getElementById("authHint");
     const stockKgEl = document.getElementById("stockKg");
     const receiveStockKgEl = document.getElementById("receiveStockKg");
@@ -1082,6 +1084,34 @@
     document.getElementById("reload").addEventListener("click", async () => {
       try {
         await loadPending();
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    exportExcelButtonEl.addEventListener("click", async () => {
+      try {
+        const response = await fetch("/warehouse/api/warehouse/export.csv", {
+          method: "GET",
+          headers: {
+            Authorization: authHeader(),
+          },
+        });
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error || "Eksportni yuklab bo'lmadi");
+        }
+        const blob = await response.blob();
+        const downloadUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+        link.href = downloadUrl;
+        link.download = `warehouse-export-${stamp}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(downloadUrl);
+        setStatus("Excel eksport yuklab olindi.");
       } catch (error) {
         setStatus(error.message, true);
       }

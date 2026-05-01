@@ -410,6 +410,14 @@ async function sendTelegramMessage(chatId, text) {
   return response.ok;
 }
 
+async function sendTelegramChannelMessage(text) {
+  const channelId = process.env.TELEGRAM_CHANNEL_ID?.trim();
+  if (!channelId || !text) {
+    return false;
+  }
+  return sendTelegramMessage(channelId, text);
+}
+
 function buildPendingReply(result) {
   return [
     "Qabul qilindi.",
@@ -640,6 +648,7 @@ const server = http.createServer(async (req, res) => {
         setCustomerSellerBalanceVisibility,
         seedWarehouseStock,
         sendApiJson,
+        sendTelegramChannelMessage,
         sendTelegramMessage,
         summarizeApprovedTransactions,
         summarizeOperatorDailyActivity,

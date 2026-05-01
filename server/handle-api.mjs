@@ -34,6 +34,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     setCustomerSellerBalanceVisibility,
     seedWarehouseStock,
     sendApiJson,
+    sendTelegramChannelMessage,
     sendTelegramMessage,
     summarizeApprovedTransactions,
     summarizeOperatorDailyActivity,
@@ -74,6 +75,94 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       role: entry.role,
       permissions: Array.isArray(entry.permissions) ? entry.permissions : [],
     };
+  }
+
+  function formatNumber(value) {
+    return new Intl.NumberFormat("ru-RU").format(Number(value || 0));
+  }
+
+  function toCsvCell(value) {
+    const normalized = String(value == null ? "" : value);
+    if (/[,"\n\r]/.test(normalized)) {
+      return `"${normalized.replace(/"/g, '""')}"`;
+    }
+    return normalized;
+  }
+
+  function toCsvRow(values) {
+    return values.map((value) => toCsvCell(value)).join(",");
+  }
+
+  function buildWarehouseExportCsv(state, pricing) {
+    const lines = [];
+    const approved = listApprovedTransactions(state, "all", pricing);
+    const customers = listCustomerSummaries(state, pricing);
+    const orders = listWarehouseOrders(state);
+
+    lines.push(toCsvRow(["TYPE", "DATE", "CUSTOMER", "KG", "BLOCKS", "TOTAL_SUM", "PAID_SUM", "DEBT_SUM", "PAYMENT_TYPE", "OPERATOR", "NOTE"]));
+    for (const entry of approved) {
+      lines.push(toCsvRow([
+        entry.kind || "sale",
+        entry.approvedAt || entry.createdAt || "",
+        entry.userFullName || entry.fullName || "",
+        Number(entry.amountKg || 0),
+        Number(entry.blockCount || 0),
+        Number(entry.totalPrice || 0),
+        Number(entry.paidAmount || 0),
+        Math.max(0, Number(entry.totalPrice || 0) - Number(entry.paidAmount || 0)),
+        entry.priceType || entry.paymentType || "",
+        entry.operatorFullName || entry.operatorUsername || "",
+        entry.note || "",
+      ]));
+    }
+
+    lines.push("");
+    lines.push(toCsvRow(["CUSTOMERS"]));
+    lines.push(toCsvRow(["ID", "FULL_NAME", "PHONE", "TOTAL_TAKEN_KG", "TOTAL_SALES_SUM", "TOTAL_PAID_SUM", "CURRENT_DEBT_SUM", "PENDING_COUNT"]));
+    for (const customer of customers) {
+      lines.push(toCsvRow([
+        customer.id,
+        customer.fullName || "",
+        customer.phone || "",
+        Number(customer.totalTakenKg || 0),
+        Number(customer.totalSales || 0),
+        Number(customer.totalPaid || 0),
+        Number(customer.currentDebt || 0),
+        Number(customer.pendingCount || 0),
+      ]));
+    }
+
+    lines.push("");
+    lines.push(toCsvRow(["ORDERS"]));
+    lines.push(toCsvRow(["ID", "CREATED_AT", "CUSTOMER", "AMOUNT_KG", "STATUS", "OPERATOR", "NOTE"]));
+    for (const order of orders) {
+      lines.push(toCsvRow([
+        order.id,
+        order.createdAt || "",
+        order.customerFullName || order.fullName || "",
+        Number(order.amountKg || 0),
+        order.status || "",
+        order.operatorFullName || order.operatorUsername || "",
+        order.note || "",
+      ]));
+    }
+
+    return `\uFEFF${lines.join("\r\n")}`;
+  }
+
+  async function notifyTelegramChannel(lines) {
+    if (typeof sendTelegramChannelMessage !== "function") {
+      return;
+    }
+    const text = Array.isArray(lines) ? lines.filter(Boolean).join("\n") : String(lines || "");
+    if (!text) {
+      return;
+    }
+    try {
+      await sendTelegramChannelMessage(text);
+    } catch {
+      // Channel notification errors must not break core business flows.
+    }
   }
 
   function serializeOrderCustomerDirectory(state) {
@@ -361,6 +450,12 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       const state = loadWarehouse();
       const order = createWarehouseOrder(state, body, operator);
       saveWarehouse(state);
+      await notifyTelegramChannel([
+        "🧾 АКБЕЛ • Zakaz yozildi",
+        `Mijoz: ${order?.customerFullName || order?.fullName || "-"}`,
+        `Hajm: ${formatNumber(order?.amountKg || 0)} kg`,
+        `Operator: ${operator?.fullName || operator?.username || "-"}`,
+      ]);
       sendApiJson(res, 201, {
         ok: true,
         order,
@@ -668,6 +763,26 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     return true;
   }
 
+  if (apiPath === "/api/warehouse/export.csv" && req.method === "GET") {
+    if (!assertWarehouseAdmin(req, res)) {
+      return true;
+    }
+    const state = loadWarehouse();
+    const pricing = currentWarehousePricing(state);
+    const csv = buildWarehouseExportCsv(state, pricing);
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    res.writeHead(200, {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename=warehouse-export-${stamp}.csv`,
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+      Pragma: "no-cache",
+      Expires: "0",
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.end(csv);
+    return true;
+  }
+
   if (apiPath === "/api/warehouse/seller-sale" && req.method === "POST") {
     const body = await readPostJson(req);
     if (body === null) {
@@ -701,6 +816,14 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         result.transaction.photo = savedPhotos[0];
       }
       saveWarehouse(state);
+      await notifyTelegramChannel([
+        "🧀 АКБЕЛ • Savdo yozildi",
+        `Mijoz: ${result.user?.fullName || "-"}`,
+        `Hajm: ${formatNumber(result.transaction?.amountKg || 0)} kg`,
+        `Summa: ${formatNumber(result.transaction?.totalPrice || 0)} so'm`,
+        `To'lov turi: ${String(result.transaction?.priceType || priceType || "cash")}`,
+        `Operator: ${operator?.fullName || operator?.username || "-"}`,
+      ]);
       sendApiJson(res, 201, {
         ok: true,
         customer: result.user,
@@ -744,6 +867,13 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         result.transaction.photo = savedPhotos[0];
       }
       saveWarehouse(state);
+      await notifyTelegramChannel([
+        "💳 АКБЕЛ • To'lov yozildi",
+        `Mijoz: ${result.user?.fullName || "-"}`,
+        `To'lov: ${formatNumber(result.transaction?.paidAmount || 0)} so'm`,
+        `Qolgan qarz: ${formatNumber(result.debt || 0)} so'm`,
+        `Operator: ${operator?.fullName || operator?.username || "-"}`,
+      ]);
       sendApiJson(res, 201, {
         ok: true,
         customer: result.user,
@@ -780,6 +910,11 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         actor: operator,
       });
       saveWarehouse(state);
+      await notifyTelegramChannel([
+        "📦 АКБЕЛ • Pul topshirildi",
+        `Sotuvchi: ${operator?.fullName || operator?.username || "-"}`,
+        `Miqdor: ${formatNumber(handoff?.amount || 0)} so'm`,
+      ]);
       sendApiJson(res, 201, {
         ok: true,
         handoff,
@@ -852,6 +987,12 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         { pricing }
       );
       saveWarehouse(state);
+      await notifyTelegramChannel([
+        "✅ АКБЕЛ • Pending tasdiqlandi",
+        `Mijoz: ${result.user?.fullName || "-"}`,
+        `Savdo: ${formatNumber(result.transaction?.totalPrice || 0)} so'm`,
+        `Qarz: ${formatNumber(result.debt || 0)} so'm`,
+      ]);
       await sendTelegramMessage(
         result.user?.telegramId,
         buildDebtReply(result.user?.fullName || "mijoz", result.debt)
