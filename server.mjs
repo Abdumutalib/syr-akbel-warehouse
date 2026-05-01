@@ -649,6 +649,9 @@ const server = http.createServer(async (req, res) => {
       seller: "/warehouse/seller",
       customers: "/warehouse/customers",
       sale: "/warehouse/seller/sale/cash",
+      admin: "/warehouse/admin",
+      ledger: "/warehouse/admin/cash",
+      customer: "/warehouse/customers",
     };
     const startPath = pageMap[page] || "/warehouse/seller";
     const startUrl = access ? `${startPath}?access=${encodeURIComponent(access)}` : startPath;
