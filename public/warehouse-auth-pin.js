@@ -2,6 +2,7 @@
   const VAULT_KEY = 'warehouse-pin-vault-v2';
   const LEGACY_VAULT_KEY = 'warehouse-pin-vault-v1';
   const OPERATOR_PROFILE_KEY = 'warehouse-operator-profile-v1';
+  const WAREHOUSE_STORAGE_PREFIX = 'warehouse-';
   const STAFF_PERMISSION_KEYS = ['seller', 'customers', 'cash', 'transfer'];
   const LEGACY_PASSWORD_KEYS = [
     'warehouse-admin-password',
@@ -12,6 +13,92 @@
   const cryptoApi = window.crypto || window.msCrypto || null;
   const encoder = typeof window.TextEncoder === 'function' ? new window.TextEncoder() : null;
   const decoder = typeof window.TextDecoder === 'function' ? new window.TextDecoder() : null;
+
+  function isWarehouseStorageKey(key) {
+    return String(key || '').indexOf(WAREHOUSE_STORAGE_PREFIX) === 0;
+  }
+
+  function enforceEphemeralWarehouseStorage() {
+    if (!window.localStorage || !window.sessionStorage) {
+      return;
+    }
+    const local = window.localStorage;
+    const session = window.sessionStorage;
+
+    // Move any previously persisted warehouse keys into session storage, then purge disk-backed copies.
+    try {
+      const keysToMove = [];
+      for (let index = 0; index < local.length; index += 1) {
+        const key = local.key(index);
+        if (isWarehouseStorageKey(key)) {
+          keysToMove.push(key);
+        }
+      }
+      keysToMove.forEach((key) => {
+        try {
+          const value = local.getItem(key);
+          if (value != null) {
+            session.setItem(key, value);
+          }
+        } catch (error) {}
+        try {
+          local.removeItem(key);
+        } catch (error) {}
+      });
+    } catch (error) {}
+
+    const nativeSetItem = local.setItem.bind(local);
+    const nativeGetItem = local.getItem.bind(local);
+    const nativeRemoveItem = local.removeItem.bind(local);
+
+    try {
+      local.setItem = function setItemPatched(key, value) {
+        if (isWarehouseStorageKey(key)) {
+          try {
+            session.setItem(String(key), String(value));
+          } catch (error) {}
+          try {
+            nativeRemoveItem(String(key));
+          } catch (error) {}
+          return;
+        }
+        nativeSetItem(key, value);
+      };
+
+      local.getItem = function getItemPatched(key) {
+        if (isWarehouseStorageKey(key)) {
+          try {
+            const fromSession = session.getItem(String(key));
+            if (fromSession != null) {
+              return fromSession;
+            }
+          } catch (error) {}
+          try {
+            const fromLocal = nativeGetItem(String(key));
+            if (fromLocal != null) {
+              session.setItem(String(key), fromLocal);
+              nativeRemoveItem(String(key));
+            }
+            return fromLocal;
+          } catch (error) {
+            return null;
+          }
+        }
+        return nativeGetItem(key);
+      };
+
+      local.removeItem = function removeItemPatched(key) {
+        if (isWarehouseStorageKey(key)) {
+          try {
+            session.removeItem(String(key));
+          } catch (error) {}
+        }
+        nativeRemoveItem(key);
+      };
+    } catch (error) {}
+  }
+
+  enforceEphemeralWarehouseStorage();
 
   function encodeUtf8(value) {
     const normalized = String(value || '');
