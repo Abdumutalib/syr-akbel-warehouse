@@ -124,6 +124,64 @@ function buildCsvContent(state, mode = "all") {
   return "\uFEFF" + [header, ...rows].join("\r\n");
 }
 
+function buildDailySummaryCsv(state) {
+  const SEP = ";";
+  const csvEscape = (v) => {
+    const s = String(v == null ? "" : v);
+    return s.includes(SEP) || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const fmtMoney = (n) => Math.round(n).toLocaleString("ru-RU");
+
+  // Approved transactions only
+  const approved = (state.transactions || []).filter((tx) => tx.status === "approved");
+
+  // Group by date
+  const byDate = new Map();
+  for (const tx of approved) {
+    const dateStr = tx.approvedAt || tx.createdAt || "";
+    const day = dateStr ? new Date(dateStr).toLocaleDateString("ru-RU") : "Noma'lum";
+    if (!byDate.has(day)) byDate.set(day, { savdo: 0, naqd: 0, otkazma: 0, topshirilgan: 0 });
+    const d = byDate.get(day);
+    if (tx.kind === "sale" || !tx.kind || tx.kind === "pending-sale") {
+      d.savdo += Number(tx.totalPrice || 0);
+    }
+    d.naqd += Number(tx.cashPaidAmount || 0);
+    d.otkazma += Number(tx.transferPaidAmount || 0);
+    if (tx.kind === "payment") {
+      d.topshirilgan += Number((tx.cashPaidAmount || 0)) + Number((tx.transferPaidAmount || 0));
+    }
+  }
+
+  // Sort by date
+  const sortedDays = [...byDate.entries()].sort((a, b) => {
+    const parse = (s) => { const [d, m, y] = s.split("."); return new Date(+y, +m - 1, +d); };
+    try { return parse(a[0]) - parse(b[0]); } catch { return 0; }
+  });
+
+  // Overall totals
+  let totalSavdo = 0, totalNaqd = 0, totalOtkazma = 0, totalTopshirilgan = 0;
+  for (const [, d] of sortedDays) {
+    totalSavdo += d.savdo;
+    totalNaqd += d.naqd;
+    totalOtkazma += d.otkazma;
+    totalTopshirilgan += d.topshirilgan;
+  }
+  const totalPaid = totalNaqd + totalOtkazma;
+  const umumiyQarzdorlik = Math.max(0, totalSavdo - totalPaid);
+
+  const header = ["Sana", "Kunlik savdo", "Naqd to'lov", "O'tkazma to'lov", "Jami to'langan", "Sotuvchi topshirgan", "Kunlik qarz"].join(SEP);
+  const rows = sortedDays.map(([day, d]) => {
+    const jami = d.naqd + d.otkazma;
+    const qarz = Math.max(0, d.savdo - jami);
+    return [day, fmtMoney(d.savdo), fmtMoney(d.naqd), fmtMoney(d.otkazma), fmtMoney(jami), fmtMoney(d.topshirilgan), fmtMoney(qarz)].map(csvEscape).join(SEP);
+  });
+
+  const jamiRow = ["JAMI", fmtMoney(totalSavdo), fmtMoney(totalNaqd), fmtMoney(totalOtkazma), fmtMoney(totalPaid), fmtMoney(totalTopshirilgan), fmtMoney(umumiyQarzdorlik)].map(csvEscape).join(SEP);
+  const debtRow = ["Umumiy qarzdorlik", fmtMoney(umumiyQarzdorlik), "", "", "", "", ""].map(csvEscape).join(SEP);
+
+  return "\uFEFF" + [header, ...rows, "", jamiRow, debtRow].join("\r\n");
+}
+
 async function uploadCsvToYandex(state) {
   const login = process.env.YANDEX_DISK_LOGIN?.trim();
   const password = process.env.YANDEX_DISK_PASSWORD?.trim();
@@ -134,6 +192,7 @@ async function uploadCsvToYandex(state) {
       { url: "https://webdav.yandex.ru/akbel-export.csv", csv: buildCsvContent(state, "all") },
       { url: "https://webdav.yandex.ru/akbel-naqd.csv", csv: buildCsvContent(state, "cash") },
       { url: "https://webdav.yandex.ru/akbel-otkazma.csv", csv: buildCsvContent(state, "transfer") },
+      { url: "https://webdav.yandex.ru/akbel-hisobot.csv", csv: buildDailySummaryCsv(state) },
     ];
 
     for (const item of uploads) {
