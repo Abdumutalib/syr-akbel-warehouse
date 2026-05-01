@@ -418,6 +418,129 @@ async function sendTelegramChannelMessage(text) {
   return sendTelegramMessage(channelId, text);
 }
 
+async function sendTelegramAdminDm(text) {
+  const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID?.trim();
+  if (!adminChatId || !text) return false;
+  return sendTelegramMessage(adminChatId, text);
+}
+
+function buildChannelSaleMsg(userName, amountKg, totalPrice, cashPaid, transferPaid, debt) {
+  const lines = [
+    `🧀 ${WAREHOUSE_COMPANY_NAME}`,
+    `📦 Yangi savdo`,
+    ``,
+    `👤 Mijoz: ${userName}`,
+    `⚖️ Hajm: ${amountKg} kg`,
+    `💰 Narx: ${formatMoney(totalPrice)} so'm`,
+  ];
+  if (cashPaid > 0) lines.push(`💵 Naqd: ${formatMoney(cashPaid)} so'm`);
+  if (transferPaid > 0) lines.push(`📲 O'tkazma: ${formatMoney(transferPaid)} so'm`);
+  if (debt > 0) {
+    lines.push(`🔴 Qarz: ${formatMoney(debt)} so'm`);
+  } else {
+    lines.push(`✅ To'liq to'landi`);
+  }
+  return lines.join("\n");
+}
+
+function buildChannelPaymentMsg(userName, cashPaid, transferPaid, debt) {
+  const paidTotal = cashPaid + transferPaid;
+  const lines = [
+    `🧀 ${WAREHOUSE_COMPANY_NAME}`,
+    `💳 To'lov qabul qilindi`,
+    ``,
+    `👤 Mijoz: ${userName}`,
+  ];
+  if (cashPaid > 0) lines.push(`💵 Naqd: ${formatMoney(cashPaid)} so'm`);
+  if (transferPaid > 0) lines.push(`📲 O'tkazma: ${formatMoney(transferPaid)} so'm`);
+  if (cashPaid <= 0 && transferPaid <= 0) lines.push(`✅ To'landi: ${formatMoney(paidTotal)} so'm`);
+  if (debt > 0) {
+    lines.push(`🔴 Qolgan qarz: ${formatMoney(debt)} so'm`);
+  } else {
+    lines.push(`✅ Qarz to'liq yopildi`);
+  }
+  return lines.join("\n");
+}
+
+function buildChannelApprovalMsg(userName, amountKg, totalPrice, cashPaid, transferPaid, debt) {
+  const lines = [
+    `🧀 ${WAREHOUSE_COMPANY_NAME}`,
+    `✅ Tasdiqlandi`,
+    ``,
+    `👤 Mijoz: ${userName}`,
+    `⚖️ Hajm: ${amountKg} kg`,
+    `💰 Narx: ${formatMoney(totalPrice)} so'm`,
+  ];
+  if (cashPaid > 0) lines.push(`💵 Naqd: ${formatMoney(cashPaid)} so'm`);
+  if (transferPaid > 0) lines.push(`📲 O'tkazma: ${formatMoney(transferPaid)} so'm`);
+  if (debt > 0) {
+    lines.push(`🔴 Qarz: ${formatMoney(debt)} so'm`);
+  } else {
+    lines.push(`✅ To'liq to'landi`);
+  }
+  return lines.join("\n");
+}
+
+function buildChannelNewOrderMsg(userName, amountKg, totalPrice) {
+  return [
+    `🧀 ${WAREHOUSE_COMPANY_NAME}`,
+    `🆕 Yangi buyurtma (kutmoqda)`,
+    ``,
+    `👤 Mijoz: ${userName}`,
+    `⚖️ Hajm: ${amountKg} kg`,
+    `💰 Narx: ${formatMoney(totalPrice)} so'm`,
+  ].join("\n");
+}
+
+function buildAdminNewOrderMsg(userName, amountKg, totalPrice) {
+  return [
+    `🧀 ${WAREHOUSE_COMPANY_NAME}`,
+    `🔔 Yangi buyurtma!`,
+    ``,
+    `👤 Mijoz: ${userName}`,
+    `⚖️ Hajm: ${amountKg} kg`,
+    `💰 Narx: ${formatMoney(totalPrice)} so'm`,
+    ``,
+    `🔗 akbelim.com/warehouse/admin`,
+  ].join("\n");
+}
+
+function buildCustomerSaleMsg(userName, amountKg, totalPrice, debt) {
+  const lines = [
+    `🧀 ${WAREHOUSE_COMPANY_NAME}`,
+    ``,
+    `Hurmatli ${userName}, xarid uchun rahmat!`,
+    `⚖️ Hajm: ${amountKg} kg`,
+    `💰 Narx: ${formatMoney(totalPrice)} so'm`,
+  ];
+  if (debt > 0) {
+    lines.push(`🔴 Qolgan qarz: ${formatMoney(debt)} so'm`);
+  } else {
+    lines.push(`✅ To'liq to'landi. Rahmat!`);
+  }
+  return lines.join("\n");
+}
+
+function buildCustomerPaymentMsg(userName, cashPaid, transferPaid, debt) {
+  const paidTotal = cashPaid + transferPaid;
+  const lines = [
+    `🧀 ${WAREHOUSE_COMPANY_NAME}`,
+    ``,
+    `Hurmatli ${userName}, to'lovingiz qabul qilindi.`,
+  ];
+  if (cashPaid > 0 && transferPaid > 0) {
+    lines.push(`💵 Naqd: ${formatMoney(cashPaid)} + 📲 O'tkazma: ${formatMoney(transferPaid)} so'm`);
+  } else {
+    lines.push(`✅ To'landi: ${formatMoney(paidTotal)} so'm`);
+  }
+  if (debt > 0) {
+    lines.push(`🔴 Qolgan qarz: ${formatMoney(debt)} so'm`);
+  } else {
+    lines.push(`✅ Qarz to'liq yopildi. Rahmat!`);
+  }
+  return lines.join("\n");
+}
+
 function buildPendingReply(result) {
   return [
     "Qabul qilindi.",
@@ -648,8 +771,16 @@ const server = http.createServer(async (req, res) => {
         setCustomerSellerBalanceVisibility,
         seedWarehouseStock,
         sendApiJson,
+        sendTelegramAdminDm,
         sendTelegramChannelMessage,
         sendTelegramMessage,
+        buildChannelSaleMsg,
+        buildChannelPaymentMsg,
+        buildChannelApprovalMsg,
+        buildChannelNewOrderMsg,
+        buildAdminNewOrderMsg,
+        buildCustomerSaleMsg,
+        buildCustomerPaymentMsg,
         summarizeApprovedTransactions,
         summarizeOperatorDailyActivity,
         summarizeWarehouseReceipts,
