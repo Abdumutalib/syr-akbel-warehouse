@@ -233,6 +233,9 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (apiPath === "/api/warehouse/staff-directory" && req.method === "GET") {
+    if (!assertWarehouseAdmin(req, res)) {
+      return true;
+    }
     const state = loadWarehouse();
     sendApiJson(res, 200, {
       ok: true,

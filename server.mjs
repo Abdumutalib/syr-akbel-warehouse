@@ -140,6 +140,46 @@ function requestOriginAllowed(req) {
   return !origin || origin === WAREHOUSE_ALLOWED_ORIGIN;
 }
 
+function requiredWarehouseRoutePermissions(pathname) {
+  if (pathname === "/warehouse/seller" || pathname === "/warehouse/seller/sale/cash") {
+    return ["seller"];
+  }
+  if (pathname === "/warehouse/seller/sale/transfer") {
+    return ["seller", "transfer"];
+  }
+  if (pathname === "/warehouse/customers" || pathname === "/warehouse/orders") {
+    return ["customers", "seller", "cash", "transfer"];
+  }
+  if (/^\/warehouse\/customers\/\d+$/.test(pathname)) {
+    return ["customers", "seller", "cash", "transfer"];
+  }
+  if (pathname === "/warehouse/admin/cash") {
+    return ["cash"];
+  }
+  if (pathname === "/warehouse/admin/transfer") {
+    return ["transfer"];
+  }
+  return null;
+}
+
+function hasWarehouseRouteAccess(req, u) {
+  const requiredPermissions = requiredWarehouseRoutePermissions(u.pathname);
+  if (!requiredPermissions) {
+    return true;
+  }
+  const accessToken = (u.searchParams.get("access") || extractWarehouseAccessToken(req) || "").trim();
+  if (!accessToken) {
+    return false;
+  }
+  const state = loadWarehouse();
+  for (const permission of requiredPermissions) {
+    if (authenticateStaffAccessToken(state, accessToken, permission)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function staticResponseHeaders(contentType, filePath) {
   const extension = path.extname(filePath).toLowerCase();
   return {
@@ -630,6 +670,17 @@ const server = http.createServer(async (req, res) => {
 
   if ((u.pathname === "/" || u.pathname === "/warehouse" || u.pathname === "/warehouse/") && req.method === "GET") {
     redirectTo(res, `/warehouse/admin${u.search}`);
+    return;
+  }
+
+  if (req.method === "GET" && !hasWarehouseRouteAccess(req, u)) {
+    res.writeHead(403, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+      Pragma: "no-cache",
+      Expires: "0",
+    });
+    res.end("Kirish faqat admin bergan maxsus ruxsat havolasi orqali mumkin.");
     return;
   }
 
