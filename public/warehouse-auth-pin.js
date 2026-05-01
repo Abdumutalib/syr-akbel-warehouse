@@ -808,6 +808,8 @@
     const ua = String(window.navigator && window.navigator.userAgent ? window.navigator.userAgent : '').toLowerCase();
     const isIos = /iphone|ipad|ipod/.test(ua);
     const isSafari = isIos && /safari/.test(ua) && !/crios|fxios|edgios/.test(ua);
+    const isAndroid = /android/.test(ua);
+    const isLikelyMobile = isIos || isAndroid || window.innerWidth <= 900;
 
     function isStandalone() {
       return Boolean(
@@ -820,10 +822,14 @@
       return;
     }
 
+    if (!isLikelyMobile) {
+      return;
+    }
+
     let deferredPrompt = null;
     const button = document.createElement('button');
     button.type = 'button';
-    button.hidden = true;
+    button.hidden = false;
     button.textContent = 'Ilovani o\'rnatish';
     button.setAttribute('aria-label', 'Ilovani o\'rnatish');
     button.style.position = 'fixed';
@@ -853,9 +859,7 @@
       button.hidden = !visible;
     }
 
-    if (isSafari) {
-      setVisible(true, 'Home screenga qo\'shish');
-    }
+    setVisible(true, isSafari ? 'Home screenga qo\'shish' : 'Ilovani o\'rnatish');
 
     window.addEventListener('beforeinstallprompt', function (event) {
       event.preventDefault();
@@ -882,7 +886,10 @@
 
       if (isSafari) {
         window.alert('Safari menyusidan Share ni bosing, keyin Add to Home Screen ni tanlang.');
+        return;
       }
+
+      window.alert('Brauzer menyusidan Add to Home screen yoki Install app ni tanlang. Agar тугма чиқмаса, саҳифани янгилаб яна уриниб кўринг.');
     });
   }
 
