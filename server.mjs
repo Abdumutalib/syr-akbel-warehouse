@@ -472,6 +472,7 @@ const MIME = {
   ".png": "image/png",
   ".webp": "image/webp",
   ".gif": "image/gif",
+  ".svg": "image/svg+xml",
 };
 
 function serveStatic(urlPath, res) {
@@ -628,6 +629,11 @@ const server = http.createServer(async (req, res) => {
 
   if ((u.pathname === "/" || u.pathname === "/warehouse" || u.pathname === "/warehouse/") && req.method === "GET") {
     redirectTo(res, `/warehouse/admin${u.search}`);
+    return;
+  }
+
+  if (u.pathname === "/favicon.svg" && req.method === "GET") {
+    serveStatic("public/favicon.svg", res);
     return;
   }
 
