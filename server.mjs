@@ -95,11 +95,12 @@ function buildCsvContent(state) {
   const userMap = new Map(state.users.map((u) => [u.id, u.fullName]));
   const KIND_LABELS = { sale: "Savdo", payment: "To'lov", "pending-sale": "Kutilayotgan" };
   const STATUS_LABELS = { approved: "Tasdiqlangan", pending: "Kutilayotgan" };
+  const SEP = ";";
   const csvEscape = (v) => {
     const s = String(v == null ? "" : v);
-    return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+    return s.includes(SEP) || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const header = ["Mijoz ismi", "Tur", "Holat", "Sana", "kg", "Summa (so'm)", "Naqd to'lov", "O'tkazma to'lov"].join(",");
+  const header = ["Mijoz ismi", "Tur", "Holat", "Sana", "kg", "Summa (so'm)", "Naqd to'lov", "O'tkazma to'lov"].join(SEP);
   const rows = (state.transactions || [])
     .slice()
     .sort((a, b) => new Date(a.approvedAt || a.createdAt || 0) - new Date(b.approvedAt || b.createdAt || 0))
@@ -113,7 +114,7 @@ function buildCsvContent(state) {
       const total = Number(tx.totalPrice || 0);
       const cash = Number(tx.cashPaidAmount || 0);
       const transfer = Number(tx.transferPaidAmount || 0);
-      return [name, kind, status, dateStr, kg, total, cash, transfer].map(csvEscape).join(",");
+      return [name, kind, status, dateStr, kg, total, cash, transfer].map(csvEscape).join(SEP);
     });
   return "\uFEFF" + [header, ...rows].join("\r\n");
 }
