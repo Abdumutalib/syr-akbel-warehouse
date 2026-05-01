@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+import ExcelJS from "exceljs";
 import { handleWarehouseApiRoute } from "./server/handle-api.mjs";
 import {
   authenticateStaffAccessToken,
@@ -182,17 +183,185 @@ function buildDailySummaryCsv(state) {
   return "\uFEFF" + [header, ...rows, "", jamiRow, debtRow].join("\r\n");
 }
 
+function formatWorksheetDate(value) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toLocaleDateString("ru-RU");
+}
+
+function getModePaymentAmount(entry, mode) {
+  const splitValue = Number(mode === "cash" ? entry.cashPaidAmount || 0 : entry.transferPaidAmount || 0);
+  if (splitValue > 0) return splitValue;
+  if (entry.cashPaidAmount == null && entry.transferPaidAmount == null && entry.priceType === mode) {
+    return Number(entry.paidAmount || 0);
+  }
+  return 0;
+}
+
+function getModeTitle(customer, index) {
+  const suffix = customer.taxId ? ` | INN: ${customer.taxId}` : "";
+  return `${index + 1}- ${customer.fullName}${suffix}`;
+}
+
+function buildCustomerModeRows(detail, mode) {
+  const entries = (detail.history || [])
+    .filter((entry) => entry.status === "approved")
+    .sort((left, right) => {
+      const leftTime = new Date(left.approvedAt || left.createdAt || 0).getTime();
+      const rightTime = new Date(right.approvedAt || right.createdAt || 0).getTime();
+      return leftTime - rightTime || left.id - right.id;
+    });
+
+  let runningSales = 0;
+  let runningPaid = 0;
+  const rows = [];
+
+  for (const entry of entries) {
+    const totalPaidForEntry =
+      entry.cashPaidAmount != null || entry.transferPaidAmount != null
+        ? Number(entry.cashPaidAmount || 0) + Number(entry.transferPaidAmount || 0)
+        : Number(entry.paidAmount || 0);
+    if (entry.kind === "sale") {
+      runningSales += Number(entry.totalPrice || 0);
+    }
+    runningPaid += totalPaidForEntry;
+
+    const paymentAmount = getModePaymentAmount(entry, mode);
+    const isModeSale = entry.kind === "sale" && (entry.priceType === mode || paymentAmount > 0);
+    const isModePayment = entry.kind === "payment" && paymentAmount > 0;
+    if (!isModeSale && !isModePayment) continue;
+
+    const dateText = formatWorksheetDate(entry.approvedAt || entry.createdAt);
+    const kg = isModeSale ? Number(entry.amountKg || 0) : 0;
+    const total = isModeSale ? Number(entry.totalPrice || 0) : 0;
+
+    rows.push([
+      dateText,
+      kg || "",
+      total || "",
+      paymentAmount || "",
+      paymentAmount > 0 ? dateText : "",
+      Math.max(0, Math.round(runningSales - runningPaid)) || "",
+    ]);
+  }
+
+  return rows;
+}
+
+function styleWorksheetBlock(worksheet, startColumn, rowCount) {
+  const titleCell = worksheet.getCell(1, startColumn);
+  titleCell.alignment = { vertical: "middle", horizontal: "center" };
+  titleCell.font = { bold: true, size: 12 };
+  titleCell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFD9EAF7" },
+  };
+
+  for (let column = startColumn; column < startColumn + 6; column += 1) {
+    const header = worksheet.getCell(2, column);
+    header.font = { bold: true };
+    header.alignment = { horizontal: "center", vertical: "middle" };
+    header.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFF3F4F6" },
+    };
+    worksheet.getColumn(column).width = [14, 10, 14, 14, 16, 14][column - startColumn];
+  }
+
+  for (let row = 1; row <= rowCount; row += 1) {
+    for (let column = startColumn; column < startColumn + 6; column += 1) {
+      const cell = worksheet.getCell(row, column);
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFBFC7D5" } },
+        left: { style: "thin", color: { argb: "FFBFC7D5" } },
+        bottom: { style: "thin", color: { argb: "FFBFC7D5" } },
+        right: { style: "thin", color: { argb: "FFBFC7D5" } },
+      };
+      if (row >= 3 && column !== startColumn) {
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+      }
+    }
+  }
+}
+
+async function buildCustomerWorkbookBuffer(state, mode) {
+  const pricing = getWarehousePricing(state);
+  const grouped = groupCustomersByPaymentType(state, pricing);
+  const selected = mode === "cash" ? grouped.cashCustomers : grouped.transferCustomers;
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "GitHub Copilot";
+  workbook.created = new Date();
+  workbook.modified = new Date();
+
+  const worksheet = workbook.addWorksheet(mode === "cash" ? "Naqd" : "Perechislenie", {
+    views: [{ state: "frozen", ySplit: 2 }],
+  });
+
+  const headers = ["Sana", "kg", "Summa", "To'lov", "To'lov sanasi", "Qarz"];
+  const customers = [];
+
+  for (const customer of selected) {
+    const detail = getCustomerDetail(state, customer.id, pricing);
+    const rows = buildCustomerModeRows(detail, mode);
+    if (rows.length > 0) {
+      customers.push({ customer: detail.customer, rows });
+    }
+  }
+
+  if (customers.length === 0) {
+    worksheet.mergeCells(1, 1, 1, 6);
+    worksheet.getCell(1, 1).value = mode === "cash" ? "Naqd mijozlar topilmadi" : "Perechislenie mijozlar topilmadi";
+    headers.forEach((header, index) => {
+      worksheet.getCell(2, index + 1).value = header;
+    });
+    styleWorksheetBlock(worksheet, 1, 2);
+    return workbook.xlsx.writeBuffer();
+  }
+
+  customers.forEach(({ customer, rows }, customerIndex) => {
+    const startColumn = customerIndex * 6 + 1;
+    worksheet.mergeCells(1, startColumn, 1, startColumn + 5);
+    worksheet.getCell(1, startColumn).value = getModeTitle(customer, customerIndex);
+    headers.forEach((header, index) => {
+      worksheet.getCell(2, startColumn + index).value = header;
+    });
+    rows.forEach((rowValues, rowIndex) => {
+      rowValues.forEach((value, valueIndex) => {
+        worksheet.getCell(3 + rowIndex, startColumn + valueIndex).value = value;
+      });
+    });
+    styleWorksheetBlock(worksheet, startColumn, Math.max(2, rows.length + 2));
+  });
+
+  return workbook.xlsx.writeBuffer();
+}
+
 async function uploadCsvToYandex(state) {
   const login = process.env.YANDEX_DISK_LOGIN?.trim();
   const password = process.env.YANDEX_DISK_PASSWORD?.trim();
   if (!login || !password) return;
   try {
     const auth = "Basic " + Buffer.from(`${login}:${password}`).toString("base64");
+    const cashWorkbook = await buildCustomerWorkbookBuffer(state, "cash");
+    const transferWorkbook = await buildCustomerWorkbookBuffer(state, "transfer");
     const uploads = [
       { url: "https://webdav.yandex.ru/akbel-export.csv", csv: buildCsvContent(state, "all") },
       { url: "https://webdav.yandex.ru/akbel-naqd.csv", csv: buildCsvContent(state, "cash") },
       { url: "https://webdav.yandex.ru/akbel-otkazma.csv", csv: buildCsvContent(state, "transfer") },
       { url: "https://webdav.yandex.ru/akbel-hisobot.csv", csv: buildDailySummaryCsv(state) },
+      {
+        url: "https://webdav.yandex.ru/akbel-naqd.xlsx",
+        body: cashWorkbook,
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+      {
+        url: "https://webdav.yandex.ru/akbel-otkazma.xlsx",
+        body: transferWorkbook,
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
     ];
 
     for (const item of uploads) {
@@ -200,9 +369,9 @@ async function uploadCsvToYandex(state) {
         method: "PUT",
         headers: {
           Authorization: auth,
-          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Type": item.contentType || "text/csv; charset=utf-8",
         },
-        body: item.csv,
+        body: item.body || item.csv,
       });
       if (!resp.ok) {
         console.error("[YandexDisk] Upload failed:", item.url, resp.status, await resp.text());
