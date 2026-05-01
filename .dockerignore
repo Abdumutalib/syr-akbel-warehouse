@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+node_modules
+
+# Runtime-only data lives in a mounted volume on Northflank
+data/warehouse.json
+data/transaction-photos
+
+# Local editor noise
+.vscode
+Thumbs.db
+Desktop.ini
