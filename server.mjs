@@ -91,8 +91,60 @@ function loadWarehouse() {
   return loadWarehouseState(WAREHOUSE_STATE_PATH);
 }
 
+function buildCsvContent(state) {
+  const userMap = new Map(state.users.map((u) => [u.id, u.fullName]));
+  const KIND_LABELS = { sale: "Savdo", payment: "To'lov", "pending-sale": "Kutilayotgan" };
+  const STATUS_LABELS = { approved: "Tasdiqlangan", pending: "Kutilayotgan" };
+  const csvEscape = (v) => {
+    const s = String(v == null ? "" : v);
+    return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = ["Mijoz ismi", "Tur", "Holat", "Sana", "kg", "Summa (so'm)", "Naqd to'lov", "O'tkazma to'lov"].join(",");
+  const rows = (state.transactions || [])
+    .slice()
+    .sort((a, b) => new Date(a.approvedAt || a.createdAt || 0) - new Date(b.approvedAt || b.createdAt || 0))
+    .map((tx) => {
+      const name = userMap.get(tx.userId) || "Noma'lum";
+      const kind = KIND_LABELS[tx.kind || (tx.status === "pending" ? "pending-sale" : "sale")] || tx.kind || "";
+      const status = STATUS_LABELS[tx.status] || tx.status || "";
+      const date = tx.approvedAt || tx.createdAt || "";
+      const dateStr = date ? new Date(date).toLocaleDateString("ru-RU") : "";
+      const kg = Number(tx.amountKg || 0);
+      const total = Number(tx.totalPrice || 0);
+      const cash = Number(tx.cashPaidAmount || 0);
+      const transfer = Number(tx.transferPaidAmount || 0);
+      return [name, kind, status, dateStr, kg, total, cash, transfer].map(csvEscape).join(",");
+    });
+  return "\uFEFF" + [header, ...rows].join("\r\n");
+}
+
+async function uploadCsvToYandex(state) {
+  const login = process.env.YANDEX_DISK_LOGIN?.trim();
+  const password = process.env.YANDEX_DISK_PASSWORD?.trim();
+  if (!login || !password) return;
+  try {
+    const csv = buildCsvContent(state);
+    const auth = "Basic " + Buffer.from(`${login}:${password}`).toString("base64");
+    const url = "https://webdav.yandex.ru/akbel-export.csv";
+    const resp = await fetch(url, {
+      method: "PUT",
+      headers: {
+        Authorization: auth,
+        "Content-Type": "text/csv; charset=utf-8",
+      },
+      body: csv,
+    });
+    if (!resp.ok) {
+      console.error("[YandexDisk] Upload failed:", resp.status, await resp.text());
+    }
+  } catch (e) {
+    console.error("[YandexDisk] Upload error:", e.message);
+  }
+}
+
 function saveWarehouse(state) {
   saveWarehouseState(WAREHOUSE_STATE_PATH, state);
+  uploadCsvToYandex(state).catch(() => {});
 }
 
 function currentWarehousePricing(state) {
