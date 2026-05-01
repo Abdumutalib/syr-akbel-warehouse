@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mijoz sahifasi</title>
+  <style>
+    :root {
+      --bg: #f5efe7; --panel: #fffdf9; --ink: #17130f; --muted: #6f6559; --accent: #224847; --line: #e2d6c9; --ok: #24613b; --error: #9f1239; --credit: #1d4ed8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: Georgia, "Times New Roman", serif; color: var(--ink);
+      background: radial-gradient(circle at top right, rgba(34,72,71,.12), transparent 30%), linear-gradient(180deg, #fffaf4 0%, var(--bg) 100%);
+      min-height: 100vh;
+    }
+
+    body,
+    input,
+    button,
+    .button-link,
+    .history-table,
+    .stat {
+      font-variant-numeric: lining-nums tabular-nums;
+      font-feature-settings: "lnum" 1, "tnum" 1;
+    }
+
+    strong,
+    .stat strong,
+    .history-table th,
+    .history-table td {
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-weight: 700;
+    }
+    .shell { width: min(1200px, calc(100% - 28px)); margin: 0 auto; padding: 28px 0 44px; }
+    .hero { display: flex; justify-content: space-between; gap: 16px; align-items: end; flex-wrap: wrap; margin-bottom: 22px; }
+    .eyebrow { font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+    h1 { margin: 0; font-size: clamp(30px, 5vw, 58px); line-height: .95; }
+    .links { display: flex; gap: 10px; flex-wrap: wrap; }
+    .button-link, button { border: 0; border-radius: 999px; padding: 12px 18px; font: inherit; cursor: pointer; text-decoration: none; background: var(--accent); color: #fff; }
+    .button-link.secondary, button.secondary { background: #eadfce; color: var(--ink); }
+    .layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
+    .card { background: color-mix(in srgb, var(--panel) 95%, white 5%); border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 18px 36px rgba(53,34,15,.06); padding: 18px; }
+    label, input { display: block; width: 100%; font: inherit; }
+    input { border-radius: 12px; border: 1px solid var(--line); background: #fff; padding: 12px 14px; margin: 8px 0 14px; }
+    .check-grid { display: grid; gap: 8px; margin: 8px 0 14px; }
+    .check-row { display: flex; align-items: center; gap: 10px; }
+    .check-row input { width: auto; margin: 0; }
+    .field-label-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .field-label-row label { margin: 0; }
+    .add-mini { padding: 8px 12px; line-height: 1; }
+    .multi-input-list { display: grid; gap: 10px; margin: 0 0 14px; }
+    .multi-input-list input { margin: 0; }
+    .stats { display: grid; gap: 10px; }
+    .stat { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+    .stat strong { display: block; font-size: 26px; margin-top: 6px; }
+    .history-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,.92);
+    }
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+    .history-table th,
+    .history-table td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    .history-table th {
+      background: #f7efe5;
+      font-size: 13px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .history-table tr:last-child td { border-bottom: 0; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .status { min-height: 24px; color: var(--ok); margin-top: 10px; }
+    .status.error { color: var(--error); }
+    .debt-outstanding { color: var(--error); }
+    .debt-credit { color: var(--credit); }
+    .pricing-help { margin: -6px 0 14px; }
+    .hidden { display: none !important; }
+    .photo-link-button {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #eadfce;
+      color: var(--ink);
+    }
+    .photo-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(23, 19, 15, 0.72);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      z-index: 20;
+    }
+    .photo-modal-card {
+      width: min(960px, 100%);
+      max-height: min(90vh, 920px);
+      overflow: auto;
+      background: color-mix(in srgb, var(--panel) 96%, white 4%);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+    .photo-modal-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .photo-modal-stage img {
+      width: 100%;
+      max-height: 58vh;
+      object-fit: contain;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+    }
+    .photo-modal-thumbs {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 10px;
+    }
+    .photo-thumb {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+      padding: 6px;
+      cursor: pointer;
+    }
+    .photo-thumb.is-active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(34, 72, 71, 0.14);
+    }
+    .photo-thumb img {
+      width: 100%;
+      height: 86px;
+      object-fit: cover;
+      border-radius: 10px;
+      display: block;
+    }
+    @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">Mijoz sahifasi</div>
+        <h1 id="customerTitle">Mijoz ma'lumotlari</h1>
+      </div>
+      <div class="links">
+        <a class="button-link secondary" id="customerCatalogLink" href="/warehouse/customers">Mundarijaga qaytish</a>
+        <a class="button-link secondary" id="customerSellerLink" href="/warehouse/seller">Sotuvchi sahifasi</a>
+      </div>
+    </section>
+
+    <section class="layout">
+      <aside class="card">
+        <div id="authPanel">
+          <h2 id="authTitle">Xodim yoki admin kirishi</h2>
+          <div id="usernameGroup">
+            <label for="username">Username</label>
+            <input id="username" autocomplete="username" placeholder="123456">
+          </div>
+          <div id="passwordGroup">
+            <label for="password">Password</label>
+            <input id="password" type="password" autocomplete="current-password" placeholder="19750104">
+          </div>
+          <div id="pinGroup">
+            <label for="pinCode">PIN kod</label>
+            <input id="pinCode" inputmode="numeric" maxlength="6" placeholder="4-6 raqam">
+          </div>
+          <div class="links">
+            <button id="save-auth">Saqlash</button>
+            <button id="unlock-pin" class="secondary">PIN bilan kirish</button>
+            <button id="clear-pin" class="secondary">PINni o'chirish</button>
+            <button id="show-login" class="secondary hidden">Login bilan kirish</button>
+            <button id="reload" class="secondary">Yangilash</button>
+          </div>
+          <div id="authHint" class="muted" style="margin-top: 8px;">Birinchi marta username/password билан киринг. PIN yozib saqlasangiz, keyingi safar шу PIN yetadi.</div>
+        </div>
+        <div id="activeSessionNotice" class="muted hidden"></div>
+
+        <div class="stats" style="margin-top: 18px;">
+          <div class="stat">Tashkilot<strong id="organizationValue">-</strong></div>
+          <div class="stat">INN<strong id="taxIdValue">-</strong></div>
+          <div class="stat">Telefon<strong id="phoneValue">-</strong></div>
+          <div class="stat">Lokatsiya<strong id="locationValue">-</strong></div>
+          <div class="stat">Telegram ID<strong id="telegramValue">-</strong></div>
+          <div class="stat">Jami olingan kg<strong id="kgValue">0</strong></div>
+          <div class="stat">Jami savdo<strong id="salesValue">0</strong></div>
+          <div class="stat">Jami to'lov<strong id="paidValue">0</strong></div>
+          <div class="stat">Naqd balans<strong id="cashDebtValue">0</strong></div>
+          <div class="stat">O'tkazma balans<strong id="transferDebtValue">0</strong></div>
+          <div class="stat">Qolgan balans<strong id="debtValue">0</strong></div>
+          <div class="stat">Amaldagi naqd narx<strong id="customerCashPriceValue">0</strong><div id="customerCashPriceMeta" class="muted">Umumiy narx</div></div>
+          <div class="stat">Amaldagi o'tkazma narx<strong id="customerTransferPriceValue">0</strong><div id="customerTransferPriceMeta" class="muted">Umumiy narx</div></div>
+        </div>
+
+        <div id="customerEditPanel" style="margin-top: 18px;">
+          <h2 style="margin: 0 0 10px; font-size: 24px;">Mijozni tahrirlash</h2>
+          <label for="editCustomerOrganizationName">Tashkilot nomi</label>
+          <input id="editCustomerOrganizationName" placeholder="Masalan: AKBEL SAVDO MCHJ">
+          <div class="field-label-row">
+            <label>F.I.Sh.</label>
+            <button id="addEditCustomerName" class="secondary add-mini" type="button">+</button>
+          </div>
+          <div id="editCustomerNameList" class="multi-input-list"></div>
+          <div class="field-label-row">
+            <label>Telefon</label>
+            <button id="addEditCustomerPhone" class="secondary add-mini" type="button">+</button>
+          </div>
+          <div id="editCustomerPhoneList" class="multi-input-list"></div>
+          <label for="editCustomerTaxId">Tashkilot INN</label>
+          <input id="editCustomerTaxId" placeholder="123456789">
+          <label for="editCustomerLocation">Lokatsiya</label>
+          <input id="editCustomerLocation" placeholder="Masalan: Chilonzor, 19-mavze">
+          <div class="field-label-row">
+            <label>Telegram ID</label>
+            <button id="addEditCustomerTelegram" class="secondary add-mini" type="button">+</button>
+          </div>
+          <div id="editCustomerTelegramList" class="multi-input-list"></div>
+          <div>To'lov toifasi</div>
+          <div class="check-grid">
+            <label class="check-row" for="editCustomerCategoryCash"><input id="editCustomerCategoryCash" type="checkbox">Naqd to'lovchi</label>
+            <label class="check-row" for="editCustomerCategoryTransfer"><input id="editCustomerCategoryTransfer" type="checkbox">O'tkazma to'lovchi</label>
+          </div>
+          <div id="customerPricingPanel" class="hidden">
+            <h3 style="margin: 0 0 10px; font-size: 20px;">Mijozning maxsus narxlari</h3>
+            <div class="muted pricing-help">Bo'sh qoldirilsa umumiy ombor narxi ishlaydi.</div>
+            <label for="editCustomerCashPricePerKg">Naqd narx</label>
+            <input id="editCustomerCashPricePerKg" type="number" min="0" step="1" placeholder="Bo'sh qoldirilsa umumiy narx">
+            <label for="editCustomerTransferPricePerKg">O'tkazma narx</label>
+            <input id="editCustomerTransferPricePerKg" type="number" min="0" step="1" placeholder="Bo'sh qoldirilsa umumiy narx">
+          </div>
+          <button id="save-customer" type="button">O'zgarishni saqlash</button>
+        </div>
+        <div id="status" class="status"></div>
+      </aside>
+
+      <main class="card">
+        <h2>Tovar oldi-berdi tarixi</h2>
+        <div id="historyList"></div>
+      </main>
+    </section>
+
+    <div id="historyPhotoModal" class="photo-modal hidden">
+      <div class="photo-modal-card">
+        <div class="photo-modal-top">
+          <div>
+            <strong id="historyPhotoModalTitle">Rasm preview</strong>
+            <div id="historyPhotoModalMeta" class="muted"></div>
+          </div>
+          <div class="links">
+            <button id="historyPhotoPrev" type="button" class="secondary">Oldingi</button>
+            <button id="historyPhotoNext" type="button" class="secondary">Keyingi</button>
+            <button id="historyPhotoClose" type="button" class="secondary">Yopish</button>
+          </div>
+        </div>
+        <div class="photo-modal-stage">
+          <img id="historyPhotoModalImage" alt="Savdo rasmi preview">
+        </div>
+        <div id="historyPhotoModalThumbs" class="photo-modal-thumbs"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/warehouse/assets/warehouse-auth-pin.js"></script>
+  <script>
+    const usernameGroupEl = document.getElementById('usernameGroup');
+    const usernameEl = document.getElementById('username');
+    const passwordEl = document.getElementById('password');
+    const pinEl = document.getElementById('pinCode');
+    const authPanelEl = document.getElementById('authPanel');
+    const activeSessionNoticeEl = document.getElementById('activeSessionNotice');
+    const authTitleEl = document.getElementById('authTitle');
+    const passwordGroupEl = document.getElementById('passwordGroup');
+    const saveAuthButtonEl = document.getElementById('save-auth');
+    const unlockPinButtonEl = document.getElementById('unlock-pin');
+    const clearPinButtonEl = document.getElementById('clear-pin');
+    const showLoginButtonEl = document.getElementById('show-login');
+    const authHintEl = document.getElementById('authHint');
+    const statusEl = document.getElementById('status');
+    const historyPhotoModalEl = document.getElementById('historyPhotoModal');
+    const historyPhotoModalTitleEl = document.getElementById('historyPhotoModalTitle');
+    const historyPhotoModalMetaEl = document.getElementById('historyPhotoModalMeta');
+    const historyPhotoModalImageEl = document.getElementById('historyPhotoModalImage');
+    const historyPhotoModalThumbsEl = document.getElementById('historyPhotoModalThumbs');
+    const historyPhotoPrevEl = document.getElementById('historyPhotoPrev');
+    const historyPhotoNextEl = document.getElementById('historyPhotoNext');
+    const historyPhotoCloseEl = document.getElementById('historyPhotoClose');
+    const customerId = window.getWarehouseLastPathSegment ? window.getWarehouseLastPathSegment(location.pathname) : location.pathname.split('/').filter(Boolean).pop();
+    let accessToken = (window.getWarehouseSearchParam ? window.getWarehouseSearchParam('access', location.search) : '') || localStorage.getItem('warehouse-access-token') || '';
+    let currentOperatorProfile = null;
+    let historyState = [];
+    let currentModalPhotos = [];
+    let currentModalIndex = 0;
+    if (accessToken) {
+      localStorage.setItem('warehouse-access-token', accessToken);
+    }
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message || '';
+      statusEl.classList.toggle('error', Boolean(isError));
+    }
+
+    const pinAuth = window.createWarehousePinAuth({
+      usernameEl,
+      passwordEl,
+      pinEl,
+      setStatus,
+      sessionKey: 'warehouse-browser-session',
+      initialUsername: localStorage.getItem('warehouse-staff-username') || localStorage.getItem('warehouse-seller-username') || localStorage.getItem('warehouse-accountant-username') || localStorage.getItem('warehouse-admin-username') || '',
+      initialPassword: localStorage.getItem('warehouse-staff-password') || localStorage.getItem('warehouse-seller-password') || localStorage.getItem('warehouse-accountant-password') || localStorage.getItem('warehouse-admin-password') || '',
+      lockedMessage: 'PIN saqlangan. PIN bilan kiring yoki username/passwordni qayta yozing.',
+      credentialsMessage: 'Xodim yoki admin login va parolini kiriting.',
+    });
+
+    const authUi = window.createWarehouseAuthUi({
+      pinAuth,
+      accessToken,
+      authPanelEl,
+      sessionNoticeEl: activeSessionNoticeEl,
+      titleEl: authTitleEl,
+      passwordGroupEl,
+      saveAuthButtonEl,
+      unlockPinButtonEl,
+      clearPinButtonEl,
+      showLoginButtonEl,
+      hintEl: authHintEl,
+      fullTitle: 'Xodim yoki admin kirishi',
+      pinTitle: 'PIN bilan kirish',
+      fullHint: 'Birinchi marta username/password bilan kiring. PIN yozib saqlasangiz, keyingi safar shu PIN yetadi.',
+      pinHint: 'Qayta kirishda username va PIN kodni kiriting.',
+      activeHint: 'Kirish tasdiqlandi. Shu tab ichida qayta login so\'ralmaydi.',
+    });
+
+    const staffPicker = window.createWarehouseStaffSelector({
+      usernameEl,
+      usernameGroupEl,
+      label: "Xodimlar ro'yxati",
+      permissions: ['customers'],
+      manualOptionLabel: 'Admin yoki boshqa login',
+    });
+
+    function isAdminProfile(profile = currentOperatorProfile) {
+      const role = profile && profile.role ? profile.role : '';
+      return String(role).trim().toLocaleLowerCase('en-US') === 'admin';
+    }
+
+    function applyOperatorPermissions(profile) {
+      const currentProfile = profile || (window.getWarehouseOperatorProfile ? window.getWarehouseOperatorProfile() : null);
+      currentOperatorProfile = currentProfile || null;
+      const canSeeCustomers = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'customers') : true;
+      const canSeeSeller = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'seller') : true;
+      const canEditCustomer = isAdminProfile(currentProfile) || canSeeSeller;
+      document.getElementById('customerCatalogLink').classList.toggle('hidden', !canSeeCustomers);
+      document.getElementById('customerSellerLink').classList.toggle('hidden', !canSeeSeller);
+      document.getElementById('customerEditPanel').classList.toggle('hidden', !canEditCustomer);
+      document.getElementById('customerPricingPanel').classList.toggle('hidden', !isAdminProfile(currentProfile));
+    }
+
+    function authHeader() {
+      if (accessToken) return null;
+      const username = usernameEl.value.trim();
+      const password = passwordEl.value;
+      if (!username || !password) throw new Error('Xodim yoki admin login va parolini kiriting.');
+      localStorage.setItem('warehouse-staff-username', username);
+      pinAuth.syncPasswordStorage(password, 'warehouse-staff-password');
+      return 'Basic ' + btoa(username + ':' + password);
+    }
+    async function apiFetch(url, options = {}) {
+      const normalizedUrl = typeof url === 'string' && url.startsWith('/api/warehouse')
+        ? `/warehouse/api${url.slice('/api'.length)}`
+        : url;
+      const authValue = authHeader();
+      const requestHeaders = Object.assign(
+        {},
+        options.headers || {},
+        authValue ? { Authorization: authValue } : {},
+        accessToken ? { 'X-Warehouse-Access': accessToken } : {}
+      );
+      const response = await fetch(normalizedUrl, {
+        ...options,
+        headers: requestHeaders,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'So\'rov bajarilmadi');
+      return data;
+    }
+    function numberFormat(value) { return new Intl.NumberFormat('ru-RU').format(Number(value || 0)); }
+    function setDebtTone(element, value) {
+      if (!element) return;
+      const amount = Number(value || 0);
+      element.classList.toggle('debt-outstanding', amount > 0);
+      element.classList.toggle('debt-credit', amount < 0);
+    }
+    function debtClass(value) {
+      const amount = Number(value || 0);
+      if (amount > 0) return 'debt-outstanding';
+      if (amount < 0) return 'debt-credit';
+      return '';
+    }
+    function appendMultiInput(containerId, options = {}, value = '') {
+      const host = document.getElementById(containerId);
+      const input = document.createElement('input');
+      input.type = options.type || 'text';
+      input.placeholder = options.placeholder || '';
+      if (options.step) input.step = options.step;
+      if (options.inputMode) input.inputMode = options.inputMode;
+      input.value = value;
+      host.appendChild(input);
+      return input;
+    }
+    function setMultiInputValues(containerId, values, options = {}) {
+      const host = document.getElementById(containerId);
+      host.innerHTML = '';
+      const source = Array.isArray(values) && values.length ? values : [''];
+      source.forEach((value) => appendMultiInput(containerId, options, value == null ? '' : String(value)));
+    }
+    function collectMultiInputValues(containerId) {
+      return Array.from(document.getElementById(containerId).querySelectorAll('input'))
+        .map((input) => input.value.trim())
+        .filter(Boolean);
+    }
+    function balanceLabel(value) {
+      const amount = Number(value || 0);
+      if (amount < 0) return 'haqdor';
+      if (amount > 0) return 'qarz';
+      return 'balans';
+    }
+    function balanceText(value) {
+      if (value == null) return 'Yopiq';
+      const amount = Number(value || 0);
+      return `${numberFormat(Math.abs(amount))} so'm ${balanceLabel(amount)}`;
+    }
+    function amountText(value) {
+      return `${numberFormat(value || 0)} so'm`;
+    }
+    function priceText(value) {
+      return `${numberFormat(value || 0)} so'm/kg`;
+    }
+    function transactionPhotos(entry) {
+      if (entry && Array.isArray(entry.photos) && entry.photos.length) {
+        return entry.photos.filter((photo) => photo && photo.url);
+      }
+      return entry && entry.photo && entry.photo.url ? [entry.photo] : [];
+    }
+    function numericValue(id) {
+      const input = document.getElementById(id);
+      return Number(input && typeof input.value === 'string' ? input.value : 0);
+    }
+    function selectedCustomerCategories() {
+      const categories = [];
+      if (document.getElementById('editCustomerCategoryCash').checked) categories.push('cash');
+      if (document.getElementById('editCustomerCategoryTransfer').checked) categories.push('transfer');
+      return categories;
+    }
+    function dateLabel(value) {
+      if (!value) return '-';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return new Intl.DateTimeFormat('ru-RU').format(date);
+    }
+    function kindLabel(entry) {
+      if (entry.kind === 'payment') return 'To\'lov';
+      if (entry.kind === 'sale') return 'Savdo';
+      if (entry.kind === 'pending-sale') return 'Kutilayotgan savdo';
+      return 'Yozuv';
+    }
+    function paymentTypeLabel(entry) {
+      const cashPaidAmount = Number(entry.cashPaidAmount || 0);
+      const transferPaidAmount = Number(entry.transferPaidAmount || 0);
+      if (cashPaidAmount > 0 && transferPaidAmount > 0) {
+        return `${numberFormat(cashPaidAmount)} so'm / ${numberFormat(transferPaidAmount)} so'm`;
+      }
+      if (cashPaidAmount > 0) {
+        return `${numberFormat(cashPaidAmount)} so'm`;
+      }
+      if (transferPaidAmount > 0) {
+        return `${numberFormat(transferPaidAmount)} so'm`;
+      }
+      return '-';
+    }
+    function statusLabel(value) {
+      if (value === 'approved') return 'Tasdiqlangan';
+      if (value === 'pending') return 'Kutilmoqda';
+      return value || '-';
+    }
+    function closeHistoryPhotoModal() {
+      historyPhotoModalEl.classList.add('hidden');
+      currentModalPhotos = [];
+      currentModalIndex = 0;
+      historyPhotoModalThumbsEl.innerHTML = '';
+      historyPhotoModalImageEl.removeAttribute('src');
+      historyPhotoModalMetaEl.textContent = '';
+    }
+    function renderHistoryPhotoModal() {
+      if (!currentModalPhotos.length) {
+        closeHistoryPhotoModal();
+        return;
+      }
+      const activePhoto = currentModalPhotos[currentModalIndex] || currentModalPhotos[0];
+      historyPhotoModalTitleEl.textContent = `Rasm ${currentModalIndex + 1} / ${currentModalPhotos.length}`;
+      historyPhotoModalMetaEl.textContent = [
+        activePhoto.originalName || `Rasm ${currentModalIndex + 1}`,
+        activePhoto.capturedAt ? dateLabel(activePhoto.capturedAt) : '',
+      ].filter(Boolean).join(' · ');
+      historyPhotoModalImageEl.src = activePhoto.url;
+      historyPhotoModalThumbsEl.innerHTML = currentModalPhotos.map((photo, index) => `
+        <button type="button" class="photo-thumb ${index === currentModalIndex ? 'is-active' : ''}" data-history-modal-index="${index}">
+          <img src="${photo.url}" alt="Savdo rasmi ${index + 1}">
+        </button>
+      `).join('');
+      historyPhotoModalEl.classList.remove('hidden');
+      historyPhotoPrevEl.disabled = currentModalPhotos.length <= 1;
+      historyPhotoNextEl.disabled = currentModalPhotos.length <= 1;
+    }
+    function openHistoryPhotoModalByEntryId(entryId) {
+      const entry = historyState.find((item) => String(item.id) === String(entryId));
+      const photos = transactionPhotos(entry);
+      if (!photos.length) {
+        return;
+      }
+      currentModalPhotos = photos;
+      currentModalIndex = 0;
+      renderHistoryPhotoModal();
+    }
+    function renderDetail(data) {
+      historyState = Array.isArray(data.history) ? data.history : [];
+      const balanceVisible = data.balanceVisible !== false;
+      document.getElementById('customerTitle').textContent = data.customer.organizationName || data.customer.fullName;
+      document.getElementById('organizationValue').textContent = data.customer.organizationName || '-';
+      document.getElementById('taxIdValue').textContent = data.customer.taxId || '-';
+      document.getElementById('phoneValue').textContent = (data.customer.phones || []).join(', ') || '-';
+      document.getElementById('locationValue').textContent = data.customer.location || '-';
+      document.getElementById('telegramValue').textContent = (data.customer.telegramIds || []).join(', ') || '-';
+      document.getElementById('kgValue').textContent = String(data.summary.totalTakenKg || 0);
+      document.getElementById('salesValue').textContent = amountText(data.summary.totalSales);
+      document.getElementById('paidValue').textContent = amountText(data.summary.totalPaid);
+      document.getElementById('cashDebtValue').textContent = balanceText(data.summary.cashDebt);
+      document.getElementById('transferDebtValue').textContent = balanceText(data.summary.transferDebt);
+      document.getElementById('debtValue').textContent = balanceText(data.summary.currentDebt);
+      document.getElementById('customerCashPriceValue').textContent = priceText(data.customer.cashPricePerKg || 0);
+      document.getElementById('customerTransferPriceValue').textContent = priceText(data.customer.transferPricePerKg || 0);
+      document.getElementById('customerCashPriceMeta').textContent = data.customer.customCashPricePerKg ? 'Mijozning maxsus naqd narxi' : 'Umumiy narx';
+      document.getElementById('customerTransferPriceMeta').textContent = data.customer.customTransferPricePerKg ? 'Mijozning maxsus o\'tkazma narxi' : 'Umumiy narx';
+      setDebtTone(document.getElementById('cashDebtValue'), balanceVisible ? data.summary.cashDebt || 0 : 0);
+      setDebtTone(document.getElementById('transferDebtValue'), balanceVisible ? data.summary.transferDebt || 0 : 0);
+      setDebtTone(document.getElementById('debtValue'), balanceVisible ? data.summary.currentDebt || 0 : 0);
+      document.getElementById('editCustomerOrganizationName').value = data.customer.organizationName || '';
+      setMultiInputValues('editCustomerNameList', data.customer.fullNames || [data.customer.fullName], { placeholder: 'Али ака' });
+      setMultiInputValues('editCustomerPhoneList', data.customer.phones || [data.customer.phone], { placeholder: '+99890...' });
+      document.getElementById('editCustomerTaxId').value = data.customer.taxId || '';
+      document.getElementById('editCustomerLocation').value = data.customer.location || '';
+      document.getElementById('editCustomerCashPricePerKg').value = data.customer.customCashPricePerKg || '';
+      document.getElementById('editCustomerTransferPricePerKg').value = data.customer.customTransferPricePerKg || '';
+      setMultiInputValues('editCustomerTelegramList', data.customer.telegramIds || [data.customer.telegramId], { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
+      document.getElementById('editCustomerCategoryCash').checked = (data.customer.paymentCategories || []).includes('cash');
+      document.getElementById('editCustomerCategoryTransfer').checked = (data.customer.paymentCategories || []).includes('transfer');
+
+      const host = document.getElementById('historyList');
+      if (!historyState.length) {
+        host.innerHTML = '<p>Bu mijoz bo\'yicha hali tarix yo\'q.</p>';
+        return;
+      }
+      host.innerHTML = `
+        <div class="history-wrap">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Sana</th>
+                <th>Turi</th>
+                <th>Kg</th>
+                <th>Blok</th>
+                <th>1 kg narx</th>
+                <th>Jami summa</th>
+                <th>Naqd yoki O'tkazma</th>
+                <th>Jami to'lov</th>
+                <th>Qarz</th>
+                <th>Rasm</th>
+                <th>Izoh</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${historyState.map((entry) => {
+                const remainingDebt = Number(entry.totalPrice || 0) - Number(entry.paidAmount || 0);
+                const photos = transactionPhotos(entry);
+                return `
+                <tr>
+                  <td>${dateLabel(entry.approvedAt || entry.createdAt)}</td>
+                  <td>${kindLabel(entry)}</td>
+                  <td>${entry.amountKg}</td>
+                  <td>${entry.blockCount ? `${numberFormat(entry.blockCount)} blok` : '-'}</td>
+                  <td>${entry.pricePerKg ? `${numberFormat(entry.pricePerKg)} so'm` : '-'}</td>
+                  <td>${numberFormat(entry.totalPrice)} so'm</td>
+                  <td>${paymentTypeLabel(entry)}</td>
+                  <td>${numberFormat(entry.paidAmount)} so'm</td>
+                  <td><span class="${debtClass(remainingDebt)}">${numberFormat(remainingDebt)} so'm</span></td>
+                  <td>${photos.length ? `<button type="button" class="photo-link-button" data-history-photo-entry="${entry.id}">${photos.length === 1 ? 'Rasmni ko\'rish' : `${photos.length} ta rasmni ko\'rish`}</button>` : '-'}</td>
+                  <td class="muted">${entry.note || 'Izoh yo\'q'}</td>
+                </tr>
+              `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+    async function loadDetail() {
+      setStatus('Mijoz ma\'lumotlari yuklanmoqda...');
+      const data = await apiFetch(`/api/warehouse/customers/${customerId}`);
+      if (window.setWarehouseOperatorProfile) {
+        window.setWarehouseOperatorProfile(data.operator || null);
+      }
+      applyOperatorPermissions(data.operator || null);
+      renderDetail(data);
+      setStatus('Tayyor.');
+    }
+    document.getElementById('save-auth').addEventListener('click', async () => {
+      try { await pinAuth.rememberFromCredentials(); authHeader(); await loadDetail(); authUi.markAuthenticated({ username: usernameEl.value.trim(), password: passwordEl.value }); } catch (error) { setStatus(error.message, true); }
+    });
+    document.getElementById('unlock-pin').addEventListener('click', async () => {
+      try { const credentials = await pinAuth.unlockWithPin(); await loadDetail(); authUi.markAuthenticated(credentials); } catch (error) { setStatus(error.message, true); }
+    });
+    document.getElementById('clear-pin').addEventListener('click', () => {
+      try { pinAuth.clearPin(); authUi.render(); } catch (error) { setStatus(error.message, true); }
+    });
+    showLoginButtonEl.addEventListener('click', () => {
+      authUi.showFullLogin();
+      staffPicker.showManualLogin();
+      setStatus('Boshqa login bilan kirish ochildi.');
+    });
+    document.getElementById('reload').addEventListener('click', async () => {
+      try { await loadDetail(); } catch (error) { setStatus(error.message, true); }
+    });
+    document.getElementById('historyList').addEventListener('click', (event) => {
+      const trigger = event.target.closest('[data-history-photo-entry]');
+      if (!trigger) {
+        return;
+      }
+      openHistoryPhotoModalByEntryId(trigger.getAttribute('data-history-photo-entry'));
+    });
+    historyPhotoModalThumbsEl.addEventListener('click', (event) => {
+      const trigger = event.target.closest('[data-history-modal-index]');
+      if (!trigger) {
+        return;
+      }
+      currentModalIndex = Number(trigger.getAttribute('data-history-modal-index')) || 0;
+      renderHistoryPhotoModal();
+    });
+    historyPhotoPrevEl.addEventListener('click', () => {
+      if (!currentModalPhotos.length) {
+        return;
+      }
+      currentModalIndex = (currentModalIndex - 1 + currentModalPhotos.length) % currentModalPhotos.length;
+      renderHistoryPhotoModal();
+    });
+    historyPhotoNextEl.addEventListener('click', () => {
+      if (!currentModalPhotos.length) {
+        return;
+      }
+      currentModalIndex = (currentModalIndex + 1) % currentModalPhotos.length;
+      renderHistoryPhotoModal();
+    });
+    historyPhotoCloseEl.addEventListener('click', closeHistoryPhotoModal);
+    historyPhotoModalEl.addEventListener('click', (event) => {
+      if (event.target === historyPhotoModalEl) {
+        closeHistoryPhotoModal();
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (historyPhotoModalEl.classList.contains('hidden')) {
+        return;
+      }
+      if (event.key === 'Escape') {
+        closeHistoryPhotoModal();
+      } else if (event.key === 'ArrowLeft') {
+        historyPhotoPrevEl.click();
+      } else if (event.key === 'ArrowRight') {
+        historyPhotoNextEl.click();
+      }
+    });
+    document.getElementById('save-customer').addEventListener('click', async () => {
+      try {
+        const paymentCategories = selectedCustomerCategories();
+        if (!paymentCategories.length) {
+          throw new Error("Kamida bitta to'lov toifasini belgilang.");
+        }
+        await apiFetch('/api/warehouse/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: Number(customerId),
+            organizationName: document.getElementById('editCustomerOrganizationName').value.trim(),
+            fullNames: collectMultiInputValues('editCustomerNameList'),
+            phones: collectMultiInputValues('editCustomerPhoneList'),
+            taxId: document.getElementById('editCustomerTaxId').value.trim(),
+            location: document.getElementById('editCustomerLocation').value.trim(),
+            telegramIds: collectMultiInputValues('editCustomerTelegramList'),
+            paymentCategories,
+            ...(isAdminProfile() ? {
+              customCashPricePerKg: document.getElementById('editCustomerCashPricePerKg').value.trim(),
+              customTransferPricePerKg: document.getElementById('editCustomerTransferPricePerKg').value.trim(),
+            } : {}),
+          }),
+        });
+        await loadDetail();
+        setStatus('Mijoz ma\'lumotlari saqlandi.');
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+    document.getElementById('addEditCustomerName').addEventListener('click', () => {
+      appendMultiInput('editCustomerNameList', { placeholder: 'Али ака' });
+    });
+    document.getElementById('addEditCustomerPhone').addEventListener('click', () => {
+      appendMultiInput('editCustomerPhoneList', { placeholder: '+99890...' });
+    });
+    document.getElementById('addEditCustomerTelegram').addEventListener('click', () => {
+      appendMultiInput('editCustomerTelegramList', { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
+    });
+    setMultiInputValues('editCustomerNameList', [], { placeholder: 'Али ака' });
+    setMultiInputValues('editCustomerPhoneList', [], { placeholder: '+99890...' });
+    setMultiInputValues('editCustomerTelegramList', [], { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
+    authUi.render();
+    applyOperatorPermissions();
+    staffPicker.load().catch(() => {});
+    if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
+      loadDetail().catch((error) => setStatus(error.message, true));
+    } else if (pinAuth.hasPin()) {
+      setStatus('PIN saqlangan. PIN bilan kiring, keyin mijoz sahifasi yuklanadi.');
+    } else {
+      setStatus('Xodim, admin ёки link orqali kiring, keyin mijoz sahifasi yuklanadi.');
+    }
+  </script>
+  <script src="/warehouse-top-nav.js"></script>
+</body>
+</html>

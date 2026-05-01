@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>To'lovlar hisoboti</title>
+  <style>
+    :root {
+      --bg: #f2f0ea;
+      --panel: #fffdf8;
+      --ink: #191714;
+      --muted: #6d665d;
+      --accent: #254441;
+      --accent-soft: #dce7e6;
+      --line: #ddd4c7;
+      --error: #9f1239;
+      --ok: #24613b;
+      --credit: #1d4ed8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Cambria, Georgia, serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(37, 68, 65, 0.14), transparent 28%),
+        linear-gradient(180deg, #fffcf7 0%, var(--bg) 100%);
+      min-height: 100vh;
+    }
+
+    body,
+    input,
+    select,
+    button,
+    .button-link,
+    .meta-item,
+    .history-table,
+    .report-card {
+      font-variant-numeric: lining-nums tabular-nums;
+      font-feature-settings: "lnum" 1, "tnum" 1;
+    }
+
+    strong,
+    .meta-item strong,
+    .history-table th,
+    .history-table td {
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-weight: 700;
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: end;
+      margin-bottom: 22px;
+      flex-wrap: wrap;
+    }
+
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(32px, 6vw, 58px);
+      line-height: 0.95;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .button-link,
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .button-link.secondary,
+    button.secondary {
+      background: #ebe6dc;
+      color: var(--ink);
+    }
+
+    .card {
+      background: color-mix(in srgb, var(--panel) 95%, white 5%);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: 0 18px 36px rgba(43, 40, 34, 0.06);
+      padding: 20px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .meta {
+      display: grid;
+      gap: 10px;
+    }
+
+    .meta-item {
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .meta-item strong {
+      display: block;
+      font-size: 26px;
+      margin-top: 6px;
+    }
+
+    label,
+    input {
+      display: block;
+      width: 100%;
+      font: inherit;
+    }
+
+    input {
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      margin: 8px 0 14px;
+      background: #fff;
+    }
+
+    .status {
+      min-height: 24px;
+      color: var(--ok);
+      margin-top: 12px;
+    }
+
+    .status.error {
+      color: var(--error);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .ledger-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .entry {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.9);
+      padding: 16px;
+    }
+
+    .entry-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .entry p {
+      margin: 6px 0;
+    }
+
+    .section-title {
+      margin: 24px 0 12px;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .debt-outstanding { color: var(--error); }
+    .debt-credit { color: var(--credit); }
+
+    @media (max-width: 860px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div>
+        <div class="eyebrow" id="eyebrow">To'lovlar hisoboti</div>
+        <h1 id="pageTitle">To'lovlar sahifasi</h1>
+      </div>
+      <div class="actions">
+        <a class="button-link secondary" id="pendingLink" href="/warehouse/admin">Kutilayotganlar sahifasi</a>
+        <a class="button-link" id="switchLink" href="/warehouse/admin/transfer">O'tkazma sahifasi</a>
+      </div>
+    </section>
+
+    <section class="grid">
+      <aside class="card">
+        <div id="authPanel">
+          <h2 id="authTitle">Buxgalter yoki admin kirishi</h2>
+          <div id="usernameGroup">
+            <label for="username">Username</label>
+            <input id="username" autocomplete="username" placeholder="admin">
+          </div>
+          <div id="passwordGroup">
+            <label for="password">Password</label>
+            <input id="password" type="password" autocomplete="current-password" placeholder="password">
+          </div>
+          <div id="pinGroup">
+            <label for="pinCode">PIN kod</label>
+            <input id="pinCode" inputmode="numeric" maxlength="6" placeholder="4-6 raqam">
+          </div>
+          <div class="actions">
+            <button id="save-auth">Saqlash</button>
+            <button id="unlock-pin" class="secondary">PIN bilan kirish</button>
+            <button id="clear-pin" class="secondary">PINni o'chirish</button>
+            <button id="show-login" class="secondary hidden">Login bilan kirish</button>
+            <button id="reload" class="secondary">Yangilash</button>
+          </div>
+          <div id="authHint" class="muted" style="margin-top: 8px;">Birinchi marta username/password билан киринг. PIN yozib saqlasangiz, keyingi safar шу PIN yetadi.</div>
+        </div>
+        <div id="activeSessionNotice" class="muted hidden"></div>
+
+        <div class="meta" style="margin-top: 22px;">
+          <div class="meta-item">Mijozlar soni<strong id="countValue">0</strong></div>
+          <div class="meta-item">Jami kg<strong id="kgValue">0</strong></div>
+          <div class="meta-item">Jami summa<strong id="priceValue">0</strong></div>
+          <div class="meta-item">Naqd tushum<strong id="cashValue">0</strong></div>
+          <div class="meta-item">O'tkazma tushumi<strong id="transferValue">0</strong></div>
+          <div class="meta-item">Qolgan qarz<strong id="debtValue">0</strong></div>
+        </div>
+
+        <div id="status" class="status"></div>
+      </aside>
+
+      <main class="card">
+        <h2 id="listTitle">Tasdiqlangan to'lovlar</h2>
+        <div id="ledgerList" class="ledger-list"></div>
+        <section id="handoffSection" class="hidden">
+          <h3 class="section-title">Sotuvchilar topshirgan pullar</h3>
+          <div id="handoffSummaryList" class="ledger-list"></div>
+          <h3 class="section-title">Topshirish tarixi</h3>
+          <div id="handoffList" class="ledger-list"></div>
+        </section>
+      </main>
+    </section>
+  </div>
+
+  <script src="/warehouse/assets/warehouse-auth-pin.js"></script>
+  <script>
+    const mode = location.pathname.includes('/transfer') ? 'transfer' : 'cash';
+    const isCash = mode === 'cash';
+    const pageTitleEl = document.getElementById('pageTitle');
+    const eyebrowEl = document.getElementById('eyebrow');
+    const listTitleEl = document.getElementById('listTitle');
+    const switchLinkEl = document.getElementById('switchLink');
+    const ledgerListEl = document.getElementById('ledgerList');
+    const handoffSectionEl = document.getElementById('handoffSection');
+    const handoffSummaryListEl = document.getElementById('handoffSummaryList');
+    const handoffListEl = document.getElementById('handoffList');
+    const statusEl = document.getElementById('status');
+    const usernameGroupEl = document.getElementById('usernameGroup');
+    const usernameEl = document.getElementById('username');
+    const passwordEl = document.getElementById('password');
+    const pinEl = document.getElementById('pinCode');
+    const authPanelEl = document.getElementById('authPanel');
+    const activeSessionNoticeEl = document.getElementById('activeSessionNotice');
+    const authTitleEl = document.getElementById('authTitle');
+    const passwordGroupEl = document.getElementById('passwordGroup');
+    const saveAuthButtonEl = document.getElementById('save-auth');
+    const unlockPinButtonEl = document.getElementById('unlock-pin');
+    const clearPinButtonEl = document.getElementById('clear-pin');
+    const showLoginButtonEl = document.getElementById('show-login');
+    const authHintEl = document.getElementById('authHint');
+    let accessToken = (window.getWarehouseSearchParam ? window.getWarehouseSearchParam('access', location.search) : '') || localStorage.getItem('warehouse-access-token') || '';
+    if (accessToken) {
+      localStorage.setItem('warehouse-access-token', accessToken);
+    }
+
+    const labels = isCash
+      ? {
+          eyebrow: 'Naqd hisoboti',
+          title: 'Naqd oladigan mijozlar',
+          listTitle: 'Naqd to\'lovlar tarixi',
+          switchHref: '/warehouse/admin/transfer',
+          switchLabel: 'O\'tkazma sahifasi'
+        }
+      : {
+          eyebrow: 'O\'tkazma hisoboti',
+          title: 'O\'tkazma oladigan mijozlar',
+          listTitle: 'Bank to\'lovlari tarixi',
+          switchHref: '/warehouse/admin/cash',
+          switchLabel: 'Naqd sahifasi'
+        };
+
+    eyebrowEl.textContent = labels.eyebrow;
+    pageTitleEl.textContent = labels.title;
+    listTitleEl.textContent = labels.listTitle;
+    switchLinkEl.href = labels.switchHref;
+    switchLinkEl.textContent = labels.switchLabel;
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message || '';
+      statusEl.classList.toggle('error', Boolean(isError));
+    }
+
+    const pinAuth = window.createWarehousePinAuth({
+      usernameEl,
+      passwordEl,
+      pinEl,
+      setStatus,
+      sessionKey: 'warehouse-browser-session',
+      initialUsername: localStorage.getItem('warehouse-accountant-username') || localStorage.getItem('warehouse-admin-username') || '',
+      initialPassword: localStorage.getItem('warehouse-accountant-password') || localStorage.getItem('warehouse-admin-password') || '',
+      lockedMessage: 'PIN saqlangan. PIN bilan kiring yoki username/passwordni qayta yozing.',
+      credentialsMessage: 'Buxgalter yoki admin username va password kiriting.',
+    });
+
+    const authUi = window.createWarehouseAuthUi({
+      pinAuth,
+      accessToken,
+      authPanelEl,
+      sessionNoticeEl: activeSessionNoticeEl,
+      titleEl: authTitleEl,
+      passwordGroupEl,
+      saveAuthButtonEl,
+      unlockPinButtonEl,
+      clearPinButtonEl,
+      showLoginButtonEl,
+      hintEl: authHintEl,
+      fullTitle: 'Buxgalter yoki admin kirishi',
+      pinTitle: 'PIN bilan kirish',
+      fullHint: 'Birinchi marta username/password bilan kiring. PIN yozib saqlasangiz, keyingi safar shu PIN yetadi.',
+      pinHint: 'Qayta kirishda username va PIN kodni kiriting.',
+      activeHint: 'Kirish tasdiqlandi. Shu tab ichida qayta login so\'ralmaydi.',
+    });
+
+    const staffPicker = window.createWarehouseStaffSelector({
+      usernameEl,
+      usernameGroupEl,
+      label: isCash ? "Naqd hisobot xodimlari" : "O'tkazma hisobot xodimlari",
+      permissions: [mode],
+      manualOptionLabel: 'Admin yoki boshqa login',
+    });
+
+    function applyOperatorPermissions(profile) {
+      const currentProfile = profile || (window.getWarehouseOperatorProfile ? window.getWarehouseOperatorProfile() : null);
+      const isAdmin = Boolean(currentProfile && currentProfile.role === 'admin');
+      const canSeeSwitch = window.warehouseOperatorHasPermission
+        ? window.warehouseOperatorHasPermission(currentProfile, isCash ? 'transfer' : 'cash')
+        : true;
+      document.getElementById('pendingLink').classList.toggle('hidden', !isAdmin);
+      switchLinkEl.classList.toggle('hidden', !canSeeSwitch);
+    }
+
+    function authHeader() {
+      if (accessToken) {
+        return null;
+      }
+      const username = usernameEl.value.trim();
+      const password = passwordEl.value;
+      if (!username || !password) {
+        throw new Error('Buxgalter yoki admin username va password kiriting.');
+      }
+      localStorage.setItem('warehouse-accountant-username', username);
+      pinAuth.syncPasswordStorage(password, 'warehouse-accountant-password');
+      return 'Basic ' + btoa(username + ':' + password);
+    }
+
+    async function apiFetch(url) {
+      const normalizedUrl = typeof url === 'string' && url.startsWith('/api/warehouse')
+        ? `/warehouse/api${url.slice('/api'.length)}`
+        : url;
+      const authValue = authHeader();
+      const response = await fetch(normalizedUrl, {
+        headers: Object.assign(
+          {},
+          authValue ? { Authorization: authValue } : {},
+          accessToken ? { 'X-Warehouse-Access': accessToken } : {}
+        ),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || 'So\'rov bajarilmadi');
+      }
+      return data;
+    }
+
+    function numberFormat(value) {
+      return new Intl.NumberFormat('ru-RU').format(Number(value || 0));
+    }
+
+    function formatDateTime(value) {
+      const timestamp = value ? new Date(value) : null;
+      if (!timestamp || Number.isNaN(timestamp.getTime())) {
+        return '-';
+      }
+      return new Intl.DateTimeFormat('ru-RU', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(timestamp);
+    }
+
+    function setDebtTone(element, value) {
+      if (!element) return;
+      const amount = Number(value || 0);
+      element.classList.toggle('debt-outstanding', amount > 0);
+      element.classList.toggle('debt-credit', amount < 0);
+    }
+
+    function debtClass(value) {
+      const amount = Number(value || 0);
+      if (amount > 0) return 'debt-outstanding';
+      if (amount < 0) return 'debt-credit';
+      return '';
+    }
+
+    function renderSummary(summary) {
+      document.getElementById('countValue').textContent = String(summary.count || 0);
+      document.getElementById('kgValue').textContent = String(summary.totalKg || 0);
+      document.getElementById('priceValue').textContent = numberFormat(summary.totalPrice);
+      document.getElementById('cashValue').textContent = numberFormat(summary.cashPaidAmount);
+      document.getElementById('transferValue').textContent = numberFormat(summary.transferPaidAmount);
+      document.getElementById('debtValue').textContent = numberFormat(summary.remainingDebt);
+      setDebtTone(document.getElementById('debtValue'), summary.remainingDebt);
+    }
+
+    function renderLedger(entries) {
+      if (!entries.length) {
+        ledgerListEl.innerHTML = '<p>Bu sahifada hozircha mijozlar yo\'q.</p>';
+        return;
+      }
+      ledgerListEl.innerHTML = entries.map((entry) => {
+        const remainingDebt = Number(entry.totalPrice || 0) - Number(entry.paidAmount || 0);
+        const photos = Array.isArray(entry.photos) && entry.photos.length
+          ? entry.photos.filter((photo) => photo && photo.url)
+          : (entry.photo && entry.photo.url ? [entry.photo] : []);
+        return `
+        <article class="entry">
+          <div class="entry-top">
+            <strong>${entry.user && entry.user.fullName ? entry.user.fullName : 'Noma\'lum'}</strong>
+            <span>#${entry.id}</span>
+          </div>
+          <p>${entry.amountKg} kg · ${numberFormat(entry.totalPrice)} so'm</p>
+          <p>Naqd: ${numberFormat(entry.cashPaidAmount)} so'm · O'tkazma: ${numberFormat(entry.transferPaidAmount)} so'm</p>
+          <p>Jami tushum: ${numberFormat(entry.paidAmount)} so'm · Qolgan qarz: <span class="${debtClass(remainingDebt)}">${numberFormat(remainingDebt)} so'm</span></p>
+          ${photos.length ? `<p><a href="${photos[0].url}" target="_blank" rel="noopener">${photos.length === 1 ? 'Savdo rasmi' : `${photos.length} ta savdo rasmi`}</a></p>` : ''}
+          <p class="muted">${entry.extractedText || ''}</p>
+        </article>
+      `;
+      }).join('');
+    }
+
+    function renderHandoffSummary(entries) {
+      if (!isCash) {
+        handoffSectionEl.classList.add('hidden');
+        return;
+      }
+      handoffSectionEl.classList.remove('hidden');
+      if (!entries.length) {
+        handoffSummaryListEl.innerHTML = '<p>Hozircha sotuvchilar topshirgan pul yo\'q.</p>';
+        return;
+      }
+      handoffSummaryListEl.innerHTML = entries.map((entry) => `
+        <article class="entry">
+          <div class="entry-top">
+            <strong>${entry.sellerName || 'Noma\'lum sotuvchi'}</strong>
+            <span>${entry.count || 0} marta</span>
+          </div>
+          <p>Jami topshirgan pul: ${numberFormat(entry.totalAmount || 0)} so'm</p>
+          <p class="muted">Oxirgi topshirish: ${formatDateTime(entry.lastReceivedAt)}</p>
+        </article>
+      `).join('');
+    }
+
+    function renderHandoffs(entries) {
+      if (!isCash) {
+        handoffListEl.innerHTML = '';
+        return;
+      }
+      if (!entries.length) {
+        handoffListEl.innerHTML = '<p>Topshirish tarixi hozircha bo\'sh.</p>';
+        return;
+      }
+      handoffListEl.innerHTML = entries.map((entry) => `
+        <article class="entry">
+          <div class="entry-top">
+            <strong>${entry.operatorFullName || entry.operatorUsername || 'Noma\'lum sotuvchi'}</strong>
+            <span>#${entry.id}</span>
+          </div>
+          <p>${numberFormat(entry.amount || 0)} so'm topshirildi</p>
+          <p class="muted">${formatDateTime(entry.receivedAt)}</p>
+          <p class="muted">${entry.note || ''}</p>
+        </article>
+      `).join('');
+    }
+
+    async function loadLedger() {
+      setStatus('Ma\'lumotlar yuklanmoqda...');
+      const data = await apiFetch(`/api/warehouse/approved?paymentType=${mode}`);
+      if (window.setWarehouseOperatorProfile) {
+        window.setWarehouseOperatorProfile(data.operator || null);
+      }
+      applyOperatorPermissions(data.operator || null);
+      renderSummary(data.summary || {});
+      renderLedger(data.approved || []);
+      renderHandoffSummary(data.handoffSummary || []);
+      renderHandoffs(data.handoffs || []);
+      setStatus('Tayyor.');
+    }
+
+    document.getElementById('save-auth').addEventListener('click', async () => {
+      try {
+        await pinAuth.rememberFromCredentials();
+        authHeader();
+        await loadLedger();
+        authUi.markAuthenticated({ username: usernameEl.value.trim(), password: passwordEl.value });
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    document.getElementById('unlock-pin').addEventListener('click', async () => {
+      try {
+        const credentials = await pinAuth.unlockWithPin();
+        await loadLedger();
+        authUi.markAuthenticated(credentials);
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    document.getElementById('clear-pin').addEventListener('click', () => {
+      try {
+        pinAuth.clearPin();
+        authUi.render();
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    showLoginButtonEl.addEventListener('click', () => {
+      authUi.showFullLogin();
+      staffPicker.showManualLogin();
+      setStatus('Boshqa login bilan kirish ochildi.');
+    });
+
+    document.getElementById('reload').addEventListener('click', async () => {
+      try {
+        await loadLedger();
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    authUi.render();
+    applyOperatorPermissions();
+    staffPicker.load().catch(() => {});
+    if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
+      loadLedger().catch((error) => setStatus(error.message, true));
+    } else if (pinAuth.hasPin()) {
+      setStatus('PIN saqlangan. PIN bilan kiring, keyin hisobot sahifasi yuklanadi.');
+    } else {
+      setStatus('Buxgalter, admin ёки link orqali kiring, keyin sahifa yuklanadi.');
+    }
+  </script>
+  <script src="/warehouse-top-nav.js"></script>
+</body>
+</html>

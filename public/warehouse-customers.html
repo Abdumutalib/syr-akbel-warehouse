@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mijozlar mundarijasi</title>
+  <style>
+    :root {
+      --bg: #f6f0e8;
+      --panel: #fffdf9;
+      --ink: #18130f;
+      --muted: #6f6559;
+      --accent: #7e4d20;
+      --accent-2: #244b49;
+      --line: #e3d6c7;
+      --ok: #24613b;
+      --error: #9f1239;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(126, 77, 32, 0.12), transparent 28%),
+        radial-gradient(circle at right center, rgba(36, 75, 73, 0.11), transparent 30%),
+        linear-gradient(180deg, #fffaf4 0%, var(--bg) 100%);
+      min-height: 100vh;
+    }
+
+    body,
+    input,
+    button,
+    .button-link,
+    .customer-link,
+    .stat {
+      font-variant-numeric: lining-nums tabular-nums;
+      font-feature-settings: "lnum" 1, "tnum" 1;
+    }
+
+    strong,
+    .stat strong,
+    .customer-link strong {
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-weight: 700;
+    }
+    .shell {
+      width: min(1220px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 28px 0 44px;
+    }
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: end;
+      flex-wrap: wrap;
+      margin-bottom: 22px;
+    }
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    h1 { margin: 0; font-size: clamp(30px, 5vw, 58px); line-height: 0.95; }
+    .links { display: flex; gap: 10px; flex-wrap: wrap; }
+    .button-link, button {
+      border: 0; border-radius: 999px; padding: 12px 18px; font: inherit; cursor: pointer;
+      text-decoration: none; background: var(--accent); color: #fff;
+    }
+    .button-link.secondary, button.secondary { background: #eadfce; color: var(--ink); }
+    .layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
+    .card {
+      background: color-mix(in srgb, var(--panel) 95%, white 5%);
+      border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 18px 36px rgba(53, 34, 15, 0.06);
+      padding: 18px;
+    }
+    label, input { display: block; width: 100%; font: inherit; }
+    input {
+      border-radius: 12px; border: 1px solid var(--line); background: #fff; padding: 12px 14px; margin: 8px 0 14px;
+    }
+    .stats, .groups { display: grid; gap: 14px; }
+    .stat { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+    .stat strong { display: block; font-size: 26px; margin-top: 6px; }
+    .group-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .group h2 { margin-top: 0; }
+    .customer-list { display: grid; gap: 12px; }
+    .catalog-search { margin-bottom: 18px; }
+    .catalog-search input { margin: 8px 0 0; }
+    .customer-link {
+      display: block; text-decoration: none; color: var(--ink); background: rgba(255,255,255,0.92);
+      border: 1px solid var(--line); border-radius: 18px; padding: 14px;
+    }
+    .customer-link strong { display: block; margin-bottom: 6px; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .status { min-height: 24px; color: var(--ok); margin-top: 10px; }
+    .status.error { color: var(--error); }
+    .hidden { display: none !important; }
+    .check-grid { display: grid; gap: 8px; margin: 8px 0 14px; }
+    .check-row { display: flex; align-items: center; gap: 10px; }
+    .check-row input { width: auto; margin: 0; }
+    .field-label-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .field-label-row label { margin: 0; }
+    .add-mini { padding: 8px 12px; line-height: 1; }
+    .multi-input-list { display: grid; gap: 10px; margin: 0 0 14px; }
+    .multi-input-list input { margin: 0; }
+    @media (max-width: 960px) { .layout, .group-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div>
+        <h1>Mijozlar mundarijasi</h1>
+      </div>
+    </section>
+
+    <section class="layout">
+      <aside class="card">
+        <div id="authPanel">
+          <h2 id="authTitle">Xodim yoki admin kirishi</h2>
+          <div id="usernameGroup">
+            <label for="username">Username</label>
+            <input id="username" autocomplete="username" placeholder="123456">
+          </div>
+          <div id="passwordGroup">
+            <label for="password">Password</label>
+            <input id="password" type="password" autocomplete="current-password" placeholder="19750104">
+          </div>
+          <div id="pinGroup">
+            <label for="pinCode">PIN kod</label>
+            <input id="pinCode" inputmode="numeric" maxlength="6" placeholder="4-6 raqam">
+          </div>
+          <div class="links">
+            <button id="save-auth">Saqlash</button>
+            <button id="unlock-pin" class="secondary">PIN bilan kirish</button>
+            <button id="clear-pin" class="secondary">PINni o'chirish</button>
+            <button id="show-login" class="secondary hidden">Login bilan kirish</button>
+            <button id="reload" class="secondary">Yangilash</button>
+          </div>
+          <div id="authHint" class="muted" style="margin-top: 8px;">Birinchi marta username/password билан киринг. PIN yozib saqlasangiz, keyingi safar шу PIN yetadi.</div>
+        </div>
+        <div id="activeSessionNotice" class="muted hidden"></div>
+
+        <div class="stats" style="margin-top: 18px;">
+          <div class="stat">Naqd mijozlar<strong id="cashCount">0</strong></div>
+          <div class="stat">O'tkazma mijozlar<strong id="transferCount">0</strong></div>
+          <div class="stat">Boshqa mijozlar<strong id="otherCount">0</strong></div>
+        </div>
+
+        <div id="customerManagementPanel" style="margin-top: 18px;">
+          <h2 style="margin: 0 0 10px; font-size: 24px;">Yangi mijoz kiritish</h2>
+          <label for="customerOrganizationName">Tashkilot nomi</label>
+          <input id="customerOrganizationName" placeholder="Masalan: AKBEL SAVDO MCHJ">
+          <div class="field-label-row">
+            <label>F.I.Sh.</label>
+            <button id="addCustomerName" class="secondary add-mini" type="button">+</button>
+          </div>
+          <div id="customerNameList" class="multi-input-list"></div>
+          <div class="field-label-row">
+            <label>Telefon</label>
+            <button id="addCustomerPhone" class="secondary add-mini" type="button">+</button>
+          </div>
+          <div id="customerPhoneList" class="multi-input-list"></div>
+          <label for="customerTaxId">Tashkilot INN</label>
+          <input id="customerTaxId" placeholder="123456789">
+          <div class="field-label-row">
+            <label>Telegram ID</label>
+            <button id="addCustomerTelegram" class="secondary add-mini" type="button">+</button>
+          </div>
+          <div id="customerTelegramList" class="multi-input-list"></div>
+          <div>To'lov toifasi</div>
+          <div class="check-grid">
+            <label class="check-row" for="customerCategoryCash"><input id="customerCategoryCash" type="checkbox" checked>Naqd to'lovchi</label>
+            <label class="check-row" for="customerCategoryTransfer"><input id="customerCategoryTransfer" type="checkbox">O'tkazma to'lovchi</label>
+          </div>
+          <div class="muted" style="margin-top: -8px; margin-bottom: 12px;">Ikkalasini ham belgilasangiz, mijoz ikkala ro'yxatda ham ko'rinadi.</div>
+          <div class="links">
+            <button id="add-customer">Mijozni saqlash</button>
+            <button id="delete-customer" class="secondary" type="button">Mijozni o'chirish</button>
+          </div>
+          <label for="deleteCustomerSelect">O'chiriladigan mijoz</label>
+          <select id="deleteCustomerSelect"></select>
+        </div>
+
+        <div id="status" class="status"></div>
+      </aside>
+
+      <main class="groups group-grid">
+        <section class="card" style="grid-column: 1 / -1;">
+          <div class="catalog-search">
+            <label for="customerSearch">Mijoz qidirish</label>
+            <input id="customerSearch" placeholder="Mijoz nomini yozing">
+          </div>
+          <div id="customerSearchStatus" class="muted">Qidiruv bo'sh. Barcha mijozlar ko'rsatilmoqda.</div>
+        </section>
+        <section class="card group">
+          <h2>Naqdga oluvchi mijozlar</h2>
+          <div id="cashList" class="customer-list"></div>
+        </section>
+        <section class="card group">
+          <h2>O'tkazmaga oluvchi mijozlar</h2>
+          <div id="transferList" class="customer-list"></div>
+        </section>
+        <section class="card group">
+          <h2>Faolligi hali yo'q mijozlar</h2>
+          <div id="otherList" class="customer-list"></div>
+        </section>
+      </main>
+    </section>
+  </div>
+
+  <script src="/warehouse/assets/warehouse-auth-pin.js"></script>
+  <script>
+    const usernameGroupEl = document.getElementById('usernameGroup');
+    const usernameEl = document.getElementById('username');
+    const passwordEl = document.getElementById('password');
+    const pinEl = document.getElementById('pinCode');
+    const authPanelEl = document.getElementById('authPanel');
+    const activeSessionNoticeEl = document.getElementById('activeSessionNotice');
+    const authTitleEl = document.getElementById('authTitle');
+    const passwordGroupEl = document.getElementById('passwordGroup');
+    const saveAuthButtonEl = document.getElementById('save-auth');
+    const unlockPinButtonEl = document.getElementById('unlock-pin');
+    const clearPinButtonEl = document.getElementById('clear-pin');
+    const showLoginButtonEl = document.getElementById('show-login');
+    const authHintEl = document.getElementById('authHint');
+    const statusEl = document.getElementById('status');
+    const customerSearchEl = document.getElementById('customerSearch');
+    const customerSearchStatusEl = document.getElementById('customerSearchStatus');
+    let accessToken = (window.getWarehouseSearchParam ? window.getWarehouseSearchParam('access', location.search) : '') || localStorage.getItem('warehouse-access-token') || '';
+    let customerCatalogState = {
+      cashCustomers: [],
+      transferCustomers: [],
+      otherCustomers: [],
+    };
+    if (accessToken) {
+      localStorage.setItem('warehouse-access-token', accessToken);
+    }
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message || '';
+      statusEl.classList.toggle('error', Boolean(isError));
+    }
+
+    const pinAuth = window.createWarehousePinAuth({
+      usernameEl,
+      passwordEl,
+      pinEl,
+      setStatus,
+      sessionKey: 'warehouse-browser-session',
+      initialUsername: localStorage.getItem('warehouse-staff-username') || localStorage.getItem('warehouse-seller-username') || localStorage.getItem('warehouse-accountant-username') || localStorage.getItem('warehouse-admin-username') || '',
+      initialPassword: localStorage.getItem('warehouse-staff-password') || localStorage.getItem('warehouse-seller-password') || localStorage.getItem('warehouse-accountant-password') || localStorage.getItem('warehouse-admin-password') || '',
+      lockedMessage: 'PIN saqlangan. PIN bilan kiring yoki username/passwordni qayta yozing.',
+      credentialsMessage: 'Xodim yoki admin login va parolini kiriting.',
+    });
+
+    const authUi = window.createWarehouseAuthUi({
+      pinAuth,
+      accessToken,
+      authPanelEl,
+      sessionNoticeEl: activeSessionNoticeEl,
+      titleEl: authTitleEl,
+      passwordGroupEl,
+      saveAuthButtonEl,
+      unlockPinButtonEl,
+      clearPinButtonEl,
+      showLoginButtonEl,
+      hintEl: authHintEl,
+      fullTitle: 'Xodim yoki admin kirishi',
+      pinTitle: 'PIN bilan kirish',
+      fullHint: 'Birinchi marta username/password bilan kiring. PIN yozib saqlasangiz, keyingi safar shu PIN yetadi.',
+      pinHint: 'Qayta kirishda username va PIN kodni kiriting.',
+      activeHint: 'Kirish tasdiqlandi. Shu tab ichida qayta login so\'ralmaydi.',
+    });
+
+    const staffPicker = window.createWarehouseStaffSelector({
+      usernameEl,
+      usernameGroupEl,
+      label: "Xodimlar ro'yxati",
+      permissions: ['customers'],
+      manualOptionLabel: 'Admin yoki boshqa login',
+    });
+
+    function applyOperatorPermissions(profile) {
+      const currentProfile = profile || (window.getWarehouseOperatorProfile ? window.getWarehouseOperatorProfile() : null);
+      const isAdmin = Boolean(currentProfile && currentProfile.role === 'admin');
+      const canSeeSeller = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'seller') : true;
+      const adminLink = document.getElementById('customerCatalogAdminLink');
+      const sellerLink = document.getElementById('customerCatalogSellerLink');
+      if (adminLink) adminLink.classList.toggle('hidden', !isAdmin);
+      if (sellerLink) sellerLink.classList.toggle('hidden', !canSeeSeller);
+      document.getElementById('customerManagementPanel').classList.toggle('hidden', !canSeeSeller);
+    }
+
+    function authHeader() {
+      if (accessToken) return null;
+      const username = usernameEl.value.trim();
+      const password = passwordEl.value;
+      if (!username || !password) throw new Error('Xodim yoki admin login va parolini kiriting.');
+      localStorage.setItem('warehouse-staff-username', username);
+      pinAuth.syncPasswordStorage(password, 'warehouse-staff-password');
+      return 'Basic ' + btoa(username + ':' + password);
+    }
+    async function apiFetch(url, options = {}) {
+      const normalizedUrl = typeof url === 'string' && url.startsWith('/api/warehouse')
+        ? `/warehouse/api${url.slice('/api'.length)}`
+        : url;
+      const authValue = authHeader();
+      const requestHeaders = Object.assign(
+        {},
+        options.headers || {},
+        authValue ? { Authorization: authValue } : {},
+        accessToken ? { 'X-Warehouse-Access': accessToken } : {}
+      );
+      const response = await fetch(normalizedUrl, {
+        ...options,
+        headers: requestHeaders,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'So\'rov bajarilmadi');
+      return data;
+    }
+    function numberFormat(value) {
+      return new Intl.NumberFormat('ru-RU').format(Number(value || 0));
+    }
+    function appendMultiInput(containerId, options = {}, value = '') {
+      const host = document.getElementById(containerId);
+      const input = document.createElement('input');
+      input.type = options.type || 'text';
+      input.placeholder = options.placeholder || '';
+      if (options.step) input.step = options.step;
+      if (options.inputMode) input.inputMode = options.inputMode;
+      input.value = value;
+      host.appendChild(input);
+      return input;
+    }
+    function setMultiInputValues(containerId, values, options = {}) {
+      const host = document.getElementById(containerId);
+      host.innerHTML = '';
+      const source = Array.isArray(values) && values.length ? values : [''];
+      source.forEach((value) => appendMultiInput(containerId, options, value == null ? '' : String(value)));
+    }
+    function collectMultiInputValues(containerId) {
+      return Array.from(document.getElementById(containerId).querySelectorAll('input'))
+        .map((input) => input.value.trim())
+        .filter(Boolean);
+    }
+    function numericValue(id) {
+      const input = document.getElementById(id);
+      return Number(input && typeof input.value === 'string' ? input.value : 0);
+    }
+    function selectedCustomerCategories() {
+      const categories = [];
+      if (document.getElementById('customerCategoryCash').checked) categories.push('cash');
+      if (document.getElementById('customerCategoryTransfer').checked) categories.push('transfer');
+      return categories;
+    }
+    function withAccess(url) {
+      return accessToken ? `${url}${url.includes('?') ? '&' : '?'}access=${encodeURIComponent(accessToken)}` : url;
+    }
+    function uniqueCustomersFromCatalog(data) {
+      const unique = new Map();
+      for (const customer of [...(data.cashCustomers || []), ...(data.transferCustomers || []), ...(data.otherCustomers || [])]) {
+        if (!unique.has(customer.id)) {
+          unique.set(customer.id, customer);
+        }
+      }
+      return Array.from(unique.values()).sort((left, right) => left.fullName.localeCompare(right.fullName, 'ru'));
+    }
+    function setDeleteOptions(customers) {
+      const select = document.getElementById('deleteCustomerSelect');
+      if (!customers.length || accessToken) {
+        select.innerHTML = '';
+        select.disabled = true;
+        document.getElementById('delete-customer').disabled = true;
+        return;
+      }
+      select.innerHTML = customers.map((customer) => `<option value="${customer.id}">${customer.fullName}</option>`).join('');
+      select.disabled = false;
+      document.getElementById('delete-customer').disabled = false;
+    }
+    function renderGroup(listId, customers, emptyText) {
+      const host = document.getElementById(listId);
+      if (!customers.length) {
+        host.innerHTML = `<p>${emptyText}</p>`;
+        return;
+      }
+      host.innerHTML = customers.map((customer) => `
+        <a class="customer-link" href="${withAccess(`/warehouse/customers/${customer.id}`)}">
+          <strong>${customer.fullName}</strong>
+          <span class="muted">Tashkilot: ${customer.organizationName || '-'} · Telefonlar: ${(customer.phones || []).join(', ') || '-'}</span>
+        </a>
+      `).join('');
+    }
+    function matchesCustomerSearch(customer, query) {
+      const normalizedQuery = String(query || '').trim().toLocaleLowerCase('ru');
+      if (!normalizedQuery) {
+        return true;
+      }
+      const fullNames = Array.isArray(customer.fullNames) && customer.fullNames.length
+        ? customer.fullNames
+        : [customer.fullName];
+      const haystack = [
+        customer.fullName,
+        customer.organizationName,
+        ...(customer.phones || []),
+        ...fullNames,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase('ru');
+      return haystack.includes(normalizedQuery);
+    }
+    function renderCatalog() {
+      const query = customerSearchEl?.value || '';
+      const hasQuery = Boolean(query.trim());
+      const cashCustomers = customerCatalogState.cashCustomers.filter((customer) => matchesCustomerSearch(customer, query));
+      const transferCustomers = customerCatalogState.transferCustomers.filter((customer) => matchesCustomerSearch(customer, query));
+      const otherCustomers = customerCatalogState.otherCustomers.filter((customer) => matchesCustomerSearch(customer, query));
+      renderGroup('cashList', cashCustomers, hasQuery ? 'Mos naqd mijoz topilmadi.' : 'Naqd mijozlar hozircha yo\'q.');
+      renderGroup('transferList', transferCustomers, hasQuery ? 'Mos o\'tkazma mijoz topilmadi.' : 'O\'tkazma mijozlar hozircha yo\'q.');
+      renderGroup('otherList', otherCustomers, hasQuery ? 'Mos boshqa mijoz topilmadi.' : 'Boshqa mijozlar yo\'q.');
+      if (hasQuery) {
+        const totalMatches = cashCustomers.length + transferCustomers.length + otherCustomers.length;
+        customerSearchStatusEl.textContent = totalMatches
+          ? `"${query.trim()}" bo'yicha ${totalMatches} ta mos mijoz topildi.`
+          : `"${query.trim()}" bo'yicha mijoz topilmadi.`;
+      } else {
+        customerSearchStatusEl.textContent = "Qidiruv bo'sh. Barcha mijozlar ko'rsatilmoqda.";
+      }
+    }
+    async function loadCatalog() {
+      setStatus('Mijozlar mundarijasi yuklanmoqda...');
+      const data = await apiFetch('/api/warehouse/customer-catalog');
+      customerCatalogState = {
+        cashCustomers: Array.isArray(data.cashCustomers) ? data.cashCustomers : [],
+        transferCustomers: Array.isArray(data.transferCustomers) ? data.transferCustomers : [],
+        otherCustomers: Array.isArray(data.otherCustomers) ? data.otherCustomers : [],
+      };
+      if (window.setWarehouseOperatorProfile) {
+        window.setWarehouseOperatorProfile(data.operator || null);
+      }
+      applyOperatorPermissions(data.operator || null);
+      document.getElementById('cashCount').textContent = String(customerCatalogState.cashCustomers.length);
+      document.getElementById('transferCount').textContent = String(customerCatalogState.transferCustomers.length);
+      document.getElementById('otherCount').textContent = String(customerCatalogState.otherCustomers.length);
+      setDeleteOptions(uniqueCustomersFromCatalog(data));
+      renderCatalog();
+      setStatus('Tayyor.');
+    }
+    customerSearchEl.addEventListener('input', () => {
+      renderCatalog();
+    });
+    document.getElementById('save-auth').addEventListener('click', async () => {
+      try { await pinAuth.rememberFromCredentials(); authHeader(); await loadCatalog(); authUi.markAuthenticated({ username: usernameEl.value.trim(), password: passwordEl.value }); } catch (error) { setStatus(error.message, true); }
+    });
+    document.getElementById('unlock-pin').addEventListener('click', async () => {
+      try { const credentials = await pinAuth.unlockWithPin(); await loadCatalog(); authUi.markAuthenticated(credentials); } catch (error) { setStatus(error.message, true); }
+    });
+    document.getElementById('clear-pin').addEventListener('click', () => {
+      try { pinAuth.clearPin(); authUi.render(); } catch (error) { setStatus(error.message, true); }
+    });
+    showLoginButtonEl.addEventListener('click', () => {
+      authUi.showFullLogin();
+      staffPicker.showManualLogin();
+      setStatus('Boshqa login bilan kirish ochildi.');
+    });
+    document.getElementById('reload').addEventListener('click', async () => {
+      try { await loadCatalog(); } catch (error) { setStatus(error.message, true); }
+    });
+    document.getElementById('add-customer').addEventListener('click', async () => {
+      try {
+        const paymentCategories = selectedCustomerCategories();
+        const fullNames = collectMultiInputValues('customerNameList');
+        if (!paymentCategories.length) {
+          throw new Error("Kamida bitta to'lov toifasini belgilang.");
+        }
+        if (!fullNames.length) {
+          throw new Error("Kamida bitta F.I.Sh. kiriting.");
+        }
+        await apiFetch('/api/warehouse/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            organizationName: document.getElementById('customerOrganizationName').value.trim(),
+            fullNames,
+            phones: collectMultiInputValues('customerPhoneList'),
+            taxId: document.getElementById('customerTaxId').value.trim(),
+            telegramIds: collectMultiInputValues('customerTelegramList'),
+            paymentCategories,
+          }),
+        });
+        document.getElementById('customerOrganizationName').value = '';
+        setMultiInputValues('customerNameList', [], { placeholder: 'Али ака' });
+        setMultiInputValues('customerPhoneList', [], { placeholder: '+99890...' });
+        document.getElementById('customerTaxId').value = '';
+        setMultiInputValues('customerTelegramList', [], { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
+        document.getElementById('customerCategoryCash').checked = true;
+        document.getElementById('customerCategoryTransfer').checked = false;
+        setStatus('Mijoz saqlandi.');
+        await loadCatalog();
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+    document.getElementById('delete-customer').addEventListener('click', async () => {
+      const select = document.getElementById('deleteCustomerSelect');
+      const customerId = Number(select.value || 0);
+      const customerName = select.options[select.selectedIndex]?.textContent || 'mijoz';
+      if (!customerId) {
+        return;
+      }
+      if (!confirm(`${customerName} va uning barcha yozuvlari o'chirilsinmi?`)) {
+        return;
+      }
+      try {
+        const result = await apiFetch(`/api/warehouse/customers/${customerId}`, {
+          method: 'DELETE',
+        });
+        setStatus(`${result.customer.fullName} o'chirildi.`);
+        await loadCatalog();
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+    document.getElementById('addCustomerName').addEventListener('click', () => {
+      appendMultiInput('customerNameList', { placeholder: 'Али ака' });
+    });
+    document.getElementById('addCustomerPhone').addEventListener('click', () => {
+      appendMultiInput('customerPhoneList', { placeholder: '+99890...' });
+    });
+    document.getElementById('addCustomerTelegram').addEventListener('click', () => {
+      appendMultiInput('customerTelegramList', { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
+    });
+    setMultiInputValues('customerNameList', [], { placeholder: 'Али ака' });
+    setMultiInputValues('customerPhoneList', [], { placeholder: '+99890...' });
+    setMultiInputValues('customerTelegramList', [], { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
+    authUi.render();
+    applyOperatorPermissions();
+    staffPicker.load().catch(() => {});
+    if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
+      loadCatalog().catch((error) => setStatus(error.message, true));
+    } else if (pinAuth.hasPin()) {
+      setStatus('PIN saqlangan. PIN bilan kiring, keyin mundarija yuklanadi.');
+    } else {
+      setStatus('Xodim, admin ёки link orqali kiring, keyin mundarija yuklanadi.');
+    }
+  </script>
+  <script src="/warehouse-top-nav.js"></script>
+</body>
+</html>

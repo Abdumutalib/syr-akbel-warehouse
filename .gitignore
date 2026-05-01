@@ -1,0 +1,13 @@
+node_modules/
+.env
+
+# Runtime warehouse state and uploads
+data/warehouse.json
+data/transaction-photos/
+
+# Python / editor / OS noise
+__pycache__/
+.pytest_cache/
+.vscode/
+Thumbs.db
+Desktop.ini
