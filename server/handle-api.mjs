@@ -6,7 +6,6 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     buildPendingReply,
     createStaffAccessLink,
     createStaffAccount,
-    createWarehouseOrder,
     createWarehouseTransaction,
     currentWarehousePricing,
     deleteCustomer,
@@ -17,216 +16,34 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     listCustomerSummaries,
     listDeletedCustomers,
     listPendingTransactions,
-    listSellerCashHandoffs,
-    listWarehouseOrders,
-    listWarehouseReceipts,
     listStaffAccounts,
     loadWarehouse,
     normalizeApprovalPayment,
     readPostJson,
     recordApprovedSale,
     recordCustomerPayment,
-    recordSellerCashHandoff,
-    recordWarehouseReceipt,
     restoreDeletedCustomer,
     revokeStaffAccessLink,
     saveWarehouse,
-    setCustomerSellerBalanceVisibility,
     seedWarehouseStock,
     sendApiJson,
-    sendTelegramChannelMessage,
     sendTelegramMessage,
+    sendTelegramChannelMessage,
+    sendTelegramAdminDm,
+    buildChannelSaleMsg,
+    buildChannelPaymentMsg,
+    buildChannelApprovalMsg,
+    buildChannelNewOrderMsg,
+    buildAdminNewOrderMsg,
+    buildCustomerSaleMsg,
+    buildCustomerPaymentMsg,
     summarizeApprovedTransactions,
-    summarizeOperatorDailyActivity,
-    summarizeWarehouseReceipts,
     summarizeCustomers,
-    storeWarehouseTransactionPhoto,
-    storeWarehouseTransactionPhotos,
     approveTransaction,
     updateStaffAccountPermissions,
     updateWarehousePricing,
     upsertCustomer,
   } = deps;
-
-  function serializeOperator(operator) {
-    if (!operator || typeof operator !== "object") {
-      return null;
-    }
-    const permissions = operator.role === "admin"
-      ? ["seller", "customers", "cash", "transfer"]
-      : (operator.authKind === "access-link" && operator.accessLink?.permission
-          ? [String(operator.accessLink.permission)]
-          : (Array.isArray(operator.permissions) ? operator.permissions : []));
-    return {
-      id: operator.id ?? null,
-      kind: operator.kind || operator.authKind || "staff",
-      role: operator.role || null,
-      username: operator.username || "",
-      fullName: operator.fullName || operator.username || "",
-      permissions,
-    };
-  }
-
-  function serializeStaffDirectoryEntry(entry) {
-    return {
-      id: entry.id,
-      fullName: entry.fullName,
-      username: entry.username,
-      role: entry.role,
-      permissions: Array.isArray(entry.permissions) ? entry.permissions : [],
-    };
-  }
-
-  function formatNumber(value) {
-    return new Intl.NumberFormat("ru-RU").format(Number(value || 0));
-  }
-
-  function toCsvCell(value) {
-    const normalized = String(value == null ? "" : value);
-    if (/[,"\n\r]/.test(normalized)) {
-      return `"${normalized.replace(/"/g, '""')}"`;
-    }
-    return normalized;
-  }
-
-  function toCsvRow(values) {
-    return values.map((value) => toCsvCell(value)).join(",");
-  }
-
-  function buildWarehouseExportCsv(state, pricing) {
-    const lines = [];
-    const approved = listApprovedTransactions(state, "all", pricing);
-    const customers = listCustomerSummaries(state, pricing);
-    const orders = listWarehouseOrders(state);
-
-    lines.push(toCsvRow(["TYPE", "DATE", "CUSTOMER", "KG", "BLOCKS", "TOTAL_SUM", "PAID_SUM", "DEBT_SUM", "PAYMENT_TYPE", "OPERATOR", "NOTE"]));
-    for (const entry of approved) {
-      lines.push(toCsvRow([
-        entry.kind || "sale",
-        entry.approvedAt || entry.createdAt || "",
-        entry.userFullName || entry.fullName || "",
-        Number(entry.amountKg || 0),
-        Number(entry.blockCount || 0),
-        Number(entry.totalPrice || 0),
-        Number(entry.paidAmount || 0),
-        Math.max(0, Number(entry.totalPrice || 0) - Number(entry.paidAmount || 0)),
-        entry.priceType || entry.paymentType || "",
-        entry.operatorFullName || entry.operatorUsername || "",
-        entry.note || "",
-      ]));
-    }
-
-    lines.push("");
-    lines.push(toCsvRow(["CUSTOMERS"]));
-    lines.push(toCsvRow(["ID", "FULL_NAME", "PHONE", "TOTAL_TAKEN_KG", "TOTAL_SALES_SUM", "TOTAL_PAID_SUM", "CURRENT_DEBT_SUM", "PENDING_COUNT"]));
-    for (const customer of customers) {
-      lines.push(toCsvRow([
-        customer.id,
-        customer.fullName || "",
-        customer.phone || "",
-        Number(customer.totalTakenKg || 0),
-        Number(customer.totalSales || 0),
-        Number(customer.totalPaid || 0),
-        Number(customer.currentDebt || 0),
-        Number(customer.pendingCount || 0),
-      ]));
-    }
-
-    lines.push("");
-    lines.push(toCsvRow(["ORDERS"]));
-    lines.push(toCsvRow(["ID", "CREATED_AT", "CUSTOMER", "AMOUNT_KG", "STATUS", "OPERATOR", "NOTE"]));
-    for (const order of orders) {
-      lines.push(toCsvRow([
-        order.id,
-        order.createdAt || "",
-        order.customerFullName || order.fullName || "",
-        Number(order.amountKg || 0),
-        order.status || "",
-        order.operatorFullName || order.operatorUsername || "",
-        order.note || "",
-      ]));
-    }
-
-    return `\uFEFF${lines.join("\r\n")}`;
-  }
-
-  async function notifyTelegramChannel(lines) {
-    if (typeof sendTelegramChannelMessage !== "function") {
-      return;
-    }
-    const text = Array.isArray(lines) ? lines.filter(Boolean).join("\n") : String(lines || "");
-    if (!text) {
-      return;
-    }
-    try {
-      await sendTelegramChannelMessage(text);
-    } catch {
-      // Channel notification errors must not break core business flows.
-    }
-  }
-
-  function serializeOrderCustomerDirectory(state) {
-    return (Array.isArray(state?.users) ? state.users : [])
-      .slice()
-      .sort((left, right) => String(left?.fullName || "").localeCompare(String(right?.fullName || ""), "ru"))
-      .map((entry) => ({
-        id: entry.id,
-        fullName: entry.fullName || "",
-        fullNames: Array.isArray(entry.fullNames) ? entry.fullNames : [],
-        organizationName: entry.organizationName || null,
-        taxId: entry.taxId || null,
-        phones: Array.isArray(entry.phones) ? entry.phones : [],
-      }));
-  }
-
-  function serializeCustomerDirectory(state) {
-    return serializeOrderCustomerDirectory(state);
-  }
-
-  function canOperatorViewCustomerBalance(operator, customer) {
-    if (!operator || operator.role === "admin") {
-      return true;
-    }
-    if (operator.role !== "seller") {
-      return true;
-    }
-    return customer?.sellerCanViewBalance === true;
-  }
-
-  function maskCustomerSummaryForOperator(customer, operator) {
-    if (canOperatorViewCustomerBalance(operator, customer)) {
-      return customer;
-    }
-    return {
-      ...customer,
-      totalSales: null,
-      totalPaid: null,
-      cashDebt: null,
-      transferDebt: null,
-      currentDebt: null,
-    };
-  }
-
-  function maskCustomerDetailForOperator(detail, operator) {
-    if (canOperatorViewCustomerBalance(operator, detail?.customer)) {
-      return {
-        ...detail,
-        balanceVisible: true,
-      };
-    }
-    return {
-      ...detail,
-      balanceVisible: false,
-      summary: {
-        ...(detail.summary || {}),
-        totalSales: null,
-        totalPaid: null,
-        cashDebt: null,
-        transferDebt: null,
-        currentDebt: null,
-      },
-    };
-  }
 
   if (apiPath === "/api/telegram/webhook" && req.method === "POST") {
     const body = await readPostJson(req);
@@ -242,6 +59,20 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     try {
       const result = createWarehouseTransaction(payload);
       await sendTelegramMessage(payload.telegramId, buildPendingReply(result));
+      await sendTelegramAdminDm(
+        buildAdminNewOrderMsg(
+          result.user?.fullName || "Noma'lum",
+          result.transaction.amountKg,
+          result.transaction.totalPrice
+        )
+      );
+      await sendTelegramChannelMessage(
+        buildChannelNewOrderMsg(
+          result.user?.fullName || "Noma'lum",
+          result.transaction.amountKg,
+          result.transaction.totalPrice
+        )
+      );
       sendApiJson(res, 200, { ok: true, transactionId: result.transaction.id });
     } catch (e) {
       await sendTelegramMessage(
@@ -283,89 +114,43 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     }
     const state = loadWarehouse();
     const pricing = currentWarehousePricing(state);
-    const receipts = listWarehouseReceipts(state);
     sendApiJson(res, 200, {
       ok: true,
       pending: listPendingTransactions(state, pricing),
-      receipts: receipts.slice(0, 10),
-      receiptSummary: summarizeWarehouseReceipts(receipts),
       stockKg: state.warehouse.currentStockKg,
       pricing,
-    });
-    return true;
-  }
-
-  if (apiPath === "/api/warehouse/stock-receipts" && req.method === "POST") {
-    if (!assertWarehouseAdmin(req, res)) {
-      return true;
-    }
-    const body = await readPostJson(req);
-    if (body === null) {
-      sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
-      return true;
-    }
-    try {
-      const state = loadWarehouse();
-      const receipt = recordWarehouseReceipt(state, body);
-      saveWarehouse(state);
-      sendApiJson(res, 201, {
-        ok: true,
-        receipt,
-        receipts: listWarehouseReceipts(state).slice(0, 10),
-        stockKg: state.warehouse.currentStockKg,
-        pricing: currentWarehousePricing(state),
-      });
-    } catch (e) {
-      sendApiJson(res, 400, { error: e.message || "Qabulni saqlab bo'lmadi" });
-    }
-    return true;
-  }
-
-  if (apiPath === "/api/warehouse/staff-directory" && req.method === "GET") {
-    if (!assertWarehouseAdmin(req, res)) {
-      return true;
-    }
-    const state = loadWarehouse();
-    sendApiJson(res, 200, {
-      ok: true,
-      staff: listStaffAccounts(state).map(serializeStaffDirectoryEntry),
-      adminEnabled: true,
     });
     return true;
   }
 
   if (apiPath === "/api/warehouse/customers" && req.method === "GET") {
-    const operator = assertWarehouseOperator(req, res, {
+    if (!assertWarehouseOperator(req, res, {
       realm: "warehouse-seller",
       permission: "seller",
       message: "Mijoz qo'shish uchun sotuvchi ruxsati kerak",
-    });
-    if (!operator) {
+    })) {
       return true;
     }
     const state = loadWarehouse();
     const pricing = currentWarehousePricing(state);
-    const customers = listCustomerSummaries(state, pricing).map((customer) => maskCustomerSummaryForOperator(customer, operator));
+    const customers = listCustomerSummaries(state, pricing);
     sendApiJson(res, 200, {
       ok: true,
       customers,
       summary: summarizeCustomers(customers),
-      dailySummary: summarizeOperatorDailyActivity(state, operator, { pricing }),
       stockKg: state.warehouse.currentStockKg,
       pricing,
-      operator: serializeOperator(operator),
     });
     return true;
   }
 
   if (apiPath === "/api/warehouse/customer-catalog" && req.method === "GET") {
-    const operator = assertWarehouseOperator(req, res, {
+    if (!assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
       permission: "customers",
       message: "Mijozlar sahifasi uchun ruxsat kerak",
-    });
-    if (!operator) {
+    })) {
       return true;
     }
     const state = loadWarehouse();
@@ -373,108 +158,17 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     sendApiJson(res, 200, {
       ok: true,
       ...catalog,
-      operator: serializeOperator(operator),
     });
-    return true;
-  }
-
-  if (apiPath === "/api/warehouse/orders" && req.method === "GET") {
-    const operator = assertWarehouseOperator(req, res, {
-      allowAdmin: true,
-      realm: "warehouse-staff",
-      message: "Zakazlar sahifasi uchun kirish kerak",
-    });
-    if (!operator) {
-      return true;
-    }
-    const state = loadWarehouse();
-    sendApiJson(res, 200, {
-      ok: true,
-      orders: listWarehouseOrders(state),
-      operator: serializeOperator(operator),
-    });
-    return true;
-  }
-
-  if (apiPath === "/api/warehouse/order-customer-directory" && req.method === "GET") {
-    const operator = assertWarehouseOperator(req, res, {
-      allowAdmin: true,
-      realm: "warehouse-staff",
-      message: "Zakaz uchun mijozlar ro'yxatini olishda kirish kerak",
-    });
-    if (!operator) {
-      return true;
-    }
-    const state = loadWarehouse();
-    sendApiJson(res, 200, {
-      ok: true,
-      customers: serializeOrderCustomerDirectory(state),
-      operator: serializeOperator(operator),
-    });
-    return true;
-  }
-
-  if (apiPath === "/api/warehouse/customer-directory" && req.method === "GET") {
-    const operator = assertWarehouseOperator(req, res, {
-      allowAdmin: true,
-      realm: "warehouse-staff",
-      message: "Mijozlar ro'yxatini olishda kirish kerak",
-    });
-    if (!operator) {
-      return true;
-    }
-    const state = loadWarehouse();
-    sendApiJson(res, 200, {
-      ok: true,
-      customers: serializeCustomerDirectory(state),
-      operator: serializeOperator(operator),
-    });
-    return true;
-  }
-
-  if (apiPath === "/api/warehouse/orders" && req.method === "POST") {
-    const operator = assertWarehouseOperator(req, res, {
-      allowAdmin: true,
-      realm: "warehouse-staff",
-      message: "Zakaz yozish uchun kirish kerak",
-    });
-    if (!operator) {
-      return true;
-    }
-    const body = await readPostJson(req);
-    if (body === null) {
-      sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
-      return true;
-    }
-    try {
-      const state = loadWarehouse();
-      const order = createWarehouseOrder(state, body, operator);
-      saveWarehouse(state);
-      await notifyTelegramChannel([
-        "🧾 АКБЕЛ • Zakaz yozildi",
-        `Mijoz: ${order?.customerFullName || order?.fullName || "-"}`,
-        `Hajm: ${formatNumber(order?.amountKg || 0)} kg`,
-        `Operator: ${operator?.fullName || operator?.username || "-"}`,
-      ]);
-      sendApiJson(res, 201, {
-        ok: true,
-        order,
-        operator: serializeOperator(operator),
-      });
-    } catch (e) {
-      sendApiJson(res, 400, { error: e.message || "Zakazni saqlab bo'lmadi" });
-    }
     return true;
   }
 
   if (apiPath === "/api/warehouse/customers" && req.method === "POST") {
-    const operator = assertWarehouseOperator(req, res, {
+    if (!assertWarehouseOperator(req, res, {
       roles: ["seller"],
       allowAdmin: true,
       realm: "warehouse-seller",
       message: "Mijoz qo'shish учун sotuvchi yoki admin ruxsati kerak",
-    });
-    if (!operator) {
+    })) {
       return true;
     }
     const body = await readPostJson(req);
@@ -484,19 +178,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     }
     try {
       const state = loadWarehouse();
-      const payload = {
-        ...body,
-      };
-      if (
-        operator.role !== "admin" &&
-        (Object.prototype.hasOwnProperty.call(payload, "customCashPricePerKg") ||
-          Object.prototype.hasOwnProperty.call(payload, "customTransferPricePerKg"))
-      ) {
-        sendApiJson(res, 403, { error: "Mijozning maxsus narxini faqat admin o'zgartira oladi" });
-        return true;
-      }
-      delete payload.sellerCanViewBalance;
-      const customer = upsertCustomer(state, payload);
+      const customer = upsertCustomer(state, body);
       saveWarehouse(state);
       sendApiJson(res, 201, { ok: true, customer });
     } catch (e) {
@@ -527,56 +209,23 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (customerDetailMatch && req.method === "GET") {
-    const operator = assertWarehouseOperator(req, res, {
+    if (!assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
       permission: "customers",
       message: "Mijoz sahifasi uchun ruxsat kerak",
-    });
-    if (!operator) {
+    })) {
       return true;
     }
     try {
       const state = loadWarehouse();
-      const detail = maskCustomerDetailForOperator(
-        getCustomerDetail(state, Number(customerDetailMatch[1]), currentWarehousePricing(state)),
-        operator
-      );
+      const detail = getCustomerDetail(state, Number(customerDetailMatch[1]), currentWarehousePricing(state));
       sendApiJson(res, 200, {
         ok: true,
         ...detail,
-        operator: serializeOperator(operator),
       });
     } catch (e) {
       sendApiJson(res, 404, { error: e.message || "Mijoz topilmadi" });
-    }
-    return true;
-  }
-
-  const customerBalanceVisibilityMatch = apiPath.match(/^\/api\/warehouse\/customers\/(\d+)\/seller-balance-visibility$/);
-  if (customerBalanceVisibilityMatch && req.method === "POST") {
-    if (!assertWarehouseAdmin(req, res)) {
-      return true;
-    }
-    const body = await readPostJson(req);
-    if (body === null) {
-      sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
-      return true;
-    }
-    try {
-      const state = loadWarehouse();
-      const customer = setCustomerSellerBalanceVisibility(state, Number(customerBalanceVisibilityMatch[1]), body.visible);
-      saveWarehouse(state);
-      sendApiJson(res, 200, {
-        ok: true,
-        customer: {
-          id: customer.id,
-          fullName: customer.fullName,
-          sellerCanViewBalance: customer.sellerCanViewBalance === true,
-        },
-      });
-    } catch (e) {
-      sendApiJson(res, 404, { error: e.message || "Mijoz sozlamasini saqlab bo'lmadi" });
     }
     return true;
   }
@@ -722,85 +371,39 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   if (apiPath === "/api/warehouse/approved" && req.method === "GET") {
     const paymentType = u.searchParams.get("paymentType") || "all";
     const requiredPermission = paymentType === "transfer" ? "transfer" : "cash";
-    const operator = assertWarehouseOperator(req, res, {
+    if (!assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-accountant",
       permission: requiredPermission,
       message: "Hisobot sahifasi uchun ruxsat kerak",
-    });
-    if (!operator) {
+    })) {
       return true;
     }
     const state = loadWarehouse();
     const pricing = currentWarehousePricing(state);
     const approved = listApprovedTransactions(state, paymentType, pricing);
-    const handoffs = paymentType === "cash" ? listSellerCashHandoffs(state) : [];
-    const handoffSummary = handoffs.reduce((entries, entry) => {
-      const sellerKey = entry.operatorUsername || entry.operatorFullName || `seller-${entry.operatorId || entry.id}`;
-      const current = entries.get(sellerKey) || {
-        sellerName: entry.operatorFullName || entry.operatorUsername || "Noma'lum sotuvchi",
-        operatorUsername: entry.operatorUsername || null,
-        totalAmount: 0,
-        count: 0,
-        lastReceivedAt: null,
-      };
-      current.totalAmount += Number(entry.amount || 0);
-      current.count += 1;
-      current.lastReceivedAt = entry.receivedAt || current.lastReceivedAt;
-      entries.set(sellerKey, current);
-      return entries;
-    }, new Map());
     sendApiJson(res, 200, {
       ok: true,
       paymentType,
       approved,
-      handoffs,
-      handoffSummary: Array.from(handoffSummary.values()).sort((left, right) => right.totalAmount - left.totalAmount),
       summary: summarizeApprovedTransactions(approved),
       pricing,
-      operator: serializeOperator(operator),
     });
-    return true;
-  }
-
-  if (apiPath === "/api/warehouse/export.csv" && req.method === "GET") {
-    if (!assertWarehouseAdmin(req, res)) {
-      return true;
-    }
-    const state = loadWarehouse();
-    const pricing = currentWarehousePricing(state);
-    const csv = buildWarehouseExportCsv(state, pricing);
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    res.writeHead(200, {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename=warehouse-export-${stamp}.csv`,
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      Pragma: "no-cache",
-      Expires: "0",
-      "X-Content-Type-Options": "nosniff",
-    });
-    res.end(csv);
     return true;
   }
 
   if (apiPath === "/api/warehouse/seller-sale" && req.method === "POST") {
+    if (!assertWarehouseOperator(req, res, {
+      allowAdmin: true,
+      realm: "warehouse-seller",
+      permission: "seller",
+      message: "Savdo yozish uchun sotuvchi ruxsati kerak",
+    })) {
+      return true;
+    }
     const body = await readPostJson(req);
     if (body === null) {
       sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
-      return true;
-    }
-    const priceType = String(body?.priceType || "").trim().toLocaleLowerCase("en-US");
-    const requiredPermission = priceType === "transfer" ? ["transfer", "seller"] : ["seller"];
-    const permissionLabel = priceType === "transfer"
-      ? "Savdo yozish uchun бухгалтер ёки сотувчи рухсати керак"
-      : "Savdo yozish uchun sotuvchi ruxsati kerak";
-    const operator = assertWarehouseOperator(req, res, {
-      allowAdmin: true,
-      realm: priceType === "transfer" ? "warehouse-accountant" : "warehouse-seller",
-      permission: requiredPermission,
-      message: permissionLabel,
-    });
-    if (!operator) {
       return true;
     }
     try {
@@ -808,22 +411,29 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       const pricing = currentWarehousePricing(state);
       const result = recordApprovedSale(state, body, {
         pricing,
-        actor: operator,
       });
-      const savedPhotos = storeWarehouseTransactionPhotos(body?.photos || body?.photo || []);
-      if (savedPhotos.length) {
-        result.transaction.photos = savedPhotos;
-        result.transaction.photo = savedPhotos[0];
-      }
       saveWarehouse(state);
-      await notifyTelegramChannel([
-        "🧀 АКБЕЛ • Savdo yozildi",
-        `Mijoz: ${result.user?.fullName || "-"}`,
-        `Hajm: ${formatNumber(result.transaction?.amountKg || 0)} kg`,
-        `Summa: ${formatNumber(result.transaction?.totalPrice || 0)} so'm`,
-        `To'lov turi: ${String(result.transaction?.priceType || priceType || "cash")}`,
-        `Operator: ${operator?.fullName || operator?.username || "-"}`,
-      ]);
+      const saleCashPaid = Number(result.transaction?.cashPaidAmount || 0);
+      const saleTransferPaid = Number(result.transaction?.transferPaidAmount || 0);
+      await sendTelegramChannelMessage(
+        buildChannelSaleMsg(
+          result.user?.fullName || "Noma'lum",
+          result.transaction.amountKg,
+          result.transaction.totalPrice,
+          saleCashPaid,
+          saleTransferPaid,
+          result.debt
+        )
+      );
+      await sendTelegramMessage(
+        result.user?.telegramId,
+        buildCustomerSaleMsg(
+          result.user?.fullName || "Hurmatli mijoz",
+          result.transaction.amountKg,
+          result.transaction.totalPrice,
+          result.debt
+        )
+      );
       sendApiJson(res, 201, {
         ok: true,
         customer: result.user,
@@ -840,13 +450,12 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (apiPath === "/api/warehouse/customer-payment" && req.method === "POST") {
-    const operator = assertWarehouseOperator(req, res, {
+    if (!assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-seller",
       permission: "seller",
       message: "To'lov yozish uchun sotuvchi ruxsati kerak",
-    });
-    if (!operator) {
+    })) {
       return true;
     }
     const body = await readPostJson(req);
@@ -859,21 +468,27 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       const pricing = currentWarehousePricing(state);
       const result = recordCustomerPayment(state, body, {
         pricing,
-        actor: operator,
       });
-      const savedPhotos = storeWarehouseTransactionPhotos(body?.photos || body?.photo || []);
-      if (savedPhotos.length) {
-        result.transaction.photos = savedPhotos;
-        result.transaction.photo = savedPhotos[0];
-      }
       saveWarehouse(state);
-      await notifyTelegramChannel([
-        "💳 АКБЕЛ • To'lov yozildi",
-        `Mijoz: ${result.user?.fullName || "-"}`,
-        `To'lov: ${formatNumber(result.transaction?.paidAmount || 0)} so'm`,
-        `Qolgan qarz: ${formatNumber(result.debt || 0)} so'm`,
-        `Operator: ${operator?.fullName || operator?.username || "-"}`,
-      ]);
+      const payCashPaid = Number(result.transaction?.cashPaidAmount || 0);
+      const payTransferPaid = Number(result.transaction?.transferPaidAmount || 0);
+      await sendTelegramChannelMessage(
+        buildChannelPaymentMsg(
+          result.user?.fullName || "Noma'lum",
+          payCashPaid,
+          payTransferPaid,
+          result.debt
+        )
+      );
+      await sendTelegramMessage(
+        result.user?.telegramId,
+        buildCustomerPaymentMsg(
+          result.user?.fullName || "Hurmatli mijoz",
+          payCashPaid,
+          payTransferPaid,
+          result.debt
+        )
+      );
       sendApiJson(res, 201, {
         ok: true,
         customer: result.user,
@@ -884,45 +499,6 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       });
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "To'lovni yozib bo'lmadi" });
-    }
-    return true;
-  }
-
-  if (apiPath === "/api/warehouse/seller-cash-handoffs" && req.method === "POST") {
-    const operator = assertWarehouseOperator(req, res, {
-      allowAdmin: true,
-      realm: "warehouse-seller",
-      permission: "seller",
-      message: "Pul topshirish uchun sotuvchi ruxsati kerak",
-    });
-    if (!operator) {
-      return true;
-    }
-    const body = await readPostJson(req);
-    if (body === null) {
-      sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
-      return true;
-    }
-    try {
-      const state = loadWarehouse();
-      const pricing = currentWarehousePricing(state);
-      const handoff = recordSellerCashHandoff(state, body, {
-        actor: operator,
-      });
-      saveWarehouse(state);
-      await notifyTelegramChannel([
-        "📦 АКБЕЛ • Pul topshirildi",
-        `Sotuvchi: ${operator?.fullName || operator?.username || "-"}`,
-        `Miqdor: ${formatNumber(handoff?.amount || 0)} so'm`,
-      ]);
-      sendApiJson(res, 201, {
-        ok: true,
-        handoff,
-        dailySummary: summarizeOperatorDailyActivity(state, operator, { pricing }),
-        operator: serializeOperator(operator),
-      });
-    } catch (e) {
-      sendApiJson(res, 400, { error: e.message || "Topshirilgan pulni saqlab bo'lmadi" });
     }
     return true;
   }
@@ -987,12 +563,18 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         { pricing }
       );
       saveWarehouse(state);
-      await notifyTelegramChannel([
-        "✅ АКБЕЛ • Pending tasdiqlandi",
-        `Mijoz: ${result.user?.fullName || "-"}`,
-        `Savdo: ${formatNumber(result.transaction?.totalPrice || 0)} so'm`,
-        `Qarz: ${formatNumber(result.debt || 0)} so'm`,
-      ]);
+      const approveCashPaid = Number(result.transaction?.cashPaidAmount || 0);
+      const approveTransferPaid = Number(result.transaction?.transferPaidAmount || 0);
+      await sendTelegramChannelMessage(
+        buildChannelApprovalMsg(
+          result.user?.fullName || "Noma'lum",
+          result.transaction.amountKg,
+          result.transaction.totalPrice,
+          approveCashPaid,
+          approveTransferPaid,
+          result.debt
+        )
+      );
       await sendTelegramMessage(
         result.user?.telegramId,
         buildDebtReply(result.user?.fullName || "mijoz", result.debt)
@@ -1009,6 +591,44 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Tranzaksiyani tasdiqlab bo'lmadi" });
     }
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/export-csv" && req.method === "GET") {
+    if (!assertWarehouseAdmin(req, res)) {
+      return true;
+    }
+    const state = loadWarehouse();
+    const pricing = currentWarehousePricing(state);
+    const userMap = new Map(state.users.map((u) => [u.id, u.fullName]));
+    const KIND_LABELS = { sale: "Savdo", payment: "To'lov", "pending-sale": "Kutilayotgan" };
+    const STATUS_LABELS = { approved: "Tasdiqlangan", pending: "Kutilayotgan" };
+    const csvEscape = (v) => {
+      const s = String(v == null ? "" : v);
+      return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ["Mijoz ismi", "Tur", "Holat", "Sana", "kg", "Summa (so'm)", "Naqd to'lov", "O'tkazma to'lov"].join(",");
+    const rows = state.transactions
+      .slice()
+      .sort((a, b) => new Date(a.approvedAt || a.createdAt || 0) - new Date(b.approvedAt || b.createdAt || 0))
+      .map((tx) => {
+        const name = userMap.get(tx.userId) || "Noma'lum";
+        const kind = KIND_LABELS[tx.kind || (tx.status === "pending" ? "pending-sale" : "sale")] || tx.kind || "";
+        const status = STATUS_LABELS[tx.status] || tx.status || "";
+        const date = tx.approvedAt || tx.createdAt || "";
+        const dateStr = date ? new Date(date).toLocaleDateString("ru-RU") : "";
+        const kg = Number(tx.amountKg || 0);
+        const total = Number(tx.totalPrice || 0);
+        const cash = Number(tx.cashPaidAmount || 0);
+        const transfer = Number(tx.transferPaidAmount || 0);
+        return [name, kind, status, dateStr, kg, total, cash, transfer].map(csvEscape).join(",");
+      });
+    const csv = [header, ...rows].join("\r\n");
+    res.writeHead(200, {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": 'attachment; filename="akbel-export.csv"',
+    });
+    res.end("\uFEFF" + csv);
     return true;
   }
 

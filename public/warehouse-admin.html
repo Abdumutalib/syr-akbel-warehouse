@@ -4,14 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Сыр АКБЕЛ</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="АКБЕЛ Админ">
-  <link rel="apple-touch-icon" href="/favicon.svg">
-  <meta name="theme-color" content="#9f6b2f">
-  <script>(function(){var l=document.createElement('link');l.rel='manifest';l.href='/warehouse/manifest.json?page=admin';document.head.appendChild(l);if('serviceWorker' in navigator)navigator.serviceWorker.register('/warehouse/sw.js',{scope:'/warehouse/',updateViaCache:'none'});})()</script>
   <style>
     :root {
       --bg: #f6efe6;
@@ -37,28 +29,6 @@
         linear-gradient(180deg, #fff8ef 0%, var(--bg) 100%);
       color: var(--ink);
       min-height: 100vh;
-    }
-
-    body,
-    input,
-    select,
-    textarea,
-    button,
-    .nav-link,
-    .receipt-item,
-    .debtor-item,
-    .tx {
-      font-variant-numeric: lining-nums tabular-nums;
-      font-feature-settings: "lnum" 1, "tnum" 1;
-    }
-
-    strong,
-    .meta-item strong,
-    .receipt-item strong,
-    .tx strong,
-    .debtor-total strong {
-      font-family: "Segoe UI", Tahoma, sans-serif;
-      font-weight: 700;
     }
 
     .shell {
@@ -190,27 +160,6 @@
       margin-top: 10px;
     }
 
-    .permission-meta {
-      display: block;
-      font-size: 12px;
-      color: var(--muted);
-      margin-top: 2px;
-      line-height: 1.35;
-    }
-
-    .special-price-list {
-      display: grid;
-      gap: 12px;
-      margin-top: 12px;
-    }
-
-    .special-price-item {
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 14px;
-      background: rgba(255, 255, 255, 0.88);
-    }
-
     .link-item {
       border: 1px dashed var(--line);
       border-radius: 14px;
@@ -288,90 +237,6 @@
       font-size: 14px;
     }
 
-    .receipt-list {
-      display: grid;
-      gap: 10px;
-      margin-top: 12px;
-    }
-
-    .receipt-item {
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.88);
-      padding: 12px 14px;
-    }
-
-    .receipt-item strong {
-      display: block;
-      margin-bottom: 4px;
-    }
-
-    .debtor-list {
-      display: grid;
-      gap: 12px;
-      margin-top: 14px;
-    }
-
-    .debtor-toolbar {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: end;
-      flex-wrap: wrap;
-      margin-top: 8px;
-    }
-
-    .debtor-filter {
-      display: grid;
-      gap: 6px;
-    }
-
-    .debtor-filter select {
-      min-width: 220px;
-      padding: 12px 14px;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-      background: #fff;
-      font: inherit;
-    }
-
-    .debtor-total {
-      padding: 12px 14px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.88);
-    }
-
-    .debtor-total strong {
-      display: block;
-      margin-top: 4px;
-      font-size: 24px;
-    }
-
-    .debtor-item {
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.88);
-      padding: 14px;
-    }
-
-    .debtor-item strong {
-      display: block;
-      margin-bottom: 4px;
-    }
-
-    .debtor-header {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      align-items: start;
-      flex-wrap: wrap;
-    }
-
-    .debt-outstanding {
-      color: #9f1239;
-    }
-
     .tx-actions {
       display: flex;
       gap: 10px;
@@ -427,7 +292,6 @@
             <button id="clear-pin" class="secondary">PINni o'chirish</button>
             <button id="show-login" class="secondary hidden">Login bilan kirish</button>
             <button id="reload" class="secondary">Qayta yuklash</button>
-            <button id="export-excel" class="secondary">Excel eksport</button>
           </div>
           <div id="authHint" style="color: #6d6255; font-size: 14px; margin-top: 8px;">Birinchi marta login/password bilan kiring. PIN yozib saqlasangiz, keyingi safar шу PIN билан кириш мумкин.</div>
         </div>
@@ -437,20 +301,6 @@
         <label for="stockKg">Joriy qoldiq (kg)</label>
         <input id="stockKg" type="number" min="0" step="0.1" placeholder="0">
         <button id="update-stock">Qoldiqni yangilash</button>
-
-        <h3 style="margin-top: 24px;">Сыр қабул қилиш</h3>
-        <label for="receiveStockKg">Qabul qilingan kg</label>
-        <input id="receiveStockKg" type="number" min="0.001" step="0.001" placeholder="Masalan: 25.5">
-        <label for="receiveStockBlocks">Qabul blok soni</label>
-        <input id="receiveStockBlocks" type="number" min="1" step="1" placeholder="Masalan: 48">
-        <label for="receiveStockPriceKg">Qabul narxi (1 kg)</label>
-        <input id="receiveStockPriceKg" type="number" min="1" step="1" placeholder="Masalan: 52000">
-        <label for="receiveStockDate">Sana</label>
-        <input id="receiveStockDate" type="date">
-        <label for="receiveStockNote">Izoh</label>
-        <input id="receiveStockNote" placeholder="Masalan: ertalabki yangi partiya">
-        <button id="receive-stock">Qabulni saqlash</button>
-        <div id="receiptList" class="receipt-list"></div>
 
         <h3 style="margin-top: 24px;">Narxlar</h3>
         <label for="cashPriceKg">Naqd 1 kg narxi</label>
@@ -476,30 +326,6 @@
             O'tkazma narx
             <strong id="transferPriceValue">0</strong>
           </div>
-          <div class="meta-item">
-            Sotilgan kg
-            <strong id="approvedKgValue">0</strong>
-          </div>
-          <div class="meta-item">
-            Sotilgan blok
-            <strong id="approvedBlockValue">0</strong>
-          </div>
-          <div class="meta-item">
-            Sotilgan summa
-            <strong id="approvedTotalValue">0</strong>
-          </div>
-          <div class="meta-item">
-            Qabul blok
-            <strong id="receiptBlockValue">0</strong>
-          </div>
-          <div class="meta-item">
-            Naqd tushum
-            <strong id="approvedCashValue">0</strong>
-          </div>
-          <div class="meta-item">
-            Перечисление тушуми
-            <strong id="approvedTransferValue">0</strong>
-          </div>
         </div>
 
         <div class="nav-links">
@@ -520,6 +346,9 @@
             Bank orqali tushgan to'lovlar va mijozlar ro'yxati
           </a>
         </div>
+        <div style="margin-top: 16px;">
+          <button id="export-csv">CSV yuklab olish (Excel)</button>
+        </div>
 
         <div class="card" style="margin-top: 20px; padding: 0; border: 0; box-shadow: none; background: transparent;">
           <h3 style="margin-top: 0;">Xodim qo'shish</h3>
@@ -536,7 +365,6 @@
           </select>
           <h4 style="margin-bottom: 8px;">Qaysi sahifalarni ko'ra oladi</h4>
           <div id="staffPermissionsCreate" class="permission-grid"></div>
-          <div class="muted" style="margin-bottom: 12px;">Zakazlar sahifasi hozir barcha loginlar uchun ochiq.</div>
           <button id="createStaff">Xodimni saqlash</button>
           <div id="staffList" class="staff-list"></div>
         </div>
@@ -550,31 +378,6 @@
       <main class="card">
         <h2>Tasdiq kutayotgan yozuvlar</h2>
         <div id="pendingList" class="tx-list"></div>
-
-        <div style="margin-top: 24px;">
-          <h2>Balans ro'yxati</h2>
-          <div class="debtor-toolbar">
-            <div class="debtor-filter">
-              <label for="debtorFilter">Filter</label>
-              <select id="debtorFilter">
-                <option value="all">Hammasi</option>
-                <option value="cash">Faqat naqdchilar</option>
-                <option value="transfer">Faqat перечислениечилар</option>
-              </select>
-            </div>
-            <div class="debtor-total">
-              Umumiy balans
-              <strong id="debtorTotalValue">0</strong>
-            </div>
-          </div>
-          <div id="debtorList" class="debtor-list"></div>
-        </div>
-
-        <div style="margin-top: 24px;">
-          <h2>Maxsus narxli mijozlar</h2>
-          <div class="muted">Admin alohida narx bergan mijozlar shu yerda ko'rinadi.</div>
-          <div id="specialPriceCustomerList" class="special-price-list"></div>
-        </div>
       </main>
     </section>
   </div>
@@ -594,47 +397,23 @@
     const unlockPinButtonEl = document.getElementById("unlock-pin");
     const clearPinButtonEl = document.getElementById("clear-pin");
     const showLoginButtonEl = document.getElementById("show-login");
-    const exportExcelButtonEl = document.getElementById("export-excel");
     const authHintEl = document.getElementById("authHint");
     const stockKgEl = document.getElementById("stockKg");
-    const receiveStockKgEl = document.getElementById("receiveStockKg");
-    const receiveStockBlocksEl = document.getElementById("receiveStockBlocks");
-    const receiveStockPriceKgEl = document.getElementById("receiveStockPriceKg");
-    const receiveStockDateEl = document.getElementById("receiveStockDate");
-    const receiveStockNoteEl = document.getElementById("receiveStockNote");
-    const receiptListEl = document.getElementById("receiptList");
     const pendingCountEl = document.getElementById("pendingCount");
     const stockValueEl = document.getElementById("stockValue");
     const cashPriceValueEl = document.getElementById("cashPriceValue");
     const transferPriceValueEl = document.getElementById("transferPriceValue");
-    const approvedKgValueEl = document.getElementById("approvedKgValue");
-    const approvedBlockValueEl = document.getElementById("approvedBlockValue");
-    const approvedTotalValueEl = document.getElementById("approvedTotalValue");
-    const approvedCashValueEl = document.getElementById("approvedCashValue");
-    const approvedTransferValueEl = document.getElementById("approvedTransferValue");
-    const receiptBlockValueEl = document.getElementById("receiptBlockValue");
-    const debtorListEl = document.getElementById("debtorList");
-    const debtorFilterEl = document.getElementById("debtorFilter");
-    const debtorTotalValueEl = document.getElementById("debtorTotalValue");
     const cashPriceKgEl = document.getElementById("cashPriceKg");
     const transferPriceKgEl = document.getElementById("transferPriceKg");
     const staffListEl = document.getElementById("staffList");
     const deletedCustomerListEl = document.getElementById("deletedCustomerList");
-    const specialPriceCustomerListEl = document.getElementById("specialPriceCustomerList");
     const staffRoleEl = document.getElementById("staffRole");
     const createPermissionsEl = document.getElementById("staffPermissionsCreate");
-    let debtorCustomersState = [];
     const STAFF_PERMISSION_LABELS = {
       seller: "Sotuvchi sahifasi",
       customers: "Mijozlar sahifalari",
       cash: "Naqd hisobot",
       transfer: "O'tkazma hisobot",
-    };
-    const STAFF_PERMISSION_DETAILS = {
-      seller: "Sotuvchi sahifasi va Naqd savdo yozish",
-      customers: "Mijozlar mundarijasi va Mijoz sahifalari",
-      cash: "Naqd hisobot sahifasi",
-      transfer: "Buxgalter sahifasi, O'tkazma hisobot va O'tkazma savdo yozish",
     };
 
     function setStatus(message, isError = false) {
@@ -704,174 +483,12 @@
       return new Intl.NumberFormat("ru-RU").format(Number(value || 0));
     }
 
-    function balanceClass(value) {
-      const amount = Number(value || 0);
-      if (amount > 0) return "debt-outstanding";
-      if (amount < 0) return "debt-credit";
-      return "";
-    }
-
-    function balanceLabel(value) {
-      const amount = Number(value || 0);
-      if (amount < 0) return "haqdor";
-      if (amount > 0) return "qarz";
-      return "balans";
-    }
-
-    function balanceText(value) {
-      const amount = Number(value || 0);
-      return `${numberFormat(Math.abs(amount))} so'm ${balanceLabel(amount)}`;
-    }
-
-    function selectedCustomerBalance(customer, activeFilter) {
-      if (activeFilter === "cash") {
-        return Number(customer.cashDebt || 0);
-      }
-      if (activeFilter === "transfer") {
-        return Number(customer.transferDebt || 0);
-      }
-      return Number(customer.currentDebt || 0);
-    }
-
-    function todayValue() {
-      const now = new Date();
-      const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-      return local.toISOString().slice(0, 10);
-    }
-
-    function applyAutoDate(inputEl, force = false) {
-      if (!inputEl) return;
-      if (force || inputEl.dataset.dateMode !== "manual") {
-        inputEl.value = todayValue();
-        inputEl.dataset.dateMode = "auto";
-      }
-    }
-
     function renderPricing(pricing = {}) {
       cashPriceValueEl.textContent = numberFormat(pricing.cashPricePerKg || 0);
       transferPriceValueEl.textContent = numberFormat(pricing.transferPricePerKg || 0);
       cashPriceKgEl.value = pricing.cashPricePerKg || "";
       transferPriceKgEl.value = pricing.transferPricePerKg || "";
-      if (receiveStockPriceKgEl && !receiveStockPriceKgEl.value) {
-        receiveStockPriceKgEl.value = pricing.cashPricePerKg || "";
-      }
     }
-
-    function renderApprovedSummary(summary = {}) {
-      approvedKgValueEl.textContent = String(summary.totalKg || 0);
-      approvedBlockValueEl.textContent = numberFormat(summary.totalBlocks || 0);
-      approvedTotalValueEl.textContent = numberFormat(summary.totalPrice || 0);
-      approvedCashValueEl.textContent = numberFormat(summary.cashPaidAmount || 0);
-      approvedTransferValueEl.textContent = numberFormat(summary.transferPaidAmount || 0);
-    }
-
-    function renderReceiptSummary(summary = {}) {
-      receiptBlockValueEl.textContent = numberFormat(summary.totalBlocks || 0);
-    }
-
-    function renderReceipts(receipts = []) {
-      if (!Array.isArray(receipts) || !receipts.length) {
-        receiptListEl.innerHTML = "<p>Hozircha qabul yozuvi yo'q.</p>";
-        return;
-      }
-      receiptListEl.innerHTML = receipts.map((entry) => `
-        <article class="receipt-item">
-          <strong>+${String(entry.amountKg)} kg</strong>
-          <div>${entry.blockCount ? `${numberFormat(entry.blockCount)} blok` : "Blok kiritilmagan"}</div>
-          <div>${entry.pricePerKg ? `${numberFormat(entry.pricePerKg)} so'm/kg · jami ${numberFormat(entry.totalPrice || 0)} so'm` : "Narx kiritilmagan"}</div>
-          <div>${entry.receivedAt ? new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(entry.receivedAt)) : '-'}</div>
-          <div>${entry.note || "Izoh yo'q"}</div>
-        </article>
-      `).join("");
-    }
-
-    function renderDebtors(customers = []) {
-      debtorCustomersState = Array.isArray(customers) ? customers : [];
-      const activeFilter = debtorFilterEl && debtorFilterEl.value ? debtorFilterEl.value : "all";
-      const debtors = debtorCustomersState
-        .filter((customer) => selectedCustomerBalance(customer, activeFilter) !== 0)
-        .filter((customer) => {
-          if (activeFilter === "cash") {
-            return Array.isArray(customer.paymentCategories) && customer.paymentCategories.includes("cash");
-          }
-          if (activeFilter === "transfer") {
-            return Array.isArray(customer.paymentCategories) && customer.paymentCategories.includes("transfer");
-          }
-          return true;
-        })
-        .sort((left, right) => Math.abs(selectedCustomerBalance(right, activeFilter)) - Math.abs(selectedCustomerBalance(left, activeFilter)));
-
-      debtorTotalValueEl.textContent = balanceText(
-        debtors.reduce((sum, customer) => {
-          return sum + selectedCustomerBalance(customer, activeFilter);
-        }, 0)
-      );
-
-      if (!debtors.length) {
-        debtorListEl.innerHTML = "<p>Hozircha qarzdor yoki haqdor mijoz yo'q.</p>";
-        return;
-      }
-
-      debtorListEl.innerHTML = debtors.map((customer) => `
-        <article class="debtor-item">
-          <div class="debtor-header">
-            <strong>${customer.fullName}</strong>
-            <button class="secondary" data-toggle-balance-visibility="${customer.id}" data-visible="${customer.sellerCanViewBalance === true ? 'true' : 'false'}">${customer.sellerCanViewBalance === true ? 'Sotuvchiga ko\'rinadi' : 'Sotuvchidan yopiq'}</button>
-          </div>
-          <div class="${balanceClass(customer.currentDebt)}">Jami balans: ${balanceText(customer.currentDebt)}</div>
-          <div>Naqd balans: <span class="${balanceClass(customer.cashDebt)}">${balanceText(customer.cashDebt || 0)}</span> · O'tkazma balans: <span class="${balanceClass(customer.transferDebt)}">${balanceText(customer.transferDebt || 0)}</span></div>
-          <div>Jami savdo: ${numberFormat(customer.totalSales || 0)} so'm</div>
-          <div>Jami to'lov: ${numberFormat(customer.totalPaid || 0)} so'm</div>
-          <div style="margin-top: 8px;"><a href="/warehouse/customers/${customer.id}">Mijoz sahifasini ochish</a></div>
-        </article>
-      `).join("");
-    }
-
-    function renderSpecialPriceCustomers(customers = []) {
-      const specialCustomers = (Array.isArray(customers) ? customers : [])
-        .filter((customer) => customer.customCashPricePerKg || customer.customTransferPricePerKg)
-        .sort((left, right) => (left.fullName || "").localeCompare(right.fullName || "", "ru"));
-
-      if (!specialCustomers.length) {
-        specialPriceCustomerListEl.innerHTML = "<p>Hozircha maxsus narx berilgan mijoz yo'q.</p>";
-        return;
-      }
-
-      specialPriceCustomerListEl.innerHTML = specialCustomers.map((customer) => `
-        <article class="special-price-item">
-          <strong>${customer.fullName}</strong>
-          <div>Naqd narx: ${customer.customCashPricePerKg ? `${numberFormat(customer.customCashPricePerKg)} so'm/kg` : "Umumiy narx"}</div>
-          <div>O'tkazma narx: ${customer.customTransferPricePerKg ? `${numberFormat(customer.customTransferPricePerKg)} so'm/kg` : "Umumiy narx"}</div>
-          <div style="margin-top: 8px;"><a href="/warehouse/customers/${customer.id}">Mijoz sahifasini ochish</a></div>
-        </article>
-      `).join("");
-    }
-
-    debtorFilterEl.addEventListener("change", () => {
-      renderDebtors(debtorCustomersState);
-    });
-
-    debtorListEl.addEventListener("click", async (event) => {
-      const button = event.target.closest("[data-toggle-balance-visibility]");
-      if (!button) {
-        return;
-      }
-      const customerId = Number(button.dataset.toggleBalanceVisibility || 0);
-      if (!customerId) {
-        return;
-      }
-      const nextVisible = button.dataset.visible !== "true";
-      try {
-        await apiFetch(`/api/warehouse/customers/${customerId}/seller-balance-visibility`, {
-          method: "POST",
-          body: JSON.stringify({ visible: nextVisible }),
-        });
-        setStatus(nextVisible ? "Sotuvchi uchun umumiy qarz ko'rinadigan qilindi." : "Sotuvchi uchun умумий qarз yopildi.");
-        await loadPending();
-      } catch (error) {
-        setStatus(error.message, true);
-      }
-    });
 
     function defaultPermissionsForRole(role) {
       return role === "accountant" ? ["cash", "transfer", "customers"] : ["seller", "customers"];
@@ -882,7 +499,7 @@
       host.innerHTML = Object.entries(STAFF_PERMISSION_LABELS).map(([key, label]) => `
         <label class="permission-option">
           <input type="checkbox" name="${prefix}" value="${key}" ${active.includes(key) ? "checked" : ""}>
-          <span>${label}<span class="permission-meta">${STAFF_PERMISSION_DETAILS[key] || label}</span></span>
+          <span>${label}</span>
         </label>
       `).join("");
     }
@@ -892,7 +509,7 @@
     }
 
     function permissionSummary(permissions) {
-      const list = (permissions || []).map((permission) => STAFF_PERMISSION_DETAILS[permission] || STAFF_PERMISSION_LABELS[permission] || permission);
+      const list = (permissions || []).map((permission) => STAFF_PERMISSION_LABELS[permission] || permission);
       return list.length ? list.join(", ") : "Ruxsat berilmagan";
     }
 
@@ -914,10 +531,10 @@
       pendingListEl.innerHTML = items.map((item) => `
         <article class="tx">
           <div class="tx-header">
-            <strong>${item.user && item.user.fullName ? item.user.fullName : "Noma'lum"}</strong>
+            <strong>${item.user?.fullName || "Noma'lum"}</strong>
             <span>#${item.id}</span>
           </div>
-          <p>${item.amountKg} kg${item.blockCount ? ` · ${numberFormat(item.blockCount)} blok` : ''} · ${numberFormat(item.totalPrice)} so'm</p>
+          <p>${item.amountKg} kg · ${numberFormat(item.totalPrice)} so'm</p>
           <p class="raw">${item.extractedText || ""}</p>
           <label for="cash-paid-${item.id}">Naqd pul</label>
           <input id="cash-paid-${item.id}" type="number" min="0" step="1" placeholder="0">
@@ -959,8 +576,8 @@
           <div class="permission-grid">
             ${Object.entries(STAFF_PERMISSION_LABELS).map(([key, label]) => `
               <label class="permission-option">
-                <input type="checkbox" name="staff-permissions-${entry.id}" value="${key}" ${(Array.isArray(entry.permissions) && entry.permissions.includes(key)) ? "checked" : ""}>
-                <span>${label}<span class="permission-meta">${STAFF_PERMISSION_DETAILS[key] || label}</span></span>
+                <input type="checkbox" name="staff-permissions-${entry.id}" value="${key}" ${entry.permissions?.includes(key) ? "checked" : ""}>
+                <span>${label}</span>
               </label>
             `).join("")}
           </div>
@@ -1008,21 +625,11 @@
 
     async function loadPending() {
       setStatus("Kutilayotgan yozuvlar yuklanmoqda...");
-      const [data, approvedData, customersData] = await Promise.all([
-        apiFetch("/api/warehouse/pending"),
-        apiFetch("/api/warehouse/approved?paymentType=all"),
-        apiFetch("/api/warehouse/customers"),
-      ]);
+      const data = await apiFetch("/api/warehouse/pending");
       pendingCountEl.textContent = String(data.pending.length);
       stockValueEl.textContent = String(data.stockKg);
       renderPricing(data.pricing || {});
-      renderApprovedSummary(approvedData.summary || {});
-      renderReceiptSummary(data.receiptSummary || {});
-      renderDebtors(customersData.customers || []);
-      renderSpecialPriceCustomers(customersData.customers || []);
-      renderReceipts(data.receipts || []);
       stockKgEl.value = data.stockKg;
-      applyAutoDate(receiveStockDateEl);
       renderPending(data.pending);
       await loadStaff();
       await loadDeletedCustomers();
@@ -1050,7 +657,6 @@
         authHeader();
         await loadPending();
         authUi.markAuthenticated({ username: usernameEl.value.trim(), password: passwordEl.value });
-        window.dispatchEvent(new CustomEvent('warehouse:operator-profile-changed'));
       } catch (error) {
         setStatus(error.message, true);
       }
@@ -1061,7 +667,6 @@
         const credentials = await pinAuth.unlockWithPin();
         await loadPending();
         authUi.markAuthenticated(credentials);
-        window.dispatchEvent(new CustomEvent('warehouse:operator-profile-changed'));
       } catch (error) {
         setStatus(error.message, true);
       }
@@ -1089,34 +694,6 @@
       }
     });
 
-    exportExcelButtonEl.addEventListener("click", async () => {
-      try {
-        const response = await fetch("/warehouse/api/warehouse/export.csv", {
-          method: "GET",
-          headers: {
-            Authorization: authHeader(),
-          },
-        });
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          throw new Error(data.error || "Eksportni yuklab bo'lmadi");
-        }
-        const blob = await response.blob();
-        const downloadUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
-        link.href = downloadUrl;
-        link.download = `warehouse-export-${stamp}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(downloadUrl);
-        setStatus("Excel eksport yuklab olindi.");
-      } catch (error) {
-        setStatus(error.message, true);
-      }
-    });
-
     document.getElementById("update-stock").addEventListener("click", async () => {
       try {
         const stockKg = Number(stockKgEl.value || 0);
@@ -1129,32 +706,6 @@
       } catch (error) {
         setStatus(error.message, true);
       }
-    });
-
-    document.getElementById("receive-stock").addEventListener("click", async () => {
-      try {
-        const amountKg = Number(receiveStockKgEl.value || 0);
-        const blockCount = Number(receiveStockBlocksEl.value || 0);
-        const pricePerKg = Number(receiveStockPriceKgEl.value || 0);
-        const receivedAt = receiveStockDateEl.value || todayValue();
-        const note = receiveStockNoteEl.value.trim();
-        const data = await apiFetch("/api/warehouse/stock-receipts", {
-          method: "POST",
-          body: JSON.stringify({ amountKg, blockCount, pricePerKg, receivedAt, note }),
-        });
-        receiveStockKgEl.value = "";
-        receiveStockBlocksEl.value = "";
-        receiveStockNoteEl.value = "";
-        applyAutoDate(receiveStockDateEl, true);
-        await loadPending();
-        setStatus(`Сыр қабул қилинди: +${String(data.receipt?.amountKg || amountKg)} kg${data.receipt?.blockCount ? ` · ${numberFormat(data.receipt.blockCount)} blok` : ""}${data.receipt?.totalPrice ? ` · ${numberFormat(data.receipt.totalPrice)} so'm` : ""}`);
-      } catch (error) {
-        setStatus(error.message, true);
-      }
-    });
-
-    receiveStockDateEl.addEventListener("input", () => {
-      receiveStockDateEl.dataset.dateMode = "manual";
     });
 
     document.getElementById("update-pricing").addEventListener("click", async () => {
@@ -1291,6 +842,31 @@
       }
     });
 
+    document.getElementById("export-csv").addEventListener("click", async () => {
+      try {
+        setStatus("CSV tayyorlanmoqda...");
+        const auth = authHeader();
+        const base = location.pathname.startsWith("/warehouse") ? "/warehouse/api/warehouse/export-csv" : "/api/warehouse/export-csv";
+        const resp = await fetch(base, { headers: { Authorization: auth } });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || "Yuklab bo'lmadi");
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "akbel-export.csv";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setStatus("CSV yuklandi.");
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
     authUi.render();
     if (pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
       loadPending().catch((error) => setStatus(error.message, true));
@@ -1301,6 +877,5 @@
     }
     applyRoleDefaults();
   </script>
-  <script src="/warehouse-top-nav.js"></script>
 </body>
 </html>
