@@ -514,7 +514,8 @@ function hasWarehouseRouteAccess(req, u) {
   }
   const accessToken = (u.searchParams.get("access") || extractWarehouseAccessToken(req) || "").trim();
   if (!accessToken) {
-    return false;
+    // Allow opening protected pages directly; actual data access is still enforced by API auth checks.
+    return true;
   }
   const state = loadWarehouse();
   for (const permission of requiredPermissions) {
