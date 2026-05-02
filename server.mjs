@@ -1253,7 +1253,7 @@ const server = http.createServer(async (req, res) => {
         setCustomerSellerBalanceVisibility,
         seedWarehouseStock,
         sendApiJson: (res, status, data) => sendApiJson(res, status, data, req),
-        sendTelegramAdminDm:
+        sendTelegramAdminDm,
         sendTelegramChannelMessage,
         sendTelegramCashChannelMessage,
         sendTelegramTransferChannelMessage,
