@@ -8,6 +8,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     buildPendingReply,
     createStaffAccessLink,
     createStaffAccount,
+    createWarehouseOrder,
     createWarehouseTransaction,
     currentWarehousePricing,
     deleteCustomer,
@@ -18,6 +19,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     listCustomerSummaries,
     listDeletedCustomers,
     listPendingTransactions,
+    listWarehouseOrders,
     listStaffAccounts,
     loadWarehouse,
     withWarehouseRead,
@@ -301,6 +303,81 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       ok: true,
       ...catalog,
     });
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/order-customer-directory" && req.method === "GET") {
+    const operator = assertWarehouseOperator(req, res, {
+      allowAdmin: true,
+      realm: "warehouse-staff",
+      permission: "customers",
+      message: "Zakaz sahifasi uchun ruxsat kerak",
+    });
+    if (!operator) {
+      return true;
+    }
+    const customers = readWarehouse((state) => {
+      const pricing = currentWarehousePricing(state);
+      const allCustomers = listCustomerSummaries(state, pricing);
+      return allCustomers.filter((customer) => canAccessCustomer(operator, customer));
+    });
+    sendApiJson(res, 200, {
+      ok: true,
+      customers,
+    });
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/orders" && req.method === "GET") {
+    const operator = assertWarehouseOperator(req, res, {
+      allowAdmin: true,
+      realm: "warehouse-staff",
+      permission: "customers",
+      message: "Zakazlar sahifasi uchun ruxsat kerak",
+    });
+    if (!operator) {
+      return true;
+    }
+    const orders = readWarehouse((state) => {
+      const allOrders = listWarehouseOrders(state);
+      if (isAdminOperator(operator)) {
+        return allOrders;
+      }
+      const operatorId = Number(operator?.id);
+      if (!Number.isFinite(operatorId) || operatorId <= 0) {
+        return [];
+      }
+      return allOrders.filter((entry) => Number(entry.operatorId) === operatorId);
+    });
+    sendApiJson(res, 200, {
+      ok: true,
+      orders,
+      operator,
+    });
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/orders" && req.method === "POST") {
+    const operator = assertWarehouseOperator(req, res, {
+      allowAdmin: true,
+      realm: "warehouse-staff",
+      permission: "customers",
+      message: "Zakaz yozish uchun ruxsat kerak",
+    });
+    if (!operator) {
+      return true;
+    }
+    const body = await readPostJson(req);
+    if (body === null) {
+      sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
+      return true;
+    }
+    try {
+      const order = await writeWarehouse((state) => createWarehouseOrder(state, body, operator));
+      sendApiJson(res, 201, { ok: true, order });
+    } catch (e) {
+      sendApiJson(res, 400, { error: e.message || "Zakazni saqlab bo'lmadi" });
+    }
     return true;
   }
 

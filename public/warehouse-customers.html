@@ -604,59 +604,103 @@
     document.getElementById('addCustomerTelegram').addEventListener('click', () => {
       appendMultiInput('customerTelegramList', { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
     });
-    // Modal events
-    document.getElementById('openAddCustomerModal').addEventListener('click', () => {
-      openAddCustomerModal();
-    });
-    document.getElementById('closeAddCustomerModal').addEventListener('click', () => {
-      closeAddCustomerModal();
-    });
-    document.getElementById('modalCancelAddCustomer').addEventListener('click', () => {
-      closeAddCustomerModal();
-    });
-    document.getElementById('addCustomerModal').addEventListener('click', (e) => {
-      if (e.target === document.getElementById('addCustomerModal')) {
-        closeAddCustomerModal();
-      }
-    });
-    document.getElementById('modalAddCustomerName').addEventListener('click', () => {
-      appendMultiInput('modalCustomerNameList', { placeholder: 'Али ака' });
-    });
-    document.getElementById('modalAddCustomerPhone').addEventListener('click', () => {
-      appendMultiInput('modalCustomerPhoneList', { placeholder: '+99890...' });
-    });
-    document.getElementById('modalAddCustomerTelegram').addEventListener('click', () => {
-      appendMultiInput('modalCustomerTelegramList', { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
-    });
-    document.getElementById('modalAddCustomer').addEventListener('click', async () => {
-      try {
-        const paymentCategories = selectedModalCustomerCategories();
-        const fullNames = collectMultiInputValues('modalCustomerNameList');
-        if (!paymentCategories.length) {
-          throw new Error("Kamida bitta to'lov toifasini belgilang.");
-        }
-        if (!fullNames.length) {
-          throw new Error("Kamida bitta F.I.Sh. kiriting.");
-        }
-        await apiFetch('/api/warehouse/customers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            organizationName: document.getElementById('modalCustomerOrganizationName').value.trim(),
-            fullNames,
-            phones: collectMultiInputValues('modalCustomerPhoneList'),
-            taxId: document.getElementById('modalCustomerTaxId').value.trim(),
-            telegramIds: collectMultiInputValues('modalCustomerTelegramList'),
-            paymentCategories,
-          }),
+    // Bind modal events after DOM is fully parsed because modal markup is placed below this script.
+    function bindAddCustomerModalEvents() {
+      const openModalBtn = document.getElementById('openAddCustomerModal');
+      const closeModalBtn = document.getElementById('closeAddCustomerModal');
+      const cancelModalBtn = document.getElementById('modalCancelAddCustomer');
+      const modalBackdrop = document.getElementById('addCustomerModal');
+      const addNameBtn = document.getElementById('modalAddCustomerName');
+      const addPhoneBtn = document.getElementById('modalAddCustomerPhone');
+      const addTelegramBtn = document.getElementById('modalAddCustomerTelegram');
+      const saveModalBtn = document.getElementById('modalAddCustomer');
+
+      if (openModalBtn && !openModalBtn.dataset.bound) {
+        openModalBtn.addEventListener('click', () => {
+          openAddCustomerModal();
         });
-        setModalStatus('Mijoz saqlandi.');
-        closeAddCustomerModal();
-        await loadCatalog();
-      } catch (error) {
-        setModalStatus(error.message, true);
+        openModalBtn.dataset.bound = '1';
       }
-    });
+
+      if (closeModalBtn && !closeModalBtn.dataset.bound) {
+        closeModalBtn.addEventListener('click', () => {
+          closeAddCustomerModal();
+        });
+        closeModalBtn.dataset.bound = '1';
+      }
+
+      if (cancelModalBtn && !cancelModalBtn.dataset.bound) {
+        cancelModalBtn.addEventListener('click', () => {
+          closeAddCustomerModal();
+        });
+        cancelModalBtn.dataset.bound = '1';
+      }
+
+      if (modalBackdrop && !modalBackdrop.dataset.bound) {
+        modalBackdrop.addEventListener('click', (e) => {
+          if (e.target === modalBackdrop) {
+            closeAddCustomerModal();
+          }
+        });
+        modalBackdrop.dataset.bound = '1';
+      }
+
+      if (addNameBtn && !addNameBtn.dataset.bound) {
+        addNameBtn.addEventListener('click', () => {
+          appendMultiInput('modalCustomerNameList', { placeholder: 'Али ака' });
+        });
+        addNameBtn.dataset.bound = '1';
+      }
+
+      if (addPhoneBtn && !addPhoneBtn.dataset.bound) {
+        addPhoneBtn.addEventListener('click', () => {
+          appendMultiInput('modalCustomerPhoneList', { placeholder: '+99890...' });
+        });
+        addPhoneBtn.dataset.bound = '1';
+      }
+
+      if (addTelegramBtn && !addTelegramBtn.dataset.bound) {
+        addTelegramBtn.addEventListener('click', () => {
+          appendMultiInput('modalCustomerTelegramList', { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
+        });
+        addTelegramBtn.dataset.bound = '1';
+      }
+
+      if (saveModalBtn && !saveModalBtn.dataset.bound) {
+        saveModalBtn.addEventListener('click', async () => {
+          try {
+            const paymentCategories = selectedModalCustomerCategories();
+            const fullNames = collectMultiInputValues('modalCustomerNameList');
+            if (!paymentCategories.length) {
+              throw new Error("Kamida bitta to'lov toifasini belgilang.");
+            }
+            if (!fullNames.length) {
+              throw new Error("Kamida bitta F.I.Sh. kiriting.");
+            }
+            await apiFetch('/api/warehouse/customers', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                organizationName: document.getElementById('modalCustomerOrganizationName').value.trim(),
+                fullNames,
+                phones: collectMultiInputValues('modalCustomerPhoneList'),
+                taxId: document.getElementById('modalCustomerTaxId').value.trim(),
+                telegramIds: collectMultiInputValues('modalCustomerTelegramList'),
+                paymentCategories,
+              }),
+            });
+            setModalStatus('Mijoz saqlandi.');
+            closeAddCustomerModal();
+            await loadCatalog();
+          } catch (error) {
+            setModalStatus(error.message, true);
+          }
+        });
+        saveModalBtn.dataset.bound = '1';
+      }
+    }
+    bindAddCustomerModalEvents();
+    window.addEventListener('DOMContentLoaded', bindAddCustomerModalEvents);
     
     setMultiInputValues('customerNameList', [], { placeholder: 'Али ака' });
     setMultiInputValues('customerPhoneList', [], { placeholder: '+99890...' });

@@ -1408,6 +1408,11 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
 
+  if (u.pathname === "/warehouse/assets/warehouse-top-nav.js" && req.method === "GET") {
+    serveWarehouseAsset("warehouse-top-nav.js", req, res);
+    return;
+  }
+
   const warehouseUploadMatch = u.pathname.match(/^\/warehouse\/uploads\/([a-f0-9-]+\.(?:jpg|jpeg|png|webp|gif))$/i);
   if (warehouseUploadMatch && req.method === "GET") {
     serveWarehouseUpload(warehouseUploadMatch[1], req, res);
@@ -1514,7 +1519,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
   if (u.pathname === "/warehouse/ledger" && req.method === "GET") {
-    redirectTo(res, `/warehouse/admin/cash${u.search}`);
+    serveWarehouseLedger(req, res);
     return;
   }
   if (/^\/warehouse\/customer\/\d+$/.test(u.pathname) && req.method === "GET") {
