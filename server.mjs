@@ -4,7 +4,6 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-import ExcelJS from "exceljs";
 import { handleWarehouseApiRoute } from "./server/handle-api.mjs";
 import {
   authenticateStaffAccessToken,
@@ -287,6 +286,7 @@ function styleWorksheetBlock(worksheet, startColumn, rowCount) {
 }
 
 async function buildCustomerWorkbookBuffer(state, mode) {
+  const { default: ExcelJS } = await import("exceljs");
   const pricing = getWarehousePricing(state);
   const grouped = groupCustomersByPaymentType(state, pricing);
   const selected = mode === "cash" ? grouped.cashCustomers : grouped.transferCustomers;
