@@ -114,6 +114,36 @@
     .add-mini { padding: 8px 12px; line-height: 1; }
     .multi-input-list { display: grid; gap: 10px; margin: 0 0 14px; }
     .multi-input-list input { margin: 0; }
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 999;
+      animation: fadeIn 0.2s ease;
+    }
+    .modal-backdrop.active { display: flex; align-items: center; justify-content: center; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .modal-content {
+      background: color-mix(in srgb, var(--panel) 95%, white 5%);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: 0 18px 36px rgba(53, 34, 15, 0.12);
+      padding: 28px;
+      max-width: 600px;
+      width: min(90vw, 600px);
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-header h2 { margin: 0; }
+    .modal-close { background: transparent; border: 0; font-size: 24px; cursor: pointer; color: var(--ink); padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+    .modal-close:hover { opacity: 0.7; }
     @media (max-width: 960px) { .layout, .group-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -122,6 +152,9 @@
     <section class="hero">
       <div>
         <h1>Mijozlar mundarijasi</h1>
+      </div>
+      <div class="links" id="mainActions" style="display: none;">
+        <button id="openAddCustomerModal" class="button-link">+ Yangi mijoz qo'shish</button>
       </div>
     </section>
 
@@ -301,6 +334,7 @@
       if (adminLink) adminLink.classList.toggle('hidden', !isAdmin);
       if (sellerLink) sellerLink.classList.toggle('hidden', !canSeeSeller);
       document.getElementById('customerManagementPanel').classList.toggle('hidden', !canSeeSeller);
+      document.getElementById('mainActions').style.display = canSeeSeller ? 'flex' : 'none';
     }
 
     function authHeader() {
@@ -366,6 +400,33 @@
       if (document.getElementById('customerCategoryTransfer').checked) categories.push('transfer');
       return categories;
     }
+    function selectedModalCustomerCategories() {
+      const categories = [];
+      if (document.getElementById('modalCustomerCategoryCash').checked) categories.push('cash');
+      if (document.getElementById('modalCustomerCategoryTransfer').checked) categories.push('transfer');
+      return categories;
+    }
+    function openAddCustomerModal() {
+      document.getElementById('addCustomerModal').classList.add('active');
+      document.getElementById('modalCustomerOrganizationName').value = '';
+      setMultiInputValues('modalCustomerNameList', [], { placeholder: 'Али ака' });
+      setMultiInputValues('modalCustomerPhoneList', [], { placeholder: '+99890...' });
+      document.getElementById('modalCustomerTaxId').value = '';
+      setMultiInputValues('modalCustomerTelegramList', [], { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
+      document.getElementById('modalCustomerCategoryCash').checked = true;
+      document.getElementById('modalCustomerCategoryTransfer').checked = false;
+      document.getElementById('modalStatus').textContent = '';
+      document.getElementById('modalStatus').classList.remove('error');
+    }
+    function closeAddCustomerModal() {
+      document.getElementById('addCustomerModal').classList.remove('active');
+    }
+    function setModalStatus(message, isError = false) {
+      const el = document.getElementById('modalStatus');
+      el.textContent = message || '';
+      el.classList.toggle('error', Boolean(isError));
+    }
+    
     function withAccess(url) {
       return accessToken ? `${url}${url.includes('?') ? '&' : '?'}access=${encodeURIComponent(accessToken)}` : url;
     }
@@ -543,9 +604,67 @@
     document.getElementById('addCustomerTelegram').addEventListener('click', () => {
       appendMultiInput('customerTelegramList', { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
     });
+    // Modal events
+    document.getElementById('openAddCustomerModal').addEventListener('click', () => {
+      openAddCustomerModal();
+    });
+    document.getElementById('closeAddCustomerModal').addEventListener('click', () => {
+      closeAddCustomerModal();
+    });
+    document.getElementById('modalCancelAddCustomer').addEventListener('click', () => {
+      closeAddCustomerModal();
+    });
+    document.getElementById('addCustomerModal').addEventListener('click', (e) => {
+      if (e.target === document.getElementById('addCustomerModal')) {
+        closeAddCustomerModal();
+      }
+    });
+    document.getElementById('modalAddCustomerName').addEventListener('click', () => {
+      appendMultiInput('modalCustomerNameList', { placeholder: 'Али ака' });
+    });
+    document.getElementById('modalAddCustomerPhone').addEventListener('click', () => {
+      appendMultiInput('modalCustomerPhoneList', { placeholder: '+99890...' });
+    });
+    document.getElementById('modalAddCustomerTelegram').addEventListener('click', () => {
+      appendMultiInput('modalCustomerTelegramList', { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
+    });
+    document.getElementById('modalAddCustomer').addEventListener('click', async () => {
+      try {
+        const paymentCategories = selectedModalCustomerCategories();
+        const fullNames = collectMultiInputValues('modalCustomerNameList');
+        if (!paymentCategories.length) {
+          throw new Error("Kamida bitta to'lov toifasini belgilang.");
+        }
+        if (!fullNames.length) {
+          throw new Error("Kamida bitta F.I.Sh. kiriting.");
+        }
+        await apiFetch('/api/warehouse/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            organizationName: document.getElementById('modalCustomerOrganizationName').value.trim(),
+            fullNames,
+            phones: collectMultiInputValues('modalCustomerPhoneList'),
+            taxId: document.getElementById('modalCustomerTaxId').value.trim(),
+            telegramIds: collectMultiInputValues('modalCustomerTelegramList'),
+            paymentCategories,
+          }),
+        });
+        setModalStatus('Mijoz saqlandi.');
+        closeAddCustomerModal();
+        await loadCatalog();
+      } catch (error) {
+        setModalStatus(error.message, true);
+      }
+    });
+    
     setMultiInputValues('customerNameList', [], { placeholder: 'Али ака' });
     setMultiInputValues('customerPhoneList', [], { placeholder: '+99890...' });
     setMultiInputValues('customerTelegramList', [], { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
+    // Initialize modal fields
+    setMultiInputValues('modalCustomerNameList', [], { placeholder: 'Али ака' });
+    setMultiInputValues('modalCustomerPhoneList', [], { placeholder: '+99890...' });
+    setMultiInputValues('modalCustomerTelegramList', [], { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
     authUi.render();
     applyOperatorPermissions();
     staffPicker.load().catch(() => {});
@@ -561,6 +680,49 @@
         loadCatalog().catch(() => {});
       }
     }, 60000);  </script>
+
+  <!-- Yangi mijoz qo'shish modali -->
+  <div id="addCustomerModal" class="modal-backdrop">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Yangi mijoz qo'shish</h2>
+        <button class="modal-close" id="closeAddCustomerModal" type="button">&times;</button>
+      </div>
+      <div>
+        <label for="modalCustomerOrganizationName">Tashkilot nomi</label>
+        <input id="modalCustomerOrganizationName" placeholder="Masalan: AKBEL SAVDO MCHJ">
+        <div class="field-label-row">
+          <label>F.I.Sh.</label>
+          <button id="modalAddCustomerName" class="secondary add-mini" type="button">+</button>
+        </div>
+        <div id="modalCustomerNameList" class="multi-input-list"></div>
+        <div class="field-label-row">
+          <label>Telefon</label>
+          <button id="modalAddCustomerPhone" class="secondary add-mini" type="button">+</button>
+        </div>
+        <div id="modalCustomerPhoneList" class="multi-input-list"></div>
+        <label for="modalCustomerTaxId">Tashkilot INN</label>
+        <input id="modalCustomerTaxId" placeholder="123456789">
+        <div class="field-label-row">
+          <label>Telegram ID</label>
+          <button id="modalAddCustomerTelegram" class="secondary add-mini" type="button">+</button>
+        </div>
+        <div id="modalCustomerTelegramList" class="multi-input-list"></div>
+        <div>To'lov toifasi</div>
+        <div class="check-grid">
+          <label class="check-row" for="modalCustomerCategoryCash"><input id="modalCustomerCategoryCash" type="checkbox" checked>Naqd to'lovchi</label>
+          <label class="check-row" for="modalCustomerCategoryTransfer"><input id="modalCustomerCategoryTransfer" type="checkbox">O'tkazma to'lovchi</label>
+        </div>
+        <div class="muted" style="margin-top: -8px; margin-bottom: 12px;">Ikkalasini ham belgilasangiz, mijoz ikkala ro'yxatda ham ko'rinadi.</div>
+        <div class="links">
+          <button id="modalAddCustomer">Mijozni saqlash</button>
+          <button id="modalCancelAddCustomer" class="secondary" type="button">Bekor qilish</button>
+        </div>
+        <div id="modalStatus" class="status"></div>
+      </div>
+    </div>
+  </div>
+
   <script src="/warehouse-top-nav.js"></script>
 </body>
 </html>
