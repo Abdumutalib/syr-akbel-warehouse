@@ -13,13 +13,43 @@
 
   const NAV_ITEMS = [
     {
-      label: "Admin",
+      label: "Admin panel",
       href: "/warehouse/admin",
       isVisible(profile) {
         return !profile || profile.role === "admin";
       },
       isActive(pathname) {
-        return pathname === "/warehouse/admin" || pathname === "/warehouse/admin/cash";
+        return pathname === "/warehouse/admin";
+      },
+    },
+    {
+      label: "Admin naqd",
+      href: "/warehouse/admin/cash",
+      isVisible(profile) {
+        return hasPermission(profile, "cash");
+      },
+      isActive(pathname) {
+        return pathname === "/warehouse/admin/cash";
+      },
+    },
+    {
+      label: "Admin o'tkazma",
+      href: "/warehouse/admin/transfer",
+      isVisible(profile) {
+        return hasPermission(profile, "transfer");
+      },
+      isActive(pathname) {
+        return pathname === "/warehouse/admin/transfer";
+      },
+    },
+    {
+      label: "Umumiy hisobot",
+      href: "/warehouse/ledger",
+      isVisible(profile) {
+        return hasPermission(profile, ["cash", "transfer"]);
+      },
+      isActive(pathname) {
+        return pathname === "/warehouse/ledger";
       },
     },
     {
@@ -33,7 +63,7 @@
       },
     },
     {
-      label: "Mijozlar mundarijasi",
+      label: "Mijozlar",
       href: "/warehouse/customers",
       isVisible(profile) {
         return hasPermission(profile, "customers");
@@ -43,23 +73,13 @@
       },
     },
     {
-      label: "Zakazlar",
+      label: "Buyurtmalar",
       href: "/warehouse/orders",
       isVisible() {
         return true;
       },
       isActive(pathname) {
         return pathname === "/warehouse/orders";
-      },
-    },
-    {
-      label: "Buxgalter",
-      href: "/warehouse/admin/transfer",
-      isVisible(profile) {
-        return hasPermission(profile, "transfer");
-      },
-      isActive(pathname) {
-        return pathname === "/warehouse/admin/transfer";
       },
     },
     {

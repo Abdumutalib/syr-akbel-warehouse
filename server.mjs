@@ -1430,9 +1430,18 @@ const server = http.createServer(async (req, res) => {
     redirectTo(res, `/warehouse/orders${u.search}`);
     return;
   }
+  if (u.pathname === "/ledger" && req.method === "GET") {
+    redirectTo(res, `/warehouse/ledger${u.search}`);
+    return;
+  }
   if (/^\/customers\/\d+$/.test(u.pathname) && req.method === "GET") {
     const id = u.pathname.split("/").pop();
     redirectTo(res, `/warehouse/customers/${id}${u.search}`);
+    return;
+  }
+  if (/^\/customer\/\d+$/.test(u.pathname) && req.method === "GET") {
+    const id = u.pathname.split("/").pop();
+    redirectTo(res, `/warehouse/customer/${id}${u.search}`);
     return;
   }
   if (u.pathname === "/admin/cash" && req.method === "GET") {
@@ -1466,6 +1475,15 @@ const server = http.createServer(async (req, res) => {
   }
   if (u.pathname === "/warehouse/orders" && req.method === "GET") {
     serveWarehouseOrders(req, res);
+    return;
+  }
+  if (u.pathname === "/warehouse/ledger" && req.method === "GET") {
+    redirectTo(res, `/warehouse/admin/cash${u.search}`);
+    return;
+  }
+  if (/^\/warehouse\/customer\/\d+$/.test(u.pathname) && req.method === "GET") {
+    const id = u.pathname.split("/").pop();
+    redirectTo(res, `/warehouse/customers/${id}${u.search}`);
     return;
   }
   if (/^\/warehouse\/customers\/\d+$/.test(u.pathname) && req.method === "GET") {
