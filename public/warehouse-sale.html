@@ -369,6 +369,28 @@
       display: none !important;
     }
 
+    .block-adjust {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 8px;
+      align-items: center;
+      margin-top: 6px;
+      margin-bottom: 10px;
+    }
+
+    .block-step {
+      width: 42px;
+      min-height: 42px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      font-size: 24px;
+      font-weight: 700;
+      padding: 0;
+      line-height: 1;
+    }
+
     .selected-customer {
       display: grid;
       gap: 8px;
@@ -546,6 +568,11 @@
           <textarea id="saleKgExpression" class="expression-input" inputmode="decimal" rows="2" placeholder="Masalan: (10,285+10,895)-2,000 yoki 200+15%"></textarea>
           <label for="saleBlockCount">Blok soni</label>
           <input id="saleBlockCount" type="number" min="1" step="1" inputmode="numeric" placeholder="Masalan: 3">
+          <div class="block-adjust">
+            <button id="blockMinus" class="block-step" type="button" aria-label="Blok sonini kamaytirish">-</button>
+            <div class="muted">Blok sonини қўлда ҳам тўғриланг: − ёки +</div>
+            <button id="blockPlus" class="block-step" type="button" aria-label="Blok sonini oshirish">+</button>
+          </div>
           <div class="muted" style="margin-top: -6px; margin-bottom: 12px;">Istasangiz blok sonini qo'lda yozing. Bo'sh qoldirilsa, kalkulyatordan taxminiy blok soni olinadi.</div>
           <div id="calcBackdrop" class="calc-backdrop" hidden></div>
           <div id="kgCalculator" class="calculator">
@@ -652,6 +679,8 @@
     const saleDateEl = document.getElementById('saleDate');
     const saleKgExpressionEl = document.getElementById('saleKgExpression');
     const saleBlockCountEl = document.getElementById('saleBlockCount');
+    const blockMinusEl = document.getElementById('blockMinus');
+    const blockPlusEl = document.getElementById('blockPlus');
     const saleCashGroupEl = document.getElementById('saleCashGroup');
     const saleCashEl = document.getElementById('saleCash');
     const saleTransferGroupEl = document.getElementById('saleTransferGroup');
@@ -1300,6 +1329,21 @@
       return value;
     }
 
+    function adjustManualBlockCount(delta) {
+      const step = Number(delta || 0);
+      if (!Number.isFinite(step) || step === 0) {
+        return;
+      }
+      const current = Number(saleBlockCountEl.value || 0);
+      const safeCurrent = Number.isInteger(current) && current > 0 ? current : 0;
+      const next = Math.max(1, safeCurrent + step);
+      saleBlockCountEl.value = String(next);
+      saleBlockCountEl.dataset.mode = 'manual';
+      updateCalculatorPreview();
+      writeSaleDraft();
+      saleBlockCountEl.focus({ preventScroll: true });
+    }
+
     function syncBlockCountField(parsed) {
       if (!saleBlockCountEl) {
         return;
@@ -1567,6 +1611,8 @@
       updateCalculatorPreview();
       writeSaleDraft();
     });
+    blockMinusEl.addEventListener('click', () => adjustManualBlockCount(-1));
+    blockPlusEl.addEventListener('click', () => adjustManualBlockCount(1));
     saleDateEl.addEventListener('input', () => {
       saleDateEl.dataset.dateMode = 'manual';
       writeSaleDraft();
