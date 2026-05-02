@@ -331,35 +331,57 @@
         <div class="nav-links">
           <a class="nav-link" href="/warehouse/customers">
             <strong>Mijozlar mundarijasi</strong>
-            Naqd va o'tkazma mijozlar ro'yxati, nomiga bosilganda shaxsiy sahifa ochiladi
+            Naqd ва o'tkazma mijozlar ro'yxati, nomiga bosilganda shaxsiy sahifa ochiladi
           </a>
           <a class="nav-link" href="/warehouse/seller">
             <strong>Sotuvchi sahifasi</strong>
             Mijoz qo'shish, savdo kiritish, to'lov yozish, qarzni ko'rish
           </a>
-          <a class="nav-link" href="/warehouse/seller/sale/cash">
-            <strong>Naqd savdo</strong>
-            Naqd pul bilan savdo kiritish sahifasi
-          </a>
-          <a class="nav-link" href="/warehouse/seller/sale/transfer">
-            <strong>O'tkazma savdo</strong>
-            Bank o'tkazmasi orqali savdo kiritish sahifasi
-          </a>
           <a class="nav-link" href="/warehouse/admin/cash">
-            <strong>Naqd hisobot</strong>
+            <strong>Naqd mijozlar sahifasi</strong>
             Naqd pul tushgan mijozlar va tasdiqlangan yozuvlar
           </a>
           <a class="nav-link" href="/warehouse/admin/transfer">
-            <strong>O'tkazma hisobot</strong>
+            <strong>O'tkazma sahifasi</strong>
             Bank orqali tushgan to'lovlar va mijozlar ro'yxati
-          </a>
-          <a class="nav-link" href="/warehouse/orders">
-            <strong>Buyurtmalar</strong>
-            Barcha buyurtmalar va holati ro'yxati
           </a>
         </div>
         <div style="margin-top: 16px;">
           <button id="export-csv">CSV yuklab olish (Excel)</button>
+        </div>
+
+        <div class="card" style="margin-top: 20px; padding: 0; border: 0; box-shadow: none; background: transparent;">
+          <h3 style="margin-top: 0;">Mijozni tez tahrirlash</h3>
+          <input id="customerSearchInput" type="search" placeholder="Ism yoki telefon bilan qidiring..." autocomplete="off" style="width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; margin: 0 0 8px; font: inherit; box-sizing: border-box;">
+          <label for="customerQuickSelect">Mijozni tanlang</label>
+          <select id="customerQuickSelect" style="width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; margin: 8px 0 14px; font: inherit;">
+            <option value="">Avval mijozni tanlang</option>
+          </select>
+          <div id="customerInlineEdit" class="hidden" style="margin-top: 8px;">
+            <label for="inlineCustomerName">F.I.Sh.</label>
+            <input id="inlineCustomerName" placeholder="Али ака">
+            <label for="inlineCustomerPhone">Telefon</label>
+            <input id="inlineCustomerPhone" placeholder="+99890...">
+            <label for="inlineCustomerTelegram">Telegram ID</label>
+            <input id="inlineCustomerTelegram" type="number" step="1" placeholder="123456789">
+            <div>To'lov toifasi</div>
+            <div class="permission-grid" style="grid-template-columns: 1fr; margin-top: 8px;">
+              <label class="permission-option">
+                <input id="inlineCustomerCategoryCash" type="checkbox">
+                <span>Naqd to'lovchi</span>
+              </label>
+              <label class="permission-option">
+                <input id="inlineCustomerCategoryTransfer" type="checkbox">
+                <span>O'tkazma to'lovchi</span>
+              </label>
+            </div>
+            <div class="tx-actions" style="margin-top: 8px;">
+              <button id="saveCustomerInline" type="button">Mijozni saqlash</button>
+            </div>
+          </div>
+          <div class="tx-actions">
+            <button id="openCustomerEdit" class="secondary" type="button">Tahrir sahifasini ochish</button>
+          </div>
         </div>
 
         <div class="card" style="margin-top: 20px; padding: 0; border: 0; box-shadow: none; background: transparent;">
@@ -419,6 +441,16 @@
     const transferPriceKgEl = document.getElementById("transferPriceKg");
     const staffListEl = document.getElementById("staffList");
     const deletedCustomerListEl = document.getElementById("deletedCustomerList");
+    const customerQuickSelectEl = document.getElementById("customerQuickSelect");
+    const customerSearchInputEl = document.getElementById("customerSearchInput");
+    const openCustomerEditEl = document.getElementById("openCustomerEdit");
+    const customerInlineEditEl = document.getElementById("customerInlineEdit");
+    const inlineCustomerNameEl = document.getElementById("inlineCustomerName");
+    const inlineCustomerPhoneEl = document.getElementById("inlineCustomerPhone");
+    const inlineCustomerTelegramEl = document.getElementById("inlineCustomerTelegram");
+    const inlineCustomerCategoryCashEl = document.getElementById("inlineCustomerCategoryCash");
+    const inlineCustomerCategoryTransferEl = document.getElementById("inlineCustomerCategoryTransfer");
+    const saveCustomerInlineEl = document.getElementById("saveCustomerInline");
     const staffRoleEl = document.getElementById("staffRole");
     const createPermissionsEl = document.getElementById("staffPermissionsCreate");
     const STAFF_PERMISSION_LABELS = {
@@ -535,6 +567,22 @@
       return `${location.origin}${pathMap[permission] || '/warehouse/customers'}?access=${encodeURIComponent(token)}`;
     }
 
+    function selectedInlineCustomerCategories() {
+      const categories = [];
+      if (inlineCustomerCategoryCashEl.checked) categories.push("cash");
+      if (inlineCustomerCategoryTransferEl.checked) categories.push("transfer");
+      return categories;
+    }
+
+    function fillInlineCustomerForm(customer) {
+      inlineCustomerNameEl.value = customer?.fullName || "";
+      inlineCustomerPhoneEl.value = customer?.phone || "";
+      inlineCustomerTelegramEl.value = customer?.telegramId || "";
+      const categories = customer?.paymentCategories || [];
+      inlineCustomerCategoryCashEl.checked = categories.includes("cash");
+      inlineCustomerCategoryTransferEl.checked = categories.includes("transfer");
+    }
+
     function renderPending(items) {
       if (!items.length) {
         pendingListEl.innerHTML = "<p>Hozircha kutayotgan tranzaksiyalar yo'q.</p>";
@@ -631,6 +679,42 @@
       renderDeletedCustomers(data.customers || []);
     }
 
+    let allCustomersForSearch = [];
+
+    function renderCustomerOptions(list) {
+      const options = list
+        .map((c) => `<option value="${c.id}">${c.fullName || "Noma'lum"}${c.phone ? ` (${c.phone})` : ""}</option>`)
+        .join("");
+      customerQuickSelectEl.innerHTML = `<option value="">Avval mijozni tanlang</option>${options}`;
+    }
+
+    async function loadCustomerQuickSelect() {
+      const data = await apiFetch("/api/warehouse/customer-catalog");
+      const allCustomers = [
+        ...(data.cashCustomers || []),
+        ...(data.transferCustomers || []),
+        ...(data.otherCustomers || []),
+      ];
+      const unique = new Map();
+      for (const customer of allCustomers) {
+        if (!unique.has(customer.id)) unique.set(customer.id, customer);
+      }
+      allCustomersForSearch = Array.from(unique.values())
+        .sort((a, b) => String(a.fullName || "").localeCompare(String(b.fullName || ""), "uz"));
+      renderCustomerOptions(allCustomersForSearch);
+    }
+
+    async function loadInlineCustomerDetail(customerId) {
+      if (!customerId) {
+        customerInlineEditEl.classList.add("hidden");
+        fillInlineCustomerForm(null);
+        return;
+      }
+      const data = await apiFetch(`/api/warehouse/customers/${customerId}`);
+      fillInlineCustomerForm(data.customer || null);
+      customerInlineEditEl.classList.remove("hidden");
+    }
+
     function applyRoleDefaults() {
       renderPermissionInputs(createPermissionsEl, defaultPermissionsForRole(staffRoleEl.value), "staff-create-permission");
     }
@@ -645,6 +729,7 @@
       renderPending(data.pending);
       await loadStaff();
       await loadDeletedCustomers();
+      await loadCustomerQuickSelect();
       setStatus("");
     }
 
@@ -879,6 +964,69 @@
       }
     });
 
+    openCustomerEditEl.addEventListener("click", () => {
+      const customerId = customerQuickSelectEl.value;
+      if (!customerId) {
+        setStatus("Avval mijozni tanlang.", true);
+        return;
+      }
+      window.location.href = `/warehouse/customers/${customerId}`;
+    });
+
+    customerSearchInputEl.addEventListener("input", () => {
+      const q = customerSearchInputEl.value.toLowerCase().trim();
+      const filtered = q
+        ? allCustomersForSearch.filter(
+            (c) =>
+              (c.fullName || "").toLowerCase().includes(q) ||
+              (c.phone || "").includes(q)
+          )
+        : allCustomersForSearch;
+      renderCustomerOptions(filtered);
+      customerQuickSelectEl.value = "";
+      customerInlineEditEl.classList.add("hidden");
+    });
+
+    customerQuickSelectEl.addEventListener("change", async () => {
+      try {
+        await loadInlineCustomerDetail(customerQuickSelectEl.value);
+        if (customerQuickSelectEl.value) {
+          setStatus("Mijoz ma'lumotlari yuklandi.");
+        }
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    saveCustomerInlineEl.addEventListener("click", async () => {
+      try {
+        const customerId = Number(customerQuickSelectEl.value || 0);
+        if (!customerId) {
+          throw new Error("Avval mijozni tanlang.");
+        }
+        const paymentCategories = selectedInlineCustomerCategories();
+        if (!paymentCategories.length) {
+          throw new Error("Kamida bitta to'lov toifasini belgilang.");
+        }
+        await apiFetch("/api/warehouse/customers", {
+          method: "POST",
+          body: JSON.stringify({
+            userId: customerId,
+            fullName: inlineCustomerNameEl.value.trim(),
+            phone: inlineCustomerPhoneEl.value.trim(),
+            telegramId: Number(inlineCustomerTelegramEl.value || 0) || null,
+            paymentCategories,
+          }),
+        });
+        await loadCustomerQuickSelect();
+        customerQuickSelectEl.value = String(customerId);
+        await loadInlineCustomerDetail(String(customerId));
+        setStatus("Mijoz ma'lumotlari admin sahifasida saqlandi.");
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
     authUi.render();
     if (pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
       loadPending().catch((error) => setStatus(error.message, true));
@@ -888,12 +1036,6 @@
       setStatus("Admin login va parolini kiriting, keyin kutilayotgan yozuvlar yuklanadi.");
     }
     applyRoleDefaults();
-    setInterval(() => {
-      if (pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
-        loadPending().catch(() => {});
-      }
-    }, 60000);
   </script>
-  <script src="/warehouse-top-nav.js"></script>
 </body>
 </html>
