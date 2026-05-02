@@ -1,5 +1,5 @@
 (function () {
-  const CUSTOMER_DIRECTORY_URL = "/api/warehouse/customer-directory";
+  const CUSTOMER_DIRECTORY_URL = "/api/warehouse/customers";
   const CUSTOMER_DIRECTORY_SESSION_KEYS = [
     "warehouse-browser-session:credentials",
     "warehouse-seller-session:credentials",
