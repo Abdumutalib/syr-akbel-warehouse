@@ -1187,8 +1187,43 @@ function redirectTo(res, target) {
   res.end();
 }
 
-const server = http.createServer(async (req, res) => {
+function withSafeRequestHandling(handler) {
+  return async (req, res) => {
+    try {
+      await handler(req, res);
+    } catch (error) {
+      console.error("[FATAL][REQUEST]", error);
+      if (!res.headersSent) {
+        try {
+          sendApiJson(res, 500, { error: "Server xatoligi" }, req);
+        } catch {
+          res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Server xatoligi");
+        }
+      } else if (!res.writableEnded) {
+        res.end();
+      }
+    }
+  };
+}
+
+const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   const u = new URL(req.url || "/", "http://127.0.0.1");
+
+  if (u.pathname === "/healthz" && req.method === "GET") {
+    sendApiJson(
+      res,
+      200,
+      {
+        ok: true,
+        service: "syr-akbel-warehouse",
+        uptimeSec: Math.round(process.uptime()),
+        now: new Date().toISOString(),
+      },
+      req
+    );
+    return;
+  }
 
   if (req.method === "OPTIONS") {
     if (!requestOriginAllowed(req)) {
@@ -1497,6 +1532,14 @@ const server = http.createServer(async (req, res) => {
 
   res.writeHead(404);
   res.end("Not found");
+}));
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[FATAL][UNHANDLED_REJECTION]", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("[FATAL][UNCAUGHT_EXCEPTION]", error);
 });
 
 // Keep connections alive longer than Northflank's LB (60s default) to avoid mid-request drops
