@@ -370,6 +370,7 @@
     }
     function appendMultiInput(containerId, options = {}, value = '') {
       const host = document.getElementById(containerId);
+      if (!host) return null;
       const input = document.createElement('input');
       input.type = options.type || 'text';
       input.placeholder = options.placeholder || '';
@@ -381,12 +382,15 @@
     }
     function setMultiInputValues(containerId, values, options = {}) {
       const host = document.getElementById(containerId);
+      if (!host) return;
       host.innerHTML = '';
       const source = Array.isArray(values) && values.length ? values : [''];
       source.forEach((value) => appendMultiInput(containerId, options, value == null ? '' : String(value)));
     }
     function collectMultiInputValues(containerId) {
-      return Array.from(document.getElementById(containerId).querySelectorAll('input'))
+      const host = document.getElementById(containerId);
+      if (!host) return [];
+      return Array.from(host.querySelectorAll('input'))
         .map((input) => input.value.trim())
         .filter(Boolean);
     }
