@@ -810,6 +810,18 @@ async function sendTelegramChannelMessage(text) {
   return sendTelegramMessage(channelId, text);
 }
 
+async function sendTelegramCashChannelMessage(text) {
+  const channelId = process.env.TELEGRAM_CHANNEL_CASH_ID?.trim();
+  if (!channelId || !text) return false;
+  return sendTelegramMessage(channelId, text);
+}
+
+async function sendTelegramTransferChannelMessage(text) {
+  const channelId = process.env.TELEGRAM_CHANNEL_TRANSFER_ID?.trim();
+  if (!channelId || !text) return false;
+  return sendTelegramMessage(channelId, text);
+}
+
 async function sendTelegramAdminDm(text) {
   const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID?.trim();
   if (!adminChatId || !text) return false;
@@ -1194,6 +1206,8 @@ const server = http.createServer(async (req, res) => {
         sendApiJson: (res, status, data) => sendApiJson(res, status, data, req),
         sendTelegramAdminDm:
         sendTelegramChannelMessage,
+        sendTelegramCashChannelMessage,
+        sendTelegramTransferChannelMessage,
         sendTelegramMessage,
         buildChannelSaleMsg,
         buildChannelPaymentMsg,

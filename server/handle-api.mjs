@@ -33,6 +33,8 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     sendApiJson,
     sendTelegramMessage,
     sendTelegramChannelMessage,
+    sendTelegramCashChannelMessage,
+    sendTelegramTransferChannelMessage,
     sendTelegramAdminDm,
     buildChannelSaleMsg,
     buildChannelPaymentMsg,
@@ -623,16 +625,17 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       }
       const saleCashPaid = Number(result.transaction?.cashPaidAmount || 0);
       const saleTransferPaid = Number(result.transaction?.transferPaidAmount || 0);
-      await sendTelegramChannelMessage(
-        buildChannelSaleMsg(
-          result.user?.fullName || "Noma'lum",
-          result.transaction.amountKg,
-          result.transaction.totalPrice,
-          saleCashPaid,
-          saleTransferPaid,
-          result.debt
-        )
+      const saleMsgText = buildChannelSaleMsg(
+        result.user?.fullName || "Noma'lum",
+        result.transaction.amountKg,
+        result.transaction.totalPrice,
+        saleCashPaid,
+        saleTransferPaid,
+        result.debt
       );
+      await sendTelegramChannelMessage(saleMsgText);
+      if (saleCashPaid > 0) await sendTelegramCashChannelMessage(saleMsgText);
+      if (saleTransferPaid > 0) await sendTelegramTransferChannelMessage(saleMsgText);
       await sendTelegramMessage(
         result.user?.telegramId,
         buildCustomerSaleMsg(
@@ -704,14 +707,15 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       }
       const payCashPaid = Number(result.transaction?.cashPaidAmount || 0);
       const payTransferPaid = Number(result.transaction?.transferPaidAmount || 0);
-      await sendTelegramChannelMessage(
-        buildChannelPaymentMsg(
-          result.user?.fullName || "Noma'lum",
-          payCashPaid,
-          payTransferPaid,
-          result.debt
-        )
+      const payMsgText = buildChannelPaymentMsg(
+        result.user?.fullName || "Noma'lum",
+        payCashPaid,
+        payTransferPaid,
+        result.debt
       );
+      await sendTelegramChannelMessage(payMsgText);
+      if (payCashPaid > 0) await sendTelegramCashChannelMessage(payMsgText);
+      if (payTransferPaid > 0) await sendTelegramTransferChannelMessage(payMsgText);
       await sendTelegramMessage(
         result.user?.telegramId,
         buildCustomerPaymentMsg(
@@ -825,16 +829,17 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       }
       const approveCashPaid = Number(result.transaction?.cashPaidAmount || 0);
       const approveTransferPaid = Number(result.transaction?.transferPaidAmount || 0);
-      await sendTelegramChannelMessage(
-        buildChannelApprovalMsg(
-          result.user?.fullName || "Noma'lum",
-          result.transaction.amountKg,
-          result.transaction.totalPrice,
-          approveCashPaid,
-          approveTransferPaid,
-          result.debt
-        )
+      const approveMsgText = buildChannelApprovalMsg(
+        result.user?.fullName || "Noma'lum",
+        result.transaction.amountKg,
+        result.transaction.totalPrice,
+        approveCashPaid,
+        approveTransferPaid,
+        result.debt
       );
+      await sendTelegramChannelMessage(approveMsgText);
+      if (approveCashPaid > 0) await sendTelegramCashChannelMessage(approveMsgText);
+      if (approveTransferPaid > 0) await sendTelegramTransferChannelMessage(approveMsgText);
       await sendTelegramMessage(
         result.user?.telegramId,
         buildDebtReply(result.user?.fullName || "mijoz", result.debt)
