@@ -239,6 +239,21 @@
       display: none;
     }
 
+    .calc-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.28);
+      z-index: 59;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+    }
+
+    .calc-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
     .calculator.open,
     .calculator.has-expression {
       display: block;
@@ -314,6 +329,9 @@
       background: #fff;
       color: var(--ink);
       padding: 12px 0;
+      min-height: 48px;
+      font-size: 22px;
+      font-weight: 700;
     }
 
     .calc-key.wide {
@@ -417,6 +435,56 @@
 
     @media (max-width: 620px) {
       .row { grid-template-columns: 1fr; }
+
+      .calc-backdrop.open {
+        display: block;
+      }
+
+      .calculator {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        margin: 0;
+        border-radius: 18px 18px 0 0;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+        padding: 12px 12px calc(10px + env(safe-area-inset-bottom));
+        z-index: 60;
+        background: rgba(255, 252, 248, 0.98);
+        box-shadow: 0 -10px 34px rgba(0, 0, 0, 0.2);
+      }
+
+      .calculator:not(.open) {
+        display: none;
+      }
+
+      .calculator.open {
+        display: block;
+      }
+
+      .calc-result {
+        margin-bottom: 10px;
+      }
+
+      .calc-grid {
+        gap: 7px;
+      }
+
+      .calc-key {
+        min-height: 52px;
+        font-size: 24px;
+      }
+
+      .calc-key.full {
+        min-height: 46px;
+        font-size: 18px;
+      }
+
+      .calc-key.tall {
+        font-size: 32px;
+      }
     }
   </style>
 </head>
@@ -479,6 +547,7 @@
           <label for="saleBlockCount">Blok soni</label>
           <input id="saleBlockCount" type="number" min="1" step="1" inputmode="numeric" placeholder="Masalan: 3">
           <div class="muted" style="margin-top: -6px; margin-bottom: 12px;">Istasangiz blok sonini qo'lda yozing. Bo'sh qoldirilsa, kalkulyatordan taxminiy blok soni olinadi.</div>
+          <div id="calcBackdrop" class="calc-backdrop" hidden></div>
           <div id="kgCalculator" class="calculator">
             <div id="calcResult" class="calc-result warn">
               Hisoblangan kg
@@ -599,6 +668,7 @@
     const salePhotoPreviewGridEl = document.getElementById('salePhotoPreviewGrid');
     const salePhotoMetaEl = document.getElementById('salePhotoMeta');
     const kgCalculatorEl = document.getElementById('kgCalculator');
+    const calcBackdropEl = document.getElementById('calcBackdrop');
     const calcValueEl = document.getElementById('calcValue');
     const calcHintEl = document.getElementById('calcHint');
     const calcBlockPreviewEl = document.getElementById('calcBlockPreview');
@@ -955,6 +1025,19 @@
       kgCalculatorEl.classList.toggle('has-expression', Boolean(saleKgExpressionEl.value.trim()));
     }
 
+    function isCoarsePointer() {
+      return Boolean(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    }
+
+    function setCalculatorOverlayState(open) {
+      if (!calcBackdropEl) {
+        return;
+      }
+      const active = Boolean(open && isCoarsePointer());
+      calcBackdropEl.hidden = !active;
+      calcBackdropEl.classList.toggle('open', active);
+    }
+
     function restoreSaleDraft() {
       const draft = readSaleDraft();
       if (!draft) {
@@ -1272,20 +1355,109 @@
     function openCalculator() {
       kgCalculatorEl.classList.add('open');
       syncCalculatorVisibility();
+      setCalculatorOverlayState(true);
       updateCalculatorPreview();
     }
 
     function closeCalculator() {
       kgCalculatorEl.classList.remove('open');
+      setCalculatorOverlayState(false);
       syncCalculatorVisibility();
     }
 
+    function isDigitToken(char) {
+      return /\d/.test(String(char || ''));
+    }
+
+    function isBinaryOperator(char) {
+      return ['+', '-', '*', '/'].includes(String(char || ''));
+    }
+
+    function isValueToken(char) {
+      const token = String(char || '');
+      return isDigitToken(token) || token === ')' || token === '%';
+    }
+
+    function hasOpenParenBeforeCursor(text, cursor) {
+      const before = text.slice(0, cursor);
+      const opened = (before.match(/\(/g) || []).length;
+      const closed = (before.match(/\)/g) || []).length;
+      return opened > closed;
+    }
+
     function insertCalculatorKey(value) {
-      saleKgExpressionEl.setRangeText(value, saleKgExpressionEl.selectionStart, saleKgExpressionEl.selectionEnd, 'end');
+      let insertValue = String(value || '');
+      if (!insertValue) {
+        return;
+      }
+
+      const start = saleKgExpressionEl.selectionStart;
+      const end = saleKgExpressionEl.selectionEnd;
+      const fullText = saleKgExpressionEl.value;
+      const before = fullText.slice(0, start);
+      const after = fullText.slice(end);
+      const prevChar = before.slice(-1);
+
+      if (insertValue === ',') {
+        const leftPart = before.match(/[\d.,]+$/)?.[0] || '';
+        const rightPart = after.match(/^[\d.,]+/)?.[0] || '';
+        const selectedPart = fullText.slice(start, end);
+        const currentToken = `${leftPart}${selectedPart}${rightPart}`;
+        if (currentToken.includes(',') || currentToken.includes('.')) {
+          return;
+        }
+        if (!leftPart) {
+          insertValue = isValueToken(prevChar) ? ',' : '0,';
+        }
+      }
+
+      if (insertValue === '%') {
+        if (!isValueToken(prevChar) || prevChar === '%') {
+          return;
+        }
+      }
+
+      if (isBinaryOperator(insertValue)) {
+        if (!before && insertValue !== '-') {
+          return;
+        }
+        if (prevChar === '(' && insertValue !== '-') {
+          return;
+        }
+        if (prevChar === ',' || prevChar === '.') {
+          return;
+        }
+        if (isBinaryOperator(prevChar)) {
+          saleKgExpressionEl.setRangeText(insertValue, Math.max(0, start - 1), start, 'end');
+          syncExpressionHeight();
+          saleKgExpressionEl.focus({ preventScroll: true });
+          openCalculator();
+          updateCalculatorPreview();
+          writeSaleDraft();
+          return;
+        }
+      }
+
+      if (insertValue === '(' && isValueToken(prevChar)) {
+        insertValue = '*(';
+      }
+
+      if (insertValue === ')') {
+        if (!hasOpenParenBeforeCursor(fullText, start) || !isValueToken(prevChar)) {
+          return;
+        }
+      }
+
+      if (isDigitToken(insertValue) && prevChar === ')') {
+        insertValue = `*${insertValue}`;
+      }
+
+      saleKgExpressionEl.setRangeText(insertValue, start, end, 'end');
       syncExpressionHeight();
       saleKgExpressionEl.focus({ preventScroll: true });
       openCalculator();
       updateCalculatorPreview();
+      writeSaleDraft();
     }
 
     function backspaceCalculatorKey() {
@@ -1299,6 +1471,7 @@
       syncExpressionHeight();
       saleKgExpressionEl.focus({ preventScroll: true });
       updateCalculatorPreview();
+      writeSaleDraft();
     }
 
     async function loadCustomers() {
@@ -1374,6 +1547,16 @@
       writeSaleDraft();
     });
     saleKgExpressionEl.addEventListener('focus', openCalculator);
+    saleKgExpressionEl.addEventListener('blur', () => {
+      setTimeout(() => {
+        const activeElement = document.activeElement;
+        const calculatorContainsFocus = kgCalculatorEl.contains(activeElement);
+        const expressionActive = activeElement === saleKgExpressionEl;
+        if (!calculatorContainsFocus && !expressionActive) {
+          closeCalculator();
+        }
+      }, 0);
+    });
     saleKgExpressionEl.addEventListener('input', () => {
       syncExpressionHeight();
       updateCalculatorPreview();
@@ -1426,7 +1609,7 @@
       if (actionName === 'clear') {
         saleKgExpressionEl.value = '';
         syncExpressionHeight();
-        saleKgExpressionEl.focus();
+        saleKgExpressionEl.focus({ preventScroll: true });
         updateCalculatorPreview();
         writeSaleDraft();
         return;
@@ -1455,6 +1638,13 @@
       }
       removeSalePhoto(removeButton.getAttribute('data-remove-sale-photo'));
       setStatus('Rasm ro\'yxatdan olib tashlandi.');
+    });
+
+    calcBackdropEl.addEventListener('click', closeCalculator);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeCalculator();
+      }
     });
 
     document.getElementById('saveSale').addEventListener('click', async () => {
@@ -1530,6 +1720,9 @@
 
     applyAutoSaleDate(true);
     applySaleModeUi();
+    if (isCoarsePointer()) {
+      saleKgExpressionEl.setAttribute('inputmode', 'none');
+    }
     authUi.render();
     applyOperatorPermissions();
     staffPicker.load().catch(() => {});
