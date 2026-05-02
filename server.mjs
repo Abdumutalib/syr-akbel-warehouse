@@ -3,6 +3,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { handleWarehouseApiRoute } from "./server/handle-api.mjs";
 import {
@@ -524,17 +525,38 @@ function hasWarehouseRouteAccess(req, u) {
   return false;
 }
 
-function staticResponseHeaders(contentType, filePath) {
+function staticResponseHeaders(contentType, filePath, etag = null) {
   const extension = path.extname(filePath).toLowerCase();
-  return {
+  const isImage = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico"].includes(extension);
+  const isScript = extension === ".js";
+  const isCss = extension === ".css";
+  const isHtml = extension === ".html";
+  let cacheControl;
+  if (isImage) {
+    // Images change rarely — cache 7 days
+    cacheControl = "public, max-age=604800, immutable";
+  } else if (isScript || isCss) {
+    // JS/CSS — cache 1 hour, revalidate with ETag
+    cacheControl = "public, max-age=3600, must-revalidate";
+  } else if (isHtml) {
+    // HTML — always revalidate (ETag), but can serve from cache if unchanged
+    cacheControl = "no-cache";
+  } else {
+    cacheControl = "no-store";
+  }
+  const headers = {
     "Content-Type": contentType,
-    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-    Pragma: "no-cache",
-    Expires: "0",
+    "Cache-Control": cacheControl,
+    "Vary": "Accept-Encoding",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
   };
+  if (etag) headers["ETag"] = etag;
+  if (isHtml) {
+    headers["Pragma"] = "no-cache";
+  }
+  return headers;
 }
 
 function sanitizeOriginalPhotoName(value) {
@@ -599,9 +621,35 @@ function storeWarehouseTransactionPhotos(photoInput = []) {
     .filter(Boolean);
 }
 
-function sendApiJson(res, status, data) {
-  res.writeHead(status, baseApiJsonHeaders());
-  res.end(JSON.stringify(data));
+function acceptsGzip(req) {
+  const ae = String(req?.headers?.["accept-encoding"] || "");
+  return ae.includes("gzip");
+}
+
+function isCompressibleMime(contentType) {
+  return (
+    contentType.startsWith("text/") ||
+    contentType.startsWith("application/json") ||
+    contentType.startsWith("application/javascript") ||
+    contentType.startsWith("image/svg")
+  );
+}
+
+function sendApiJson(res, status, data, req = null) {
+  const json = JSON.stringify(data);
+  const headers = baseApiJsonHeaders();
+  if (req && acceptsGzip(req)) {
+    const compressed = zlib.gzipSync(Buffer.from(json, "utf8"), { level: 6 });
+    headers["Content-Encoding"] = "gzip";
+    headers["Content-Length"] = String(compressed.length);
+    headers["Vary"] = "Accept-Encoding";
+    res.writeHead(status, headers);
+    res.end(compressed);
+  } else {
+    headers["Content-Length"] = String(Buffer.byteLength(json, "utf8"));
+    res.writeHead(status, headers);
+    res.end(json);
+  }
 }
 
 async function readPostJson(req) {
@@ -990,7 +1038,7 @@ const MIME = {
   ".svg": "image/svg+xml",
 };
 
-function serveStatic(urlPath, res) {
+function serveStatic(urlPath, req, res) {
   const relative = (urlPath === "/" || urlPath === "" ? "public/warehouse-admin.html" : urlPath.replace(/^\//, ""));
   const resolvedFile = path.resolve(ROOT, relative);
   const relativeToRoot = path.relative(path.resolve(ROOT), resolvedFile);
@@ -999,50 +1047,78 @@ function serveStatic(urlPath, res) {
     res.end("Forbidden");
     return;
   }
-  if (!fs.existsSync(resolvedFile) || fs.statSync(resolvedFile).isDirectory()) {
+  let stat;
+  try {
+    stat = fs.statSync(resolvedFile);
+  } catch {
+    res.writeHead(404);
+    res.end("Not found");
+    return;
+  }
+  if (stat.isDirectory()) {
     res.writeHead(404);
     res.end("Not found");
     return;
   }
   const contentType = MIME[path.extname(resolvedFile)] || "application/octet-stream";
-  res.writeHead(200, staticResponseHeaders(contentType, resolvedFile));
-  fs.createReadStream(resolvedFile).pipe(res);
+  const etag = `W/"${stat.size.toString(36)}-${stat.mtimeMs.toString(36)}"`;
+  if (req?.headers?.["if-none-match"] === etag) {
+    res.writeHead(304, { ETag: etag, "Cache-Control": staticResponseHeaders(contentType, resolvedFile, etag)["Cache-Control"] });
+    res.end();
+    return;
+  }
+  const headers = staticResponseHeaders(contentType, resolvedFile, etag);
+  const useGzip = req && acceptsGzip(req) && isCompressibleMime(contentType);
+  if (useGzip) {
+    headers["Content-Encoding"] = "gzip";
+  }
+  res.writeHead(200, headers);
+  if (req?.method === "HEAD") {
+    res.end();
+    return;
+  }
+  const stream = fs.createReadStream(resolvedFile);
+  if (useGzip) {
+    stream.pipe(zlib.createGzip({ level: 6 })).pipe(res);
+  } else {
+    stream.pipe(res);
+  }
 }
 
-function serveWarehouseAdmin(res) {
-  serveStatic("public/warehouse-admin.html", res);
+function serveWarehouseAdmin(req, res) {
+  serveStatic("public/warehouse-admin.html", req, res);
 }
 
-function serveWarehouseLedger(res) {
-  serveStatic("public/warehouse-ledger.html", res);
+function serveWarehouseLedger(req, res) {
+  serveStatic("public/warehouse-ledger.html", req, res);
 }
 
-function serveWarehouseSeller(res) {
-  serveStatic("public/warehouse-seller.html", res);
+function serveWarehouseSeller(req, res) {
+  serveStatic("public/warehouse-seller.html", req, res);
 }
 
-function serveWarehouseSale(res) {
-  serveStatic("public/warehouse-sale.html", res);
+function serveWarehouseSale(req, res) {
+  serveStatic("public/warehouse-sale.html", req, res);
 }
 
-function serveWarehouseCustomers(res) {
-  serveStatic("public/warehouse-customers.html", res);
+function serveWarehouseCustomers(req, res) {
+  serveStatic("public/warehouse-customers.html", req, res);
 }
 
-function serveWarehouseOrders(res) {
-  serveStatic("public/warehouse-orders.html", res);
+function serveWarehouseOrders(req, res) {
+  serveStatic("public/warehouse-orders.html", req, res);
 }
 
-function serveWarehouseCustomerDetail(res) {
-  serveStatic("public/warehouse-customer.html", res);
+function serveWarehouseCustomerDetail(req, res) {
+  serveStatic("public/warehouse-customer.html", req, res);
 }
 
-function serveWarehouseAsset(assetPath, res) {
-  serveStatic(`public/${assetPath}`, res);
+function serveWarehouseAsset(assetPath, req, res) {
+  serveStatic(`public/${assetPath}`, req, res);
 }
 
-function serveWarehouseUpload(fileName, res) {
-  serveStatic(`data/transaction-photos/${fileName}`, res);
+function serveWarehouseUpload(fileName, req, res) {
+  serveStatic(`data/transaction-photos/${fileName}`, req, res);
 }
 
 function redirectTo(res, target) {
@@ -1115,8 +1191,8 @@ const server = http.createServer(async (req, res) => {
         saveWarehouse,
         setCustomerSellerBalanceVisibility,
         seedWarehouseStock,
-        sendApiJson,
-        sendTelegramAdminDm,
+        sendApiJson: (res, status, data) => sendApiJson(res, status, data, req),
+        sendTelegramAdminDm:
         sendTelegramChannelMessage,
         sendTelegramMessage,
         buildChannelSaleMsg,
@@ -1170,22 +1246,22 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (u.pathname === "/favicon.svg" && req.method === "GET") {
-    serveStatic("public/favicon.svg", res);
+    serveStatic("public/favicon.svg", req, res);
     return;
   }
 
   if (u.pathname === "/icon-192.png" && req.method === "GET") {
-    serveStatic("public/icon-192.png", res);
+    serveStatic("public/icon-192.png", req, res);
     return;
   }
 
   if (u.pathname === "/icon-512.png" && req.method === "GET") {
-    serveStatic("public/icon-512.png", res);
+    serveStatic("public/icon-512.png", req, res);
     return;
   }
 
   if (u.pathname === "/warehouse/sw.js" && req.method === "GET") {
-    serveStatic("public/warehouse-sw.js", res);
+    serveStatic("public/warehouse-sw.js", req, res);
     return;
   }
 
@@ -1223,18 +1299,18 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (u.pathname === "/warehouse/assets/warehouse-auth-pin.js" && req.method === "GET") {
-    serveWarehouseAsset("warehouse-auth-pin.js", res);
+    serveWarehouseAsset("warehouse-auth-pin.js", req, res);
     return;
   }
 
   if (u.pathname === "/warehouse-top-nav.js" && req.method === "GET") {
-    serveWarehouseAsset("warehouse-top-nav.js", res);
+    serveWarehouseAsset("warehouse-top-nav.js", req, res);
     return;
   }
 
   const warehouseUploadMatch = u.pathname.match(/^\/warehouse\/uploads\/([a-f0-9-]+\.(?:jpg|jpeg|png|webp|gif))$/i);
   if (warehouseUploadMatch && req.method === "GET") {
-    serveWarehouseUpload(warehouseUploadMatch[1], res);
+    serveWarehouseUpload(warehouseUploadMatch[1], req, res);
     return;
   }
 
@@ -1305,11 +1381,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (u.pathname === "/warehouse/admin" && req.method === "GET") {
-    serveWarehouseAdmin(res);
+    serveWarehouseAdmin(req, res);
     return;
   }
   if (u.pathname === "/warehouse/seller" && req.method === "GET") {
-    serveWarehouseSeller(res);
+    serveWarehouseSeller(req, res);
     return;
   }
   if (u.pathname === "/warehouse/seller/sale" && req.method === "GET") {
@@ -1317,29 +1393,33 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if ((u.pathname === "/warehouse/seller/sale/cash" || u.pathname === "/warehouse/seller/sale/transfer") && req.method === "GET") {
-    serveWarehouseSale(res);
+    serveWarehouseSale(req, res);
     return;
   }
   if (u.pathname === "/warehouse/customers" && req.method === "GET") {
-    serveWarehouseCustomers(res);
+    serveWarehouseCustomers(req, res);
     return;
   }
   if (u.pathname === "/warehouse/orders" && req.method === "GET") {
-    serveWarehouseOrders(res);
+    serveWarehouseOrders(req, res);
     return;
   }
   if (/^\/warehouse\/customers\/\d+$/.test(u.pathname) && req.method === "GET") {
-    serveWarehouseCustomerDetail(res);
+    serveWarehouseCustomerDetail(req, res);
     return;
   }
   if ((u.pathname === "/warehouse/admin/cash" || u.pathname === "/warehouse/admin/transfer") && req.method === "GET") {
-    serveWarehouseLedger(res);
+    serveWarehouseLedger(req, res);
     return;
   }
 
   res.writeHead(404);
   res.end("Not found");
 });
+
+// Keep connections alive longer than Northflank's LB (60s default) to avoid mid-request drops
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 70000;
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Syr AKBEL standalone → http://127.0.0.1:${PORT}/warehouse/admin`);
