@@ -35,6 +35,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     sendTelegramChannelMessage,
     sendTelegramCashChannelMessage,
     sendTelegramTransferChannelMessage,
+    sendTransactionPhotosToChannels,
     sendTelegramAdminDm,
     buildChannelSaleMsg,
     buildChannelPaymentMsg,
@@ -636,6 +637,12 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       await sendTelegramChannelMessage(saleMsgText);
       if (saleCashPaid > 0) await sendTelegramCashChannelMessage(saleMsgText);
       if (saleTransferPaid > 0) await sendTelegramTransferChannelMessage(saleMsgText);
+      await sendTransactionPhotosToChannels(
+        result.transaction?.photos,
+        saleCashPaid,
+        saleTransferPaid,
+        `👤 ${result.user?.fullName || "Noma'lum"} | ${result.transaction.amountKg} kg`
+      );
       await sendTelegramMessage(
         result.user?.telegramId,
         buildCustomerSaleMsg(
@@ -716,6 +723,12 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       await sendTelegramChannelMessage(payMsgText);
       if (payCashPaid > 0) await sendTelegramCashChannelMessage(payMsgText);
       if (payTransferPaid > 0) await sendTelegramTransferChannelMessage(payMsgText);
+      await sendTransactionPhotosToChannels(
+        result.transaction?.photos,
+        payCashPaid,
+        payTransferPaid,
+        `👤 ${result.user?.fullName || "Noma'lum"} | To'lov`
+      );
       await sendTelegramMessage(
         result.user?.telegramId,
         buildCustomerPaymentMsg(
@@ -840,6 +853,12 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       await sendTelegramChannelMessage(approveMsgText);
       if (approveCashPaid > 0) await sendTelegramCashChannelMessage(approveMsgText);
       if (approveTransferPaid > 0) await sendTelegramTransferChannelMessage(approveMsgText);
+      await sendTransactionPhotosToChannels(
+        result.transaction?.photos,
+        approveCashPaid,
+        approveTransferPaid,
+        `👤 ${result.user?.fullName || "Noma'lum"} | Tasdiqlandi`
+      );
       await sendTelegramMessage(
         result.user?.telegramId,
         buildDebtReply(result.user?.fullName || "mijoz", result.debt)

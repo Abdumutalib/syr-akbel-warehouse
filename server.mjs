@@ -828,6 +828,55 @@ async function sendTelegramAdminDm(text) {
   return sendTelegramMessage(adminChatId, text);
 }
 
+async function sendTelegramPhotoToChat(chatId, photoPath, caption) {
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  if (!token || chatId == null) return false;
+  try {
+    const fileBuffer = fs.readFileSync(photoPath);
+    const fileName = path.basename(photoPath);
+    const boundary = "----TGBoundary" + Date.now().toString(36);
+    const CRLF = "\r\n";
+    const buildPart = (name, value, extra = "") =>
+      `--${boundary}${CRLF}Content-Disposition: form-data; name="${name}"${extra}${CRLF}${CRLF}`;
+    const chatPart = Buffer.from(buildPart("chat_id") + String(chatId) + CRLF);
+    const captionPart = caption
+      ? Buffer.from(buildPart("caption") + caption + CRLF)
+      : null;
+    const photoHeader = Buffer.from(
+      `--${boundary}${CRLF}Content-Disposition: form-data; name="photo"; filename="${fileName}"${CRLF}Content-Type: application/octet-stream${CRLF}${CRLF}`
+    );
+    const photoFooter = Buffer.from(CRLF + `--${boundary}--${CRLF}`);
+    const parts = [chatPart];
+    if (captionPart) parts.push(captionPart);
+    parts.push(photoHeader, fileBuffer, photoFooter);
+    const body = Buffer.concat(parts);
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+      method: "POST",
+      headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function sendTransactionPhotosToChannels(photos, cashPaid, transferPaid, caption) {
+  if (!photos || !photos.length) return;
+  const channelIds = [process.env.TELEGRAM_CHANNEL_ID?.trim()];
+  if (cashPaid > 0) channelIds.push(process.env.TELEGRAM_CHANNEL_CASH_ID?.trim());
+  if (transferPaid > 0) channelIds.push(process.env.TELEGRAM_CHANNEL_TRANSFER_ID?.trim());
+  const uniqueIds = [...new Set(channelIds.filter(Boolean))];
+  for (const photo of photos) {
+    if (!photo?.fileName) continue;
+    const photoPath = path.join(WAREHOUSE_TRANSACTION_PHOTO_DIR, photo.fileName);
+    if (!fs.existsSync(photoPath)) continue;
+    for (const chatId of uniqueIds) {
+      await sendTelegramPhotoToChat(chatId, photoPath, caption).catch(() => {});
+    }
+  }
+}
+
 function buildChannelSaleMsg(userName, amountKg, totalPrice, cashPaid, transferPaid, debt) {
   const lines = [
     `🧀 ${WAREHOUSE_COMPANY_NAME}`,
@@ -1208,6 +1257,7 @@ const server = http.createServer(async (req, res) => {
         sendTelegramChannelMessage,
         sendTelegramCashChannelMessage,
         sendTelegramTransferChannelMessage,
+        sendTransactionPhotosToChannels,
         sendTelegramMessage,
         buildChannelSaleMsg,
         buildChannelPaymentMsg,
