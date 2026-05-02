@@ -1283,7 +1283,7 @@
     function insertCalculatorKey(value) {
       saleKgExpressionEl.setRangeText(value, saleKgExpressionEl.selectionStart, saleKgExpressionEl.selectionEnd, 'end');
       syncExpressionHeight();
-      saleKgExpressionEl.focus();
+      saleKgExpressionEl.focus({ preventScroll: true });
       openCalculator();
       updateCalculatorPreview();
     }
@@ -1297,7 +1297,7 @@
         saleKgExpressionEl.setRangeText('', start - 1, start, 'end');
       }
       syncExpressionHeight();
-      saleKgExpressionEl.focus();
+      saleKgExpressionEl.focus({ preventScroll: true });
       updateCalculatorPreview();
     }
 
