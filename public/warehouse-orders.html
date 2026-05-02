@@ -469,6 +469,12 @@
     } else {
       setStatus('Xodim, admin yoki link orqali kiring, keyin zakazlar yuklanadi.');
     }
+
+    setInterval(() => {
+      if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
+        loadOrders().catch(() => {});
+      }
+    }, 60000);
   </script>
   <script src="/warehouse-top-nav.js"></script>
 </body>

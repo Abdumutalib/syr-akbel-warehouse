@@ -898,6 +898,12 @@
     } else {
       setStatus('Sotuvchi, admin yoki link orqali kiring, keyin sahifa ishga tushadi.');
     }
+
+    setInterval(() => {
+      if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
+        loadCustomers().catch(() => {});
+      }
+    }, 60000);
   </script>
   <script src="/warehouse-top-nav.js"></script>
 </body>

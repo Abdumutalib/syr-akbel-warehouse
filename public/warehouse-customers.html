@@ -556,7 +556,11 @@
     } else {
       setStatus('Xodim, admin ёки link orqali kiring, keyin mundarija yuklanadi.');
     }
-  </script>
+    setInterval(() => {
+      if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
+        loadCatalog().catch(() => {});
+      }
+    }, 60000);  </script>
   <script src="/warehouse-top-nav.js"></script>
 </body>
 </html>

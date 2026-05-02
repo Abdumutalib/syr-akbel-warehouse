@@ -598,11 +598,17 @@
     staffPicker.load().catch(() => {});
     if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
       loadLedger().catch((error) => setStatus(error.message, true));
-    } else if (pinAuth.hasPin()) {
+    } else if (pinAuth.hasPin()) {  
       setStatus('PIN saqlangan. PIN bilan kiring, keyin hisobot sahifasi yuklanadi.');
     } else {
-      setStatus('Buxgalter, admin ёки link orqali kiring, keyin sahifa yuklanadi.');
+      setStatus('Buxgalter, admin С'РєРё link orqali kiring, keyin sahifa yuklanadi.');
     }
+
+    setInterval(() => {
+      if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
+        loadLedger().catch(() => {});
+      }
+    }, 60000);
   </script>
   <script src="/warehouse-top-nav.js"></script>
 </body>
