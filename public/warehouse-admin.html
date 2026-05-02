@@ -888,6 +888,11 @@
       setStatus("Admin login va parolini kiriting, keyin kutilayotgan yozuvlar yuklanadi.");
     }
     applyRoleDefaults();
+    setInterval(() => {
+      if (pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
+        loadPending().catch(() => {});
+      }
+    }, 60000);
   </script>
   <script src="/warehouse-top-nav.js"></script>
 </body>
