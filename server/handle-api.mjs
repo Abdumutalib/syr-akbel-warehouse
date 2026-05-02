@@ -18,6 +18,8 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     listPendingTransactions,
     listStaffAccounts,
     loadWarehouse,
+    withWarehouseRead,
+    withWarehouseWrite,
     normalizeApprovalPayment,
     readPostJson,
     recordApprovedSale,
@@ -45,6 +47,38 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     upsertCustomer,
   } = deps;
 
+  const readWarehouse =
+    typeof withWarehouseRead === "function"
+      ? withWarehouseRead
+      : (handler) => handler(loadWarehouse());
+  const writeWarehouse =
+    typeof withWarehouseWrite === "function"
+      ? withWarehouseWrite
+      : async (handler) => {
+          const state = loadWarehouse();
+          const result = await handler(state);
+          saveWarehouse(state);
+          return result;
+        };
+
+  const isAdminOperator = (operator) =>
+    Boolean(
+      operator &&
+      (String(operator.kind || "").trim().toLocaleLowerCase("en-US") === "admin" ||
+        String(operator.role || "").trim().toLocaleLowerCase("en-US") === "admin")
+    );
+
+  const canAccessCustomer = (operator, customer) => {
+    if (isAdminOperator(operator)) {
+      return true;
+    }
+    const operatorId = Number(operator?.id);
+    if (!Number.isFinite(operatorId) || operatorId <= 0) {
+      return false;
+    }
+    return Number(customer?.ownerOperatorId) === operatorId;
+  };
+
   if (apiPath === "/api/telegram/webhook" && req.method === "POST") {
     const body = await readPostJson(req);
     if (body === null) {
@@ -57,7 +91,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const result = createWarehouseTransaction(payload);
+      const result = await createWarehouseTransaction(payload);
       await sendTelegramMessage(payload.telegramId, buildPendingReply(result));
       await sendTelegramAdminDm(
         buildAdminNewOrderMsg(
@@ -94,7 +128,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const result = createWarehouseTransaction(body);
+      const result = await createWarehouseTransaction(body);
       sendApiJson(res, 201, {
         ok: true,
         transactionId: result.transaction.id,
@@ -112,49 +146,70 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     if (!assertWarehouseAdmin(req, res)) {
       return true;
     }
-    const state = loadWarehouse();
-    const pricing = currentWarehousePricing(state);
+    const { pending, stockKg, pricing } = readWarehouse((state) => {
+      const pricing = currentWarehousePricing(state);
+      return {
+        pending: listPendingTransactions(state, pricing),
+        stockKg: state.warehouse.currentStockKg,
+        pricing,
+      };
+    });
     sendApiJson(res, 200, {
       ok: true,
-      pending: listPendingTransactions(state, pricing),
-      stockKg: state.warehouse.currentStockKg,
+      pending,
+      stockKg,
       pricing,
     });
     return true;
   }
 
   if (apiPath === "/api/warehouse/customers" && req.method === "GET") {
-    if (!assertWarehouseOperator(req, res, {
+    const operator = assertWarehouseOperator(req, res, {
       realm: "warehouse-seller",
       permission: "seller",
       message: "Mijoz qo'shish uchun sotuvchi ruxsati kerak",
-    })) {
+    });
+    if (!operator) {
       return true;
     }
-    const state = loadWarehouse();
-    const pricing = currentWarehousePricing(state);
-    const customers = listCustomerSummaries(state, pricing);
+    const { customers, stockKg, pricing } = readWarehouse((state) => {
+      const pricing = currentWarehousePricing(state);
+      const allCustomers = listCustomerSummaries(state, pricing);
+      return {
+        customers: allCustomers.filter((customer) => canAccessCustomer(operator, customer)),
+        stockKg: state.warehouse.currentStockKg,
+        pricing,
+      };
+    });
     sendApiJson(res, 200, {
       ok: true,
       customers,
       summary: summarizeCustomers(customers),
-      stockKg: state.warehouse.currentStockKg,
+      stockKg,
       pricing,
     });
     return true;
   }
 
   if (apiPath === "/api/warehouse/customer-catalog" && req.method === "GET") {
-    if (!assertWarehouseOperator(req, res, {
+    const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
       permission: "customers",
       message: "Mijozlar sahifasi uchun ruxsat kerak",
-    })) {
+    });
+    if (!operator) {
       return true;
     }
-    const state = loadWarehouse();
-    const catalog = groupCustomersByPaymentType(state, currentWarehousePricing(state));
+    const catalog = readWarehouse((state) => {
+      const grouped = groupCustomersByPaymentType(state, currentWarehousePricing(state));
+      const filterCustomers = (list) => list.filter((customer) => canAccessCustomer(operator, customer));
+      return {
+        cashCustomers: filterCustomers(grouped.cashCustomers || []),
+        transferCustomers: filterCustomers(grouped.transferCustomers || []),
+        otherCustomers: filterCustomers(grouped.otherCustomers || []),
+      };
+    });
     sendApiJson(res, 200, {
       ok: true,
       ...catalog,
@@ -163,12 +218,13 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (apiPath === "/api/warehouse/customers" && req.method === "POST") {
-    if (!assertWarehouseOperator(req, res, {
+    const operator = assertWarehouseOperator(req, res, {
       roles: ["seller"],
       allowAdmin: true,
       realm: "warehouse-seller",
       message: "Mijoz qo'shish учун sotuvchi yoki admin ruxsati kerak",
-    })) {
+    });
+    if (!operator) {
       return true;
     }
     const body = await readPostJson(req);
@@ -177,9 +233,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const customer = upsertCustomer(state, body);
-      saveWarehouse(state);
+      const customer = await writeWarehouse((state) => upsertCustomer(state, body, { actor: operator }));
       sendApiJson(res, 201, { ok: true, customer });
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Mijozni saqlab bo'lmadi" });
@@ -189,37 +243,50 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
 
   const customerDetailMatch = apiPath.match(/^\/api\/warehouse\/customers\/(\d+)$/);
   if (customerDetailMatch && req.method === "DELETE") {
-    if (!assertWarehouseOperator(req, res, {
+    const operator = assertWarehouseOperator(req, res, {
       roles: ["seller"],
       allowAdmin: true,
       realm: "warehouse-seller",
       message: "Mijozni o'chirish учун sotuvchi yoki admin ruxsati kerak",
-    })) {
+    });
+    if (!operator) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const result = deleteCustomer(state, Number(customerDetailMatch[1]));
-      saveWarehouse(state);
+      const result = await writeWarehouse((state) => {
+        const detail = getCustomerDetail(state, Number(customerDetailMatch[1]), currentWarehousePricing(state));
+        if (!canAccessCustomer(operator, detail?.customer || null)) {
+          const err = new Error("Bu mijozga ruxsat yo'q");
+          err.statusCode = 403;
+          throw err;
+        }
+        return deleteCustomer(state, Number(customerDetailMatch[1]));
+      });
       sendApiJson(res, 200, { ok: true, ...result });
     } catch (e) {
-      sendApiJson(res, 404, { error: e.message || "Mijozni o'chirib bo'lmadi" });
+      sendApiJson(res, e.statusCode || 404, { error: e.message || "Mijozni o'chirib bo'lmadi" });
     }
     return true;
   }
 
   if (customerDetailMatch && req.method === "GET") {
-    if (!assertWarehouseOperator(req, res, {
+    const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
       permission: "customers",
       message: "Mijoz sahifasi uchun ruxsat kerak",
-    })) {
+    });
+    if (!operator) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const detail = getCustomerDetail(state, Number(customerDetailMatch[1]), currentWarehousePricing(state));
+      const detail = readWarehouse((state) =>
+        getCustomerDetail(state, Number(customerDetailMatch[1]), currentWarehousePricing(state))
+      );
+      if (!canAccessCustomer(operator, detail?.customer || null)) {
+        sendApiJson(res, 403, { error: "Bu mijozga ruxsat yo'q" });
+        return true;
+      }
       sendApiJson(res, 200, {
         ok: true,
         ...detail,
@@ -234,10 +301,10 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     if (!assertWarehouseAdmin(req, res)) {
       return true;
     }
-    const state = loadWarehouse();
+    const staff = readWarehouse((state) => listStaffAccounts(state));
     sendApiJson(res, 200, {
       ok: true,
-      staff: listStaffAccounts(state),
+      staff,
     });
     return true;
   }
@@ -246,10 +313,10 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     if (!assertWarehouseAdmin(req, res)) {
       return true;
     }
-    const state = loadWarehouse();
+    const customers = readWarehouse((state) => listDeletedCustomers(state));
     sendApiJson(res, 200, {
       ok: true,
-      customers: listDeletedCustomers(state),
+      customers,
     });
     return true;
   }
@@ -260,13 +327,12 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const result = restoreDeletedCustomer(state, Number(deletedCustomerMatch[1]));
-      saveWarehouse(state);
+      const result = await writeWarehouse((state) => restoreDeletedCustomer(state, Number(deletedCustomerMatch[1])));
+      const customers = readWarehouse((state) => listDeletedCustomers(state));
       sendApiJson(res, 200, {
         ok: true,
         ...result,
-        customers: listDeletedCustomers(state),
+        customers,
       });
     } catch (e) {
       sendApiJson(res, 404, { error: e.message || "Mijozni tiklab bo'lmadi" });
@@ -284,10 +350,11 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const staff = createStaffAccount(state, body);
-      saveWarehouse(state);
-      sendApiJson(res, 201, { ok: true, staff, allStaff: listStaffAccounts(state) });
+      const result = await writeWarehouse((state) => {
+        const staff = createStaffAccount(state, body);
+        return { staff, allStaff: listStaffAccounts(state) };
+      });
+      sendApiJson(res, 201, { ok: true, ...result });
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Xodimni saqlab bo'lmadi" });
     }
@@ -305,10 +372,11 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const staff = updateStaffAccountPermissions(state, Number(staffPermissionsMatch[1]), body.permissions);
-      saveWarehouse(state);
-      sendApiJson(res, 200, { ok: true, staff, allStaff: listStaffAccounts(state) });
+      const result = await writeWarehouse((state) => {
+        const staff = updateStaffAccountPermissions(state, Number(staffPermissionsMatch[1]), body.permissions);
+        return { staff, allStaff: listStaffAccounts(state) };
+      });
+      sendApiJson(res, 200, { ok: true, ...result });
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Ruxsatlarni saqlab bo'lmadi" });
     }
@@ -326,10 +394,11 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const link = createStaffAccessLink(state, Number(staffAccessLinksMatch[1]), body.permission);
-      saveWarehouse(state);
-      sendApiJson(res, 201, { ok: true, link, allStaff: listStaffAccounts(state) });
+      const result = await writeWarehouse((state) => {
+        const link = createStaffAccessLink(state, Number(staffAccessLinksMatch[1]), body.permission);
+        return { link, allStaff: listStaffAccounts(state) };
+      });
+      sendApiJson(res, 201, { ok: true, ...result });
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Link yaratib bo'lmadi" });
     }
@@ -342,10 +411,11 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const link = revokeStaffAccessLink(state, Number(staffAccessLinkRevokeMatch[1]), staffAccessLinkRevokeMatch[2]);
-      saveWarehouse(state);
-      sendApiJson(res, 200, { ok: true, link, allStaff: listStaffAccounts(state) });
+      const result = await writeWarehouse((state) => {
+        const link = revokeStaffAccessLink(state, Number(staffAccessLinkRevokeMatch[1]), staffAccessLinkRevokeMatch[2]);
+        return { link, allStaff: listStaffAccounts(state) };
+      });
+      sendApiJson(res, 200, { ok: true, ...result });
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Linkni bekor qilib bo'lmadi" });
     }
@@ -358,10 +428,11 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const staff = deleteStaffAccount(state, Number(staffDeleteMatch[1]));
-      saveWarehouse(state);
-      sendApiJson(res, 200, { ok: true, staff, allStaff: listStaffAccounts(state) });
+      const result = await writeWarehouse((state) => {
+        const staff = deleteStaffAccount(state, Number(staffDeleteMatch[1]));
+        return { staff, allStaff: listStaffAccounts(state) };
+      });
+      sendApiJson(res, 200, { ok: true, ...result });
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Xodimni o'chirib bo'lmadi" });
     }
@@ -379,9 +450,13 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     })) {
       return true;
     }
-    const state = loadWarehouse();
-    const pricing = currentWarehousePricing(state);
-    const approved = listApprovedTransactions(state, paymentType, pricing);
+    const { approved, pricing } = readWarehouse((state) => {
+      const pricing = currentWarehousePricing(state);
+      return {
+        approved: listApprovedTransactions(state, paymentType, pricing),
+        pricing,
+      };
+    });
     sendApiJson(res, 200, {
       ok: true,
       paymentType,
@@ -393,12 +468,13 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (apiPath === "/api/warehouse/seller-sale" && req.method === "POST") {
-    if (!assertWarehouseOperator(req, res, {
+    const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-seller",
       permission: "seller",
       message: "Savdo yozish uchun sotuvchi ruxsati kerak",
-    })) {
+    });
+    if (!operator) {
       return true;
     }
     const body = await readPostJson(req);
@@ -407,12 +483,18 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const pricing = currentWarehousePricing(state);
-      const result = recordApprovedSale(state, body, {
-        pricing,
+      const { result, stockKg, pricing } = await writeWarehouse((state) => {
+        const pricing = currentWarehousePricing(state);
+        const result = recordApprovedSale(state, body, {
+          pricing,
+          actor: operator,
+        });
+        return {
+          result,
+          stockKg: state.warehouse.currentStockKg,
+          pricing,
+        };
       });
-      saveWarehouse(state);
       const saleCashPaid = Number(result.transaction?.cashPaidAmount || 0);
       const saleTransferPaid = Number(result.transaction?.transferPaidAmount || 0);
       await sendTelegramChannelMessage(
@@ -440,7 +522,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         debt: result.debt,
         totalPaid: result.totalPaid,
         transaction: result.transaction,
-        stockKg: state.warehouse.currentStockKg,
+        stockKg,
         pricing,
       });
     } catch (e) {
@@ -450,12 +532,13 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (apiPath === "/api/warehouse/customer-payment" && req.method === "POST") {
-    if (!assertWarehouseOperator(req, res, {
+    const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-seller",
       permission: "seller",
       message: "To'lov yozish uchun sotuvchi ruxsati kerak",
-    })) {
+    });
+    if (!operator) {
       return true;
     }
     const body = await readPostJson(req);
@@ -464,12 +547,14 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const pricing = currentWarehousePricing(state);
-      const result = recordCustomerPayment(state, body, {
-        pricing,
+      const { result, pricing } = await writeWarehouse((state) => {
+        const pricing = currentWarehousePricing(state);
+        const result = recordCustomerPayment(state, body, {
+          pricing,
+          actor: operator,
+        });
+        return { result, pricing };
       });
-      saveWarehouse(state);
       const payCashPaid = Number(result.transaction?.cashPaidAmount || 0);
       const payTransferPaid = Number(result.transaction?.transferPaidAmount || 0);
       await sendTelegramChannelMessage(
@@ -513,9 +598,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const pricing = updateWarehousePricing(state, body);
-      saveWarehouse(state);
+      const pricing = await writeWarehouse((state) => updateWarehousePricing(state, body));
       sendApiJson(res, 200, { ok: true, pricing });
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Narxlarni saqlab bo'lmadi" });
@@ -533,10 +616,11 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const stockKg = seedWarehouseStock(state, body.stockKg);
-      saveWarehouse(state);
-      sendApiJson(res, 200, { ok: true, stockKg, pricing: currentWarehousePricing(state) });
+      const { stockKg, pricing } = await writeWarehouse((state) => {
+        const stockKg = seedWarehouseStock(state, body.stockKg);
+        return { stockKg, pricing: currentWarehousePricing(state) };
+      });
+      sendApiJson(res, 200, { ok: true, stockKg, pricing });
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Ombor miqdori noto'g'ri" });
     }
@@ -554,15 +638,20 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     try {
-      const state = loadWarehouse();
-      const pricing = currentWarehousePricing(state);
-      const result = approveTransaction(
-        state,
-        Number(approveMatch[1]),
-        normalizeApprovalPayment(body),
-        { pricing }
-      );
-      saveWarehouse(state);
+      const { result, stockKg, pricing } = await writeWarehouse((state) => {
+        const pricing = currentWarehousePricing(state);
+        const result = approveTransaction(
+          state,
+          Number(approveMatch[1]),
+          normalizeApprovalPayment(body),
+          { pricing }
+        );
+        return {
+          result,
+          stockKg: state.warehouse.currentStockKg,
+          pricing,
+        };
+      });
       const approveCashPaid = Number(result.transaction?.cashPaidAmount || 0);
       const approveTransferPaid = Number(result.transaction?.transferPaidAmount || 0);
       await sendTelegramChannelMessage(
@@ -585,7 +674,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         totalPaid: result.totalPaid,
         cashPaidAmount: result.transaction.cashPaidAmount,
         transferPaidAmount: result.transaction.transferPaidAmount,
-        stockKg: state.warehouse.currentStockKg,
+        stockKg,
         pricing,
       });
     } catch (e) {
@@ -598,9 +687,9 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     if (!assertWarehouseAdmin(req, res)) {
       return true;
     }
-    const state = loadWarehouse();
-    const pricing = currentWarehousePricing(state);
-    const userMap = new Map(state.users.map((u) => [u.id, u.fullName]));
+    const { csv } = readWarehouse((state) => {
+      const pricing = currentWarehousePricing(state);
+      const userMap = new Map(state.users.map((u) => [u.id, u.fullName]));
     const KIND_LABELS = { sale: "Savdo", payment: "To'lov", "pending-sale": "Kutilayotgan" };
     const STATUS_LABELS = { approved: "Tasdiqlangan", pending: "Kutilayotgan" };
     const SEP = ";";
@@ -624,7 +713,10 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         const transfer = Number(tx.transferPaidAmount || 0);
         return [name, kind, status, dateStr, kg, total, cash, transfer].map(csvEscape).join(SEP);
       });
-    const csv = [header, ...rows].join("\r\n");
+      return {
+        csv: [header, ...rows].join("\r\n"),
+      };
+    });
     res.writeHead(200, {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": 'attachment; filename="akbel-export.csv"',

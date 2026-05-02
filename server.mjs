@@ -81,6 +81,11 @@ const WAREHOUSE_MAX_REQUEST_BYTES = Math.max(
 );
 const WAREHOUSE_STATE_PATH = resolveWarehouseStatePath();
 const WAREHOUSE_TRANSACTION_PHOTO_DIR = path.join(path.dirname(WAREHOUSE_STATE_PATH), "transaction-photos");
+let warehouseStateCache = loadWarehouseState(WAREHOUSE_STATE_PATH);
+let warehouseWriteQueue = Promise.resolve();
+let yandexUploadTimer = null;
+let yandexUploadInFlight = false;
+let yandexUploadRequested = false;
 
 function resolveWarehouseStatePath() {
   const configured = process.env.WAREHOUSE_STATE_FILE?.trim() || "data/warehouse.json";
@@ -88,7 +93,7 @@ function resolveWarehouseStatePath() {
 }
 
 function loadWarehouse() {
-  return loadWarehouseState(WAREHOUSE_STATE_PATH);
+  return warehouseStateCache;
 }
 
 function buildCsvContent(state, mode = "all") {
@@ -383,8 +388,55 @@ async function uploadCsvToYandex(state) {
 }
 
 function saveWarehouse(state) {
+  warehouseStateCache = state;
   saveWarehouseState(WAREHOUSE_STATE_PATH, state);
-  uploadCsvToYandex(state).catch(() => {});
+  scheduleYandexCsvUpload();
+}
+
+function withWarehouseRead(handler) {
+  return handler(warehouseStateCache);
+}
+
+function withWarehouseWrite(handler) {
+  const task = warehouseWriteQueue.then(async () => {
+    const result = await handler(warehouseStateCache);
+    saveWarehouse(warehouseStateCache);
+    return result;
+  });
+  warehouseWriteQueue = task.catch(() => {});
+  return task;
+}
+
+function scheduleYandexCsvUpload() {
+  yandexUploadRequested = true;
+  if (yandexUploadTimer) {
+    clearTimeout(yandexUploadTimer);
+  }
+  yandexUploadTimer = setTimeout(() => {
+    yandexUploadTimer = null;
+    flushYandexCsvUpload();
+  }, 1200);
+}
+
+async function flushYandexCsvUpload() {
+  if (yandexUploadInFlight) {
+    return;
+  }
+  if (!yandexUploadRequested) {
+    return;
+  }
+  yandexUploadRequested = false;
+  yandexUploadInFlight = true;
+  try {
+    await uploadCsvToYandex(warehouseStateCache);
+  } catch {
+    // Swallow errors to keep API writes resilient.
+  } finally {
+    yandexUploadInFlight = false;
+    if (yandexUploadRequested) {
+      flushYandexCsvUpload().catch(() => {});
+    }
+  }
 }
 
 function currentWarehousePricing(state) {
@@ -858,18 +910,17 @@ function normalizeApprovalPayment(body) {
   };
 }
 
-function createWarehouseTransaction(payload) {
-  const state = loadWarehouse();
-  const result = createPendingTransaction(
-    state,
-    {
-      text: payload.text,
-      telegramId: payload.telegramId ?? null,
-    },
-    { pricing: currentWarehousePricing(state) }
+async function createWarehouseTransaction(payload) {
+  return withWarehouseWrite((state) =>
+    createPendingTransaction(
+      state,
+      {
+        text: payload.text,
+        telegramId: payload.telegramId ?? null,
+      },
+      { pricing: currentWarehousePricing(state) }
+    )
   );
-  saveWarehouse(state);
-  return result;
 }
 
 function summarizeApprovedTransactions(entries) {
@@ -1051,6 +1102,8 @@ const server = http.createServer(async (req, res) => {
         listWarehouseReceipts,
         listStaffAccounts,
         loadWarehouse,
+        withWarehouseRead,
+        withWarehouseWrite,
         normalizeApprovalPayment,
         readPostJson,
         recordApprovedSale,
