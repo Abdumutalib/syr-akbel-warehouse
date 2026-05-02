@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   const {
     assertWarehouseAdmin,
@@ -77,6 +79,88 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return false;
     }
     return Number(customer?.ownerOperatorId) === operatorId;
+  };
+
+  const IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1000;
+  const IDEMPOTENCY_MAX_ENTRIES = 2000;
+  const extractIdempotencyKey = (request) => {
+    const value = request.headers["idempotency-key"] || request.headers["Idempotency-Key"];
+    if (typeof value !== "string") {
+      return "";
+    }
+    return value.trim().slice(0, 128);
+  };
+
+  const buildIdempotencyFingerprint = (requestPath, body, operator) => {
+    const actor = {
+      id: operator?.id ?? null,
+      username: operator?.username ?? null,
+      role: operator?.role ?? null,
+      kind: operator?.kind ?? null,
+    };
+    const serialized = JSON.stringify({
+      method: req.method,
+      path: requestPath,
+      actor,
+      body: body ?? null,
+    });
+    return crypto.createHash("sha256").update(serialized).digest("hex");
+  };
+
+  const pruneIdempotencyEntries = (state) => {
+    if (!Array.isArray(state.idempotencyRequests)) {
+      state.idempotencyRequests = [];
+      return;
+    }
+    const now = Date.now();
+    state.idempotencyRequests = state.idempotencyRequests.filter((entry) => {
+      const createdAt = new Date(entry?.createdAt || 0).getTime();
+      if (!Number.isFinite(createdAt) || createdAt <= 0) {
+        return false;
+      }
+      return now - createdAt <= IDEMPOTENCY_RETENTION_MS;
+    });
+    if (state.idempotencyRequests.length > IDEMPOTENCY_MAX_ENTRIES) {
+      state.idempotencyRequests = state.idempotencyRequests.slice(0, IDEMPOTENCY_MAX_ENTRIES);
+    }
+  };
+
+  const getIdempotencyHit = (state, key, fingerprint) => {
+    if (!key) {
+      return { type: "miss" };
+    }
+    pruneIdempotencyEntries(state);
+    const hit = (state.idempotencyRequests || []).find((entry) => entry.key === key);
+    if (!hit) {
+      return { type: "miss" };
+    }
+    if (hit.fingerprint !== fingerprint) {
+      return { type: "conflict" };
+    }
+    return {
+      type: "replay",
+      statusCode: Number(hit.statusCode || 200),
+      responseBody: hit.responseBody || { ok: true },
+    };
+  };
+
+  const saveIdempotencyResult = (state, key, fingerprint, statusCode, responseBody) => {
+    if (!key) {
+      return;
+    }
+    pruneIdempotencyEntries(state);
+    const nowIso = new Date().toISOString();
+    state.idempotencyRequests = (state.idempotencyRequests || []).filter((entry) => entry.key !== key);
+    state.idempotencyRequests.unshift({
+      key,
+      fingerprint,
+      statusCode,
+      responseBody,
+      createdAt: nowIso,
+    });
+    if (state.idempotencyRequests.length > IDEMPOTENCY_MAX_ENTRIES) {
+      state.idempotencyRequests = state.idempotencyRequests.slice(0, IDEMPOTENCY_MAX_ENTRIES);
+    }
   };
 
   if (apiPath === "/api/telegram/webhook" && req.method === "POST") {
@@ -232,11 +316,27 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
       return true;
     }
+    const idempotencyKey = extractIdempotencyKey(req);
+    const idempotencyFingerprint = buildIdempotencyFingerprint(apiPath, body, operator);
     try {
-      const customer = await writeWarehouse((state) => upsertCustomer(state, body, { actor: operator }));
-      sendApiJson(res, 201, { ok: true, customer });
+      const outcome = await writeWarehouse((state) => {
+        const hit = getIdempotencyHit(state, idempotencyKey, idempotencyFingerprint);
+        if (hit.type === "conflict") {
+          const err = new Error("Idempotency key boshqa so'rov bilan ishlatilgan");
+          err.statusCode = 409;
+          throw err;
+        }
+        if (hit.type === "replay") {
+          return { replay: true, statusCode: hit.statusCode, responseBody: hit.responseBody };
+        }
+        const customer = upsertCustomer(state, body, { actor: operator });
+        const responseBody = { ok: true, customer };
+        saveIdempotencyResult(state, idempotencyKey, idempotencyFingerprint, 201, responseBody);
+        return { replay: false, statusCode: 201, responseBody };
+      });
+      sendApiJson(res, outcome.statusCode, outcome.responseBody);
     } catch (e) {
-      sendApiJson(res, 400, { error: e.message || "Mijozni saqlab bo'lmadi" });
+      sendApiJson(res, e.statusCode || 400, { error: e.message || "Mijozni saqlab bo'lmadi" });
     }
     return true;
   }
@@ -482,19 +582,45 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
       return true;
     }
+    const idempotencyKey = extractIdempotencyKey(req);
+    const idempotencyFingerprint = buildIdempotencyFingerprint(apiPath, body, operator);
     try {
-      const { result, stockKg, pricing } = await writeWarehouse((state) => {
+      const { replay, statusCode, responseBody, result } = await writeWarehouse((state) => {
+        const hit = getIdempotencyHit(state, idempotencyKey, idempotencyFingerprint);
+        if (hit.type === "conflict") {
+          const err = new Error("Idempotency key boshqa so'rov bilan ishlatilgan");
+          err.statusCode = 409;
+          throw err;
+        }
+        if (hit.type === "replay") {
+          return {
+            replay: true,
+            statusCode: hit.statusCode,
+            responseBody: hit.responseBody,
+            result: null,
+          };
+        }
         const pricing = currentWarehousePricing(state);
         const result = recordApprovedSale(state, body, {
           pricing,
           actor: operator,
         });
-        return {
-          result,
+        const responseBody = {
+          ok: true,
+          customer: result.user,
+          debt: result.debt,
+          totalPaid: result.totalPaid,
+          transaction: result.transaction,
           stockKg: state.warehouse.currentStockKg,
           pricing,
         };
+        saveIdempotencyResult(state, idempotencyKey, idempotencyFingerprint, 201, responseBody);
+        return { replay: false, statusCode: 201, responseBody, result };
       });
+      if (replay) {
+        sendApiJson(res, statusCode, responseBody);
+        return true;
+      }
       const saleCashPaid = Number(result.transaction?.cashPaidAmount || 0);
       const saleTransferPaid = Number(result.transaction?.transferPaidAmount || 0);
       await sendTelegramChannelMessage(
@@ -516,17 +642,9 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
           result.debt
         )
       );
-      sendApiJson(res, 201, {
-        ok: true,
-        customer: result.user,
-        debt: result.debt,
-        totalPaid: result.totalPaid,
-        transaction: result.transaction,
-        stockKg,
-        pricing,
-      });
+      sendApiJson(res, statusCode, responseBody);
     } catch (e) {
-      sendApiJson(res, 400, { error: e.message || "Savdoni yozib bo'lmadi" });
+      sendApiJson(res, e.statusCode || 400, { error: e.message || "Savdoni yozib bo'lmadi" });
     }
     return true;
   }
@@ -546,15 +664,44 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
       return true;
     }
+    const idempotencyKey = extractIdempotencyKey(req);
+    const idempotencyFingerprint = buildIdempotencyFingerprint(apiPath, body, operator);
     try {
-      const { result, pricing } = await writeWarehouse((state) => {
+      const { replay, statusCode, responseBody, result } = await writeWarehouse((state) => {
+        const hit = getIdempotencyHit(state, idempotencyKey, idempotencyFingerprint);
+        if (hit.type === "conflict") {
+          const err = new Error("Idempotency key boshqa so'rov bilan ishlatilgan");
+          err.statusCode = 409;
+          throw err;
+        }
+        if (hit.type === "replay") {
+          return {
+            replay: true,
+            statusCode: hit.statusCode,
+            responseBody: hit.responseBody,
+            result: null,
+          };
+        }
         const pricing = currentWarehousePricing(state);
         const result = recordCustomerPayment(state, body, {
           pricing,
           actor: operator,
         });
-        return { result, pricing };
+        const responseBody = {
+          ok: true,
+          customer: result.user,
+          debt: result.debt,
+          totalPaid: result.totalPaid,
+          transaction: result.transaction,
+          pricing,
+        };
+        saveIdempotencyResult(state, idempotencyKey, idempotencyFingerprint, 201, responseBody);
+        return { replay: false, statusCode: 201, responseBody, result };
       });
+      if (replay) {
+        sendApiJson(res, statusCode, responseBody);
+        return true;
+      }
       const payCashPaid = Number(result.transaction?.cashPaidAmount || 0);
       const payTransferPaid = Number(result.transaction?.transferPaidAmount || 0);
       await sendTelegramChannelMessage(
@@ -574,16 +721,9 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
           result.debt
         )
       );
-      sendApiJson(res, 201, {
-        ok: true,
-        customer: result.user,
-        debt: result.debt,
-        totalPaid: result.totalPaid,
-        transaction: result.transaction,
-        pricing,
-      });
+      sendApiJson(res, statusCode, responseBody);
     } catch (e) {
-      sendApiJson(res, 400, { error: e.message || "To'lovni yozib bo'lmadi" });
+      sendApiJson(res, e.statusCode || 400, { error: e.message || "To'lovni yozib bo'lmadi" });
     }
     return true;
   }
@@ -637,8 +777,29 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
       return true;
     }
+    const idempotencyKey = extractIdempotencyKey(req);
+    const idempotencyFingerprint = buildIdempotencyFingerprint(apiPath, body, {
+      kind: "admin",
+      role: "admin",
+      id: 0,
+      username: "admin",
+    });
     try {
-      const { result, stockKg, pricing } = await writeWarehouse((state) => {
+      const { replay, statusCode, responseBody, result } = await writeWarehouse((state) => {
+        const hit = getIdempotencyHit(state, idempotencyKey, idempotencyFingerprint);
+        if (hit.type === "conflict") {
+          const err = new Error("Idempotency key boshqa so'rov bilan ishlatilgan");
+          err.statusCode = 409;
+          throw err;
+        }
+        if (hit.type === "replay") {
+          return {
+            replay: true,
+            statusCode: hit.statusCode,
+            responseBody: hit.responseBody,
+            result: null,
+          };
+        }
         const pricing = currentWarehousePricing(state);
         const result = approveTransaction(
           state,
@@ -646,12 +807,22 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
           normalizeApprovalPayment(body),
           { pricing }
         );
-        return {
-          result,
+        const responseBody = {
+          ok: true,
+          debt: result.debt,
+          totalPaid: result.totalPaid,
+          cashPaidAmount: result.transaction.cashPaidAmount,
+          transferPaidAmount: result.transaction.transferPaidAmount,
           stockKg: state.warehouse.currentStockKg,
           pricing,
         };
+        saveIdempotencyResult(state, idempotencyKey, idempotencyFingerprint, 200, responseBody);
+        return { replay: false, statusCode: 200, responseBody, result };
       });
+      if (replay) {
+        sendApiJson(res, statusCode, responseBody);
+        return true;
+      }
       const approveCashPaid = Number(result.transaction?.cashPaidAmount || 0);
       const approveTransferPaid = Number(result.transaction?.transferPaidAmount || 0);
       await sendTelegramChannelMessage(
@@ -668,17 +839,9 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         result.user?.telegramId,
         buildDebtReply(result.user?.fullName || "mijoz", result.debt)
       );
-      sendApiJson(res, 200, {
-        ok: true,
-        debt: result.debt,
-        totalPaid: result.totalPaid,
-        cashPaidAmount: result.transaction.cashPaidAmount,
-        transferPaidAmount: result.transaction.transferPaidAmount,
-        stockKg,
-        pricing,
-      });
+      sendApiJson(res, statusCode, responseBody);
     } catch (e) {
-      sendApiJson(res, 400, { error: e.message || "Tranzaksiyani tasdiqlab bo'lmadi" });
+      sendApiJson(res, e.statusCode || 400, { error: e.message || "Tranzaksiyani tasdiqlab bo'lmadi" });
     }
     return true;
   }
