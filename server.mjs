@@ -73,6 +73,12 @@ function loadDotEnv() {
 loadDotEnv();
 
 const PORT = Number(process.env.PORT) || 8787;
+const APP_VERSION = resolveAppVersion();
+const APP_BUILD =
+  process.env.GIT_COMMIT_SHA?.trim() ||
+  process.env.SOURCE_VERSION?.trim() ||
+  process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
+  "";
 const WAREHOUSE_COMPANY_NAME = process.env.WAREHOUSE_COMPANY_NAME?.trim() || "Сыр АКБЕЛ";
 const WAREHOUSE_ALLOWED_ORIGIN =
   process.env.WAREHOUSE_ALLOWED_ORIGIN?.trim() || `http://127.0.0.1:${PORT}`;
@@ -91,6 +97,15 @@ let yandexUploadRequested = false;
 function resolveWarehouseStatePath() {
   const configured = process.env.WAREHOUSE_STATE_FILE?.trim() || "data/warehouse.json";
   return path.isAbsolute(configured) ? configured : path.join(ROOT, configured);
+}
+
+function resolveAppVersion() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+    return String(pkg.version || "0.0.0");
+  } catch {
+    return "0.0.0";
+  }
 }
 
 function loadWarehouse() {
@@ -1212,12 +1227,15 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   const u = new URL(req.url || "/", "http://127.0.0.1");
 
   if (u.pathname === "/healthz" && req.method === "GET") {
+    res.setHeader("X-App-Version", APP_BUILD ? `${APP_VERSION}+${APP_BUILD.slice(0, 7)}` : APP_VERSION);
     sendApiJson(
       res,
       200,
       {
         ok: true,
         service: "syr-akbel-warehouse",
+        version: APP_VERSION,
+        build: APP_BUILD || null,
         uptimeSec: Math.round(process.uptime()),
         now: new Date().toISOString(),
       },

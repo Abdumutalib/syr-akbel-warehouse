@@ -477,6 +477,25 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     return true;
   }
 
+  if (apiPath === "/api/warehouse/staff-directory" && req.method === "GET") {
+    const staff = readWarehouse((state) =>
+      listStaffAccounts(state)
+        .filter((entry) => entry && entry.active !== false)
+        .map((entry) => ({
+          id: entry.id,
+          username: entry.username,
+          fullName: entry.fullName,
+          role: entry.role,
+          permissions: Array.isArray(entry.permissions) ? entry.permissions : [],
+        }))
+    );
+    sendApiJson(res, 200, {
+      ok: true,
+      staff,
+    });
+    return true;
+  }
+
   if (apiPath === "/api/warehouse/staff" && req.method === "GET") {
     if (!assertWarehouseAdmin(req, res)) {
       return true;

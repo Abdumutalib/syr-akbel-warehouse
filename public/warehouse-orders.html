@@ -316,11 +316,18 @@
 
     function renderOrders(orders) {
       const safeOrders = Array.isArray(orders) ? orders : [];
-      orderSummaryEl.textContent = safeOrders.length
-        ? `Jami ${safeOrders.length} ta zakaz yozilgan.`
-        : 'Hozircha zakaz yozilmagan.';
+      if (safeOrders.length) {
+        orderSummaryEl.textContent = `Jami ${safeOrders.length} ta zakaz yozilgan.`;
+      } else if (orderCustomerDirectoryState.length) {
+        orderSummaryEl.textContent = 'Hozircha zakaz yozilmagan. Yangi zakaz yozishingiz mumkin.';
+      } else {
+        orderSummaryEl.textContent = "Hozircha zakaz yo'q. Mijozlar ro'yxati ham bo'sh yoki vaqtincha yuklanmadi.";
+      }
       if (!safeOrders.length) {
-        orderListEl.innerHTML = '<p>Zakazlar hali yo\'q.</p>';
+        orderListEl.innerHTML = `
+          <p>Zakazlar hali yo'q.</p>
+          <p class="muted">Sabab: hali zakaz kiritilmagan, yoki bu login uchun ko'rinadigan zakazlar yo'q.</p>
+        `;
         return;
       }
       orderListEl.innerHTML = safeOrders.map((order) => `
@@ -340,15 +347,25 @@
 
     async function loadOrders() {
       setStatus('Zakazlar yuklanmoqda...');
-      const [orderData] = await Promise.all([
+      const [orderResult, directoryResult] = await Promise.allSettled([
         apiFetch('/api/warehouse/orders'),
         loadOrderCustomerDirectory(),
       ]);
+      if (orderResult.status !== 'fulfilled') {
+        throw orderResult.reason;
+      }
+      const orderData = orderResult.value;
+      if (directoryResult.status !== 'fulfilled') {
+        orderCustomerDirectoryState = [];
+        renderOrderCustomerDirectory([]);
+      }
       if (window.setWarehouseOperatorProfile) {
         window.setWarehouseOperatorProfile(orderData.operator || null);
       }
       renderOrders(orderData.orders || []);
-      setStatus('Tayyor.');
+      setStatus(directoryResult.status === 'fulfilled'
+        ? 'Tayyor.'
+        : 'Zakazlar yuklandi, lekin mijozlar ro\'yxatini hozircha olib bo\'lmadi.');
     }
 
     const pinAuth = window.createWarehousePinAuth({
