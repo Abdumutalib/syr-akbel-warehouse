@@ -610,7 +610,7 @@
     const customersState = [];
     let currentPricing = { cashPricePerKg: 0, transferPricePerKg: 0 };
     let salePhotoState = [];
-    const SALE_DRAFT_KEY = 'warehouse-sale-draft';
+    const SALE_DRAFT_KEY = `warehouse-sale-draft-${saleMode}`;
     let saleDraftRestorePending = true;
     if (accessToken) {
       localStorage.setItem('warehouse-access-token', accessToken);
@@ -1359,8 +1359,20 @@
       setStatus('Boshqa login bilan kirish ochildi.');
     });
 
-    saleCustomerEl.addEventListener('change', updateSelectedCustomerCard);
-    saleCustomerEl.addEventListener('change', writeSaleDraft);
+    saleCustomerEl.addEventListener('change', () => {
+      saleKgExpressionEl.value = '';
+      saleBlockCountEl.value = '';
+      saleBlockCountEl.dataset.mode = 'auto';
+      syncExpressionHeight();
+      saleCashEl.value = '';
+      saleTransferEl.value = '';
+      saleNoteEl.value = '';
+      clearSalePhoto();
+      closeCalculator();
+      updateSelectedCustomerCard();
+      updateCalculatorPreview();
+      writeSaleDraft();
+    });
     saleKgExpressionEl.addEventListener('focus', openCalculator);
     saleKgExpressionEl.addEventListener('input', () => {
       syncExpressionHeight();
