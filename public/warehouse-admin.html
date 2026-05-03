@@ -56,6 +56,44 @@
       line-height: 0.95;
     }
 
+    .hero-links {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    .button-link,
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      text-decoration: none;
+      font: inherit;
+      transition: transform 0.18s ease, background 0.18s ease;
+      display: inline-block;
+    }
+
+    .button-link:hover,
+    button:hover {
+      background: var(--accent-strong);
+      transform: translateY(-1px);
+    }
+
+    .button-link.secondary,
+    button.secondary {
+      background: #efe5d8;
+      color: var(--ink);
+    }
+
+    .button-link.secondary:hover,
+    button.secondary:hover {
+      background: #e6d8c5;
+    }
+
     .grid {
       display: grid;
       grid-template-columns: 320px 1fr;
@@ -91,25 +129,7 @@
       margin: 8px 0 14px;
     }
 
-    button {
-      border: 0;
-      border-radius: 999px;
-      padding: 12px 18px;
-      background: var(--accent);
-      color: #fff;
-      cursor: pointer;
-      transition: transform 0.18s ease, background 0.18s ease;
-    }
 
-    button:hover {
-      background: var(--accent-strong);
-      transform: translateY(-1px);
-    }
-
-    button.secondary {
-      background: #efe5d8;
-      color: var(--ink);
-    }
 
     .meta {
       display: grid;
@@ -266,7 +286,16 @@
 <body>
   <div class="shell">
     <section class="hero">
-      <h1>Сыр АКБЕЛ</h1>
+      <div>
+        <h1>Сыр АКБЕЛ</h1>
+        <div class="hero-links">
+          <a class="button-link secondary" href="/warehouse/admin/cash">Нақд хисобот</a>
+          <a class="button-link secondary" href="/warehouse/admin/transfer">О'тказма хисобот</a>
+          <a class="button-link secondary" href="/warehouse/customers">Мижозлар</a>
+          <a class="button-link secondary" href="/warehouse/orders">Буюртмалар</a>
+          <a class="button-link" href="/warehouse/ledger">Бухгалтер</a>
+        </div>
+      </div>
       <div id="status" class="status"></div>
     </section>
 
