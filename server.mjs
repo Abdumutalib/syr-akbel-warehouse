@@ -796,12 +796,29 @@ function assertWarehouseOperator(req, res, options = {}) {
 }
 
 function extractTelegramMessage(update) {
-  const message = update?.business_message || update?.edited_business_message || update?.message;
+  // Telegram Business bot ulanganda/uzilganda
+  if (update?.business_connection) {
+    const bc = update.business_connection;
+    return {
+      text: null,
+      telegramId: bc.user?.id ?? null,
+      type: "business_connection",
+      isConnected: bc.is_enabled !== false,
+      businessConnectionId: bc.id ?? null,
+      userName: bc.user?.first_name ?? null,
+    };
+  }
+  const message =
+    update?.business_message ||
+    update?.edited_business_message ||
+    update?.message;
   if (!message) return null;
   const text = typeof message.text === "string" ? message.text.trim() : "";
   return {
     text,
     telegramId: message.chat?.id ?? message.from?.id ?? null,
+    businessConnectionId: message.business_connection_id ?? null,
+    type: "message",
   };
 }
 

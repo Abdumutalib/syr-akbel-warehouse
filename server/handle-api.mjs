@@ -175,10 +175,79 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
     const payload = deps.extractTelegramMessage(body);
+
+    // Telegram Business bot ulanganda/uzilganda xabar
+    if (payload?.type === "business_connection") {
+      const statusMsg = payload.isConnected
+        ? `✅ Telegram Business ulandi!\n👤 ${payload.userName || "Foydalanuvchi"} bilan ulanish o'rnatildi.`
+        : `⚠️ Telegram Business uzildi.\n👤 ${payload.userName || "Foydalanuvchi"} bilan ulanish uzildi.`;
+      await sendTelegramAdminDm(statusMsg);
+      sendApiJson(res, 200, { ok: true, type: "business_connection" });
+      return true;
+    }
+
     if (!payload || !payload.text) {
       sendApiJson(res, 200, { ok: true, ignored: true });
       return true;
     }
+
+    // /start yoki /yordam — botni tanishtirish
+    const txt = payload.text.toLowerCase();
+    if (
+      txt === "/start" ||
+      txt.startsWith("/start ") ||
+      txt === "/yordam" ||
+      txt === "/help"
+    ) {
+      const helpMsg = [
+        "🧀 Сыр АКБЕЛ — savdo botiga xush kelibsiz!",
+        "",
+        "📦 Buyurtma berish uchun:",
+        "Ism va kilogramni yozing.",
+        "Misol: Ali aka 12 kg",
+        "",
+        "💰 Qarzingizni bilish uchun:",
+        "qarz — deb yozing",
+        "",
+        "ℹ️ Buyurtmangiz admin tasdiqlaganidan keyin kuchga kiradi.",
+      ].join("\n");
+      await sendTelegramMessage(payload.telegramId, helpMsg);
+      sendApiJson(res, 200, { ok: true });
+      return true;
+    }
+
+    // qarz — mijozning qarzini ko'rsatish
+    if (txt === "qarz" || txt === "/qarz" || txt === "qarzdorlik") {
+      try {
+        const customerInfo = withWarehouseRead((state) => {
+          const pricing = currentWarehousePricing(state);
+          const allCustomers = listCustomerSummaries(state, pricing);
+          return allCustomers.find(
+            (c) => c.telegramId != null && Number(c.telegramId) === Number(payload.telegramId)
+          );
+        });
+        if (customerInfo) {
+          await sendTelegramMessage(
+            payload.telegramId,
+            buildDebtReply(customerInfo.fullName, customerInfo.currentDebt ?? 0)
+          );
+        } else {
+          await sendTelegramMessage(
+            payload.telegramId,
+            "Sizning hisobingiz topilmadi. Avval buyurtma bering."
+          );
+        }
+      } catch {
+        await sendTelegramMessage(
+          payload.telegramId,
+          "Qarzni aniqlashda xatolik yuz berdi."
+        );
+      }
+      sendApiJson(res, 200, { ok: true });
+      return true;
+    }
+
+    // Buyurtma qabul qilish (misol: Ali aka 12 kg)
     try {
       const result = await createWarehouseTransaction(payload);
       await sendTelegramMessage(payload.telegramId, buildPendingReply(result));
@@ -200,7 +269,12 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     } catch (e) {
       await sendTelegramMessage(
         payload.telegramId,
-        "Xabar formati noto'g'ri. Misol: Ali aka 12 kg"
+        [
+          "❌ Xabar formati noto'g'ri.",
+          "Misol: Ali aka 12 kg",
+          "",
+          "/start — yordam ko'rish",
+        ].join("\n")
       );
       sendApiJson(res, 200, {
         ok: true,
