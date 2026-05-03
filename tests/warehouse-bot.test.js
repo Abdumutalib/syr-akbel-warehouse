@@ -55,6 +55,20 @@ describe("warehouse bot helpers", () => {
     });
   });
 
+  test("extracts latin name and latin kg", () => {
+    assert.deepEqual(extractNameAndAmount("Ali aka 12 kg"), {
+      name: "Ali aka",
+      amountKg: 12,
+    });
+  });
+
+  test("extracts latin name with cyrillic кг", () => {
+    assert.deepEqual(extractNameAndAmount("Botir 5.5 кг"), {
+      name: "Botir",
+      amountKg: 5.5,
+    });
+  });
+
   test("creates persistent pending transaction", () => {
     const dbPath = makeStatePath();
     const state = loadWarehouseState(dbPath);

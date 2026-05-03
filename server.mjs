@@ -6,6 +6,8 @@ import crypto from "node:crypto";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { handleWarehouseApiRoute } from "./server/handle-api.mjs";
+import { rateLimiter, securityHeaders, recordFailedAuth } from "./lib/rate-limiter.mjs";
+import { handleAnalyticsRoute } from "./lib/analytics.mjs";
 import {
   authenticateStaffAccessToken,
   authenticateStaffAccount,
@@ -42,6 +44,8 @@ import {
   updateStaffAccountPermissions,
   updateWarehousePricing,
   upsertCustomer,
+  recordTelegramMessage,
+  listTelegramMessages,
 } from "./lib/warehouse-bot.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -88,6 +92,37 @@ const WAREHOUSE_MAX_REQUEST_BYTES = Math.max(
 );
 const WAREHOUSE_STATE_PATH = resolveWarehouseStatePath();
 const WAREHOUSE_TRANSACTION_PHOTO_DIR = path.join(path.dirname(WAREHOUSE_STATE_PATH), "transaction-photos");
+const SCHEDULER_STATE_PATH = path.join(path.dirname(WAREHOUSE_STATE_PATH), "scheduler.json");
+
+// --- Qarz eslatma scheduler holati ---
+const DEBT_REMINDER_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 kun
+
+function loadSchedulerState() {
+  try {
+    if (fs.existsSync(SCHEDULER_STATE_PATH)) {
+      const raw = fs.readFileSync(SCHEDULER_STATE_PATH, "utf8");
+      const parsed = JSON.parse(raw);
+      return {
+        lastDebtReminderSentAt: parsed.lastDebtReminderSentAt ?? null,
+        pendingDebtReminderApproval: parsed.pendingDebtReminderApproval ?? false,
+      };
+    }
+  } catch { /* ignore */ }
+  return { lastDebtReminderSentAt: null, pendingDebtReminderApproval: false };
+}
+
+function saveSchedulerState(state) {
+  try {
+    fs.mkdirSync(path.dirname(SCHEDULER_STATE_PATH), { recursive: true });
+    fs.writeFileSync(SCHEDULER_STATE_PATH, JSON.stringify(state, null, 2), "utf8");
+  } catch (e) {
+    console.error("[SCHEDULER] Holatni saqlashda xatolik:", e.message);
+  }
+}
+
+// In-memory holat (server restart da fayldan tiklanadi)
+let schedulerState = loadSchedulerState();
+
 let warehouseStateCache = loadWarehouseState(WAREHOUSE_STATE_PATH);
 let warehouseWriteQueue = Promise.resolve();
 let yandexUploadTimer = null;
@@ -704,6 +739,8 @@ function assertWarehouseAdmin(req, res) {
   }
   const auth = parseBasicAuthHeader(req.headers.authorization);
   if (!auth || auth.username !== expectedUser || auth.password !== expectedPassword) {
+    const ip = req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.socket.remoteAddress;
+    recordFailedAuth(ip);
     res.writeHead(401, {
       ...baseApiJsonHeaders(),
       "WWW-Authenticate": 'Basic realm="warehouse-admin"',
@@ -1045,6 +1082,98 @@ function buildDebtReply(userName, debt) {
   ].join("\n");
 }
 
+// --- Qarz eslatma: admin ruxsati so'rash ---
+async function sendDebtReminderApprovalRequest() {
+  const debtors = withWarehouseRead((state) => {
+    const pricing = currentWarehousePricing(state);
+    return listCustomerSummaries(state, pricing).filter(
+      (c) => (c.currentDebt ?? 0) > 0 && c.telegramId != null
+    );
+  });
+
+  if (debtors.length === 0) {
+    console.log("[SCHEDULER] Qarzdor mijoz yo'q, eslatma yuborilmadi.");
+    return;
+  }
+
+  const lines = [
+    `🔔 Har 3 kunlik qarz eslatmasi`,
+    ``,
+    `Quyidagi ${debtors.length} ta mijozda qarz bor:`,
+    ...debtors.map((c) => `• ${c.fullName}: ${formatMoney(c.currentDebt ?? 0)} so'm`),
+    ``,
+    `Ularga Telegram orqali eslatma jo'natayinmi?`,
+    `✅ Jo'natish uchun: /ha`,
+    `❌ Bekor qilish uchun: /yoq`,
+  ];
+  await sendTelegramAdminDm(lines.join("\n"));
+  schedulerState.pendingDebtReminderApproval = true;
+  saveSchedulerState(schedulerState);
+  console.log(`[SCHEDULER] Admin ga ruxsat so'raldi (${debtors.length} ta qarzdor).`);
+}
+
+// --- Qarz eslatmalarini barcha qarzdorlarga yuborish ---
+async function sendDebtRemindersToAll() {
+  const debtors = withWarehouseRead((state) => {
+    const pricing = currentWarehousePricing(state);
+    return listCustomerSummaries(state, pricing).filter(
+      (c) => (c.currentDebt ?? 0) > 0 && c.telegramId != null
+    );
+  });
+
+  let sent = 0;
+  for (const customer of debtors) {
+    const msg = buildDebtReminderMsg(customer.fullName, customer.currentDebt ?? 0);
+    const ok = await sendTelegramMessage(customer.telegramId, msg);
+    if (ok) sent++;
+  }
+
+  schedulerState.lastDebtReminderSentAt = new Date().toISOString();
+  schedulerState.pendingDebtReminderApproval = false;
+  saveSchedulerState(schedulerState);
+
+  await sendTelegramAdminDm(
+    `✅ Qarz eslatmasi ${sent}/${debtors.length} ta mijozga yuborildi.`
+  );
+  console.log(`[SCHEDULER] ${sent}/${debtors.length} ta mijozga eslatma yuborildi.`);
+}
+
+function buildDebtReminderMsg(userName, debt) {
+  return [
+    `🧀 ${WAREHOUSE_COMPANY_NAME}`,
+    ``,
+    `Hurmatli ${userName},`,
+    ``,
+    `📌 Sizda ${formatMoney(debt)} so'm qarzdorlik mavjud.`,
+    `Iltimos, qarzni o'z vaqtida to'lang.`,
+    ``,
+    `💬 Qarz miqdorini bilish: qarz`,
+  ].join("\n");
+}
+
+// --- Scheduler: har 3 kunda bir marta tekshirish ---
+function startDebtReminderScheduler() {
+  async function check() {
+    const now = Date.now();
+    const lastSent = schedulerState.lastDebtReminderSentAt
+      ? new Date(schedulerState.lastDebtReminderSentAt).getTime()
+      : 0;
+    if (now - lastSent >= DEBT_REMINDER_INTERVAL_MS) {
+      console.log("[SCHEDULER] 3 kun o'tdi, admin ga ruxsat so'ralmoqda...");
+      try {
+        await sendDebtReminderApprovalRequest();
+      } catch (e) {
+        console.error("[SCHEDULER] Xatolik:", e.message);
+      }
+    }
+  }
+
+  // Server ishga tushganda ham tekshir (restart bo'lsa ham)
+  setTimeout(check, 10_000);
+  setInterval(check, DEBT_REMINDER_INTERVAL_MS);
+  console.log("[SCHEDULER] Qarz eslatma scheduler ishga tushdi (har 3 kunda).");
+}
+
 function normalizeApprovalPayment(body) {
   return {
     cashPaidAmount: Number(body?.cashPaidAmount || 0),
@@ -1243,6 +1372,10 @@ function withSafeRequestHandling(handler) {
 const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   const u = new URL(req.url || "/", "http://127.0.0.1");
 
+  // Security headers va rate limiting (healthz ni chetlab o'tamiz)
+  securityHeaders(res);
+  if (u.pathname !== "/healthz" && rateLimiter(req, res)) return;
+
   if (u.pathname === "/healthz" && req.method === "GET") {
     res.setHeader("X-App-Version", APP_BUILD ? `${APP_VERSION}+${APP_BUILD.slice(0, 7)}` : APP_VERSION);
     sendApiJson(
@@ -1284,6 +1417,19 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
       sendApiJson(res, 403, { error: "Bu origin uchun ruxsat yo'q" });
       return;
     }
+    // Analytics endpointlari
+    if (apiPath.startsWith("/api/analytics")) {
+      const handled = await handleAnalyticsRoute(req, res, apiPath, {
+        assertWarehouseAdmin,
+        loadWarehouse,
+        withWarehouseRead,
+        sendApiJson: (r, s, d) => sendApiJson(r, s, d, req),
+        listCustomerSummaries,
+        currentWarehousePricing,
+      });
+      if (handled) return;
+    }
+
     try {
       if (await handleWarehouseApiRoute(req, res, u, apiPath, {
         approveTransaction,
@@ -1346,6 +1492,23 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         updateStaffAccountPermissions,
         updateWarehousePricing,
         upsertCustomer,
+        recordTelegramMessage: async ({ telegramId, text, type }) => {
+          await withWarehouseWrite((state) => {
+            // customerName ni telegramId bo'yicha topish
+            const customerName =
+              state.users.find(
+                (u) => u.telegramId != null && Number(u.telegramId) === Number(telegramId)
+              )?.fullName ?? null;
+            recordTelegramMessage(state, { telegramId, customerName, text, type, result: "ok" });
+          });
+        },
+        getSchedulerState: () => schedulerState,
+        sendDebtRemindersToAll,
+        sendDebtReminderApprovalRequest,
+        cancelPendingDebtReminder: () => {
+          schedulerState.pendingDebtReminderApproval = false;
+          saveSchedulerState(schedulerState);
+        },
       })) {
         return;
       }
@@ -1529,6 +1692,11 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
 
+  if (u.pathname === "/warehouse/dashboard" && req.method === "GET") {
+    serveStatic("public/warehouse-dashboard.html", req, res);
+    return;
+  }
+
   if (u.pathname === "/warehouse/admin" && req.method === "GET") {
     serveWarehouseAdmin(req, res);
     return;
@@ -1590,4 +1758,5 @@ server.headersTimeout = 70000;
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Syr AKBEL standalone → http://127.0.0.1:${PORT}/warehouse/admin`);
   console.log(`Seller page → http://127.0.0.1:${PORT}/warehouse/seller`);
+  startDebtReminderScheduler();
 });

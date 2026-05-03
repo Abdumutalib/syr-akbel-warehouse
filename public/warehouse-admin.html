@@ -441,6 +441,14 @@
       <main class="card">
         <h2>Tasdiq kutayotgan yozuvlar</h2>
         <div id="pendingList" class="tx-list"></div>
+
+        <h2 style="margin-top: 32px;">
+          Telegram xabarlari
+          <button id="refreshInbox" class="secondary" style="font-size: 13px; padding: 4px 12px; margin-left: 12px; vertical-align: middle;">Yangilash</button>
+        </h2>
+        <div id="telegramInbox" class="tx-list">
+          <p style="color: var(--muted);">Yuklanmoqda...</p>
+        </div>
       </main>
     </section>
   </div>
@@ -759,7 +767,41 @@
       await loadStaff();
       await loadDeletedCustomers();
       await loadCustomerQuickSelect();
+      await loadTelegramInbox();
       setStatus("");
+    }
+
+    const INBOX_TYPE_LABELS = { order: "📦 Buyurtma", debt: "💰 Qarz", help: "ℹ️ Yordam", admin: "🔧 Admin", unknown: "❓ Noma'lum" };
+
+    function renderTelegramInbox(messages) {
+      const el = document.getElementById("telegramInbox");
+      if (!el) return;
+      if (!messages.length) {
+        el.innerHTML = "<p style='color: var(--muted);'>Hali hech qanday xabar kelmagan.</p>";
+        return;
+      }
+      el.innerHTML = messages.map((m) => `
+        <article class="tx" style="background: #f9f6f0;">
+          <div class="tx-header">
+            <strong>${m.customerName || "Noma'lum"}</strong>
+            <span style="color: var(--muted); font-size: 13px;">${INBOX_TYPE_LABELS[m.type] || m.type}</span>
+          </div>
+          <p class="raw" style="margin: 0; font-size: 15px; color: var(--ink);">${m.text.replace(/</g, "&lt;")}</p>
+          <p style="margin: 6px 0 0; color: var(--muted); font-size: 12px;">
+            ${m.telegramId ? `ID: ${m.telegramId} · ` : ""}${new Date(m.receivedAt).toLocaleString("uz-UZ")}
+          </p>
+        </article>
+      `).join("");
+    }
+
+    async function loadTelegramInbox() {
+      try {
+        const data = await apiFetch("/api/telegram/messages?limit=50");
+        renderTelegramInbox(data.messages || []);
+      } catch {
+        const el = document.getElementById("telegramInbox");
+        if (el) el.innerHTML = "<p style='color: var(--muted);'>Xabarlarni yuklashda xatolik.</p>";
+      }
     }
 
     async function approve(id) {
@@ -1065,6 +1107,10 @@
       setStatus("Admin login va parolini kiriting, keyin kutilayotgan yozuvlar yuklanadi.");
     }
     applyRoleDefaults();
+
+    document.getElementById("refreshInbox")?.addEventListener("click", () => {
+      loadTelegramInbox().catch(() => {});
+    });
   </script>
 </body>
 </html>

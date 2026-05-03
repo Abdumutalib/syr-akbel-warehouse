@@ -1,0 +1,23 @@
+{
+  "users": [],
+  "deletedCustomers": [],
+  "staffAccounts": [],
+  "orders": [],
+  "transactions": [],
+  "idempotencyRequests": [],
+  "sellerCashHandoffs": [],
+  "stockReceipts": [],
+  "warehouse": {
+    "currentStockKg": 0,
+    "cashPricePerKg": 10000,
+    "transferPricePerKg": 11200
+  },
+  "lastIds": {
+    "handoff": 0,
+    "receipt": 0,
+    "staff": 0,
+    "user": 0,
+    "order": 0,
+    "transaction": 0
+  }
+}

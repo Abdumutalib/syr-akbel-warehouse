@@ -191,6 +191,23 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
 
+    // Kiruvchi xabarni saqlash (admin panel uchun)
+    if (deps.recordTelegramMessage) {
+      const msgType =
+        payload.text.toLowerCase() === "qarz" || payload.text.toLowerCase() === "/qarz" || payload.text.toLowerCase() === "qarzdorlik"
+          ? "debt"
+          : payload.text.toLowerCase().startsWith("/start") || payload.text.toLowerCase() === "/yordam" || payload.text.toLowerCase() === "/help"
+          ? "help"
+          : payload.text.toLowerCase() === "/ha" || payload.text.toLowerCase() === "/yoq" || payload.text.toLowerCase() === "/eslatma" || payload.text.toLowerCase() === "ha" || payload.text.toLowerCase() === "yoq"
+          ? "admin"
+          : "order";
+      await deps.recordTelegramMessage({
+        telegramId: payload.telegramId,
+        text: payload.text,
+        type: msgType,
+      });
+    }
+
     // /start yoki /yordam — botni tanishtirish
     const txt = payload.text.toLowerCase();
     if (
@@ -242,6 +259,44 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
           payload.telegramId,
           "Qarzni aniqlashda xatolik yuz berdi."
         );
+      }
+      sendApiJson(res, 200, { ok: true });
+      return true;
+    }
+
+    // /ha — admin qarz eslatmasini tasdiqlaydi
+    if (txt === "/ha" || txt === "ha") {
+      if (deps.getSchedulerState && deps.getSchedulerState().pendingDebtReminderApproval) {
+        try {
+          await deps.sendDebtRemindersToAll();
+        } catch (e) {
+          await sendTelegramAdminDm(`❌ Eslatma yuborishda xatolik: ${e.message}`);
+        }
+      } else {
+        await sendTelegramAdminDm("ℹ️ Hozir tasdiqlash kutilayotgan eslatma yo'q.");
+      }
+      sendApiJson(res, 200, { ok: true });
+      return true;
+    }
+
+    // /yoq — admin qarz eslatmasini bekor qiladi
+    if (txt === "/yoq" || txt === "yoq") {
+      if (deps.getSchedulerState && deps.getSchedulerState().pendingDebtReminderApproval) {
+        deps.cancelPendingDebtReminder();
+        await sendTelegramAdminDm("✅ Qarz eslatmasi bekor qilindi.");
+      } else {
+        await sendTelegramAdminDm("ℹ️ Hozir bekor qilinadigan eslatma yo'q.");
+      }
+      sendApiJson(res, 200, { ok: true });
+      return true;
+    }
+
+    // /eslatma — admin qo'lda trigger qiladi
+    if (txt === "/eslatma") {
+      try {
+        await deps.sendDebtReminderApprovalRequest();
+      } catch (e) {
+        await sendTelegramAdminDm(`❌ Xatolik: ${e.message}`);
       }
       sendApiJson(res, 200, { ok: true });
       return true;
@@ -302,6 +357,16 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Xabar formati noto'g'ri" });
     }
+    return true;
+  }
+
+  if (apiPath === "/api/telegram/messages" && req.method === "GET") {
+    if (!assertWarehouseAdmin(req, res)) return true;
+    const limit = Math.min(Number(new URL(req.url || "/", "http://x").searchParams.get("limit")) || 50, 200);
+    const messages = readWarehouse((state) =>
+      (Array.isArray(state.telegramMessages) ? state.telegramMessages : []).slice(0, limit)
+    );
+    sendApiJson(res, 200, { ok: true, messages });
     return true;
   }
 

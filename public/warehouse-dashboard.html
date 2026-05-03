@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AKBEL Omborxona Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f5f7fb; padding: 16px; color: #1e293b; }
+    .container { max-width: 800px; margin: 0 auto; }
+    .card { background: white; border-radius: 24px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    .card h2 { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
+    .stat { background: #f8fafc; border-radius: 20px; padding: 16px; text-align: center; }
+    .stat-value { font-size: 28px; font-weight: 700; color: #0f3b3f; }
+    .stat-label { font-size: 14px; color: #475569; margin-top: 6px; }
+    .progress-bar { background: #e2e8f0; border-radius: 999px; height: 12px; overflow: hidden; margin: 12px 0; }
+    .progress-fill { background: #10b981; height: 100%; width: 0%; border-radius: 999px; transition: width 0.5s; }
+    .debtor-list { list-style: none; margin-top: 12px; }
+    .debtor-list li { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
+    .debtor-list li:last-child { border-bottom: none; }
+    .badge { background: #fee2e2; color: #b91c1c; padding: 4px 10px; border-radius: 40px; font-size: 12px; font-weight: 600; }
+    button { background: #0f3b3f; color: white; border: none; border-radius: 40px; padding: 12px 20px; font-size: 16px; width: 100%; margin-top: 12px; cursor: pointer; transition: opacity 0.2s; }
+    button:active { opacity: 0.75; }
+    .refresh-time { font-size: 12px; color: #94a3b8; text-align: center; margin-top: 16px; }
+    svg { width: 100%; overflow: visible; margin-top: 16px; }
+    .warning { color: #b91c1c; margin-top: 8px; font-size: 14px; }
+    .ok { color: #059669; margin-top: 8px; font-size: 14px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="card">
+    <h2>📊 Bugungi ko'rsatkichlar</h2>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-value" id="totalSales">—</div><div class="stat-label">Savdo (so'm)</div></div>
+      <div class="stat"><div class="stat-value" id="transactionCount">—</div><div class="stat-label">Operatsiyalar</div></div>
+      <div class="stat"><div class="stat-value" id="cashAmount">—</div><div class="stat-label">Naqd</div></div>
+      <div class="stat"><div class="stat-value" id="transferAmount">—</div><div class="stat-label">O'tkazma</div></div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="cashRatioFill"></div></div>
+    <p style="font-size:13px;color:#64748b">Naqd / O'tkazma nisbati</p>
+  </div>
+
+  <div class="card">
+    <h2>📈 14 kunlik tendensiya</h2>
+    <svg id="trendChart" viewBox="0 0 600 200"></svg>
+  </div>
+
+  <div class="card">
+    <h2>💰 Top 5 qarzdor</h2>
+    <ul class="debtor-list" id="debtorList"><li style="color:#94a3b8">Yuklanmoqda...</li></ul>
+  </div>
+
+  <div class="card">
+    <h2>🏭 Omborxona qoldig'i</h2>
+    <div class="stat-value" id="stockKg">—</div>
+    <div class="stat-label">kilogramm</div>
+    <div id="stockStatus"></div>
+    <button id="refreshBtn">🔄 Yangilash</button>
+  </div>
+
+  <div class="refresh-time" id="lastUpdate">Yuklanmoqda...</div>
+</div>
+
+<script>
+  let refreshTimer = null;
+
+  async function fetchDashboardData() {
+    try {
+      const [todayRes, trendRes, debtorsRes, stockRes] = await Promise.all([
+        fetch('/api/analytics/today'),
+        fetch('/api/analytics/trend?days=14'),
+        fetch('/api/analytics/debtors?limit=5'),
+        fetch('/api/analytics/stock'),
+      ]);
+
+      if (!todayRes.ok || !trendRes.ok || !debtorsRes.ok || !stockRes.ok) {
+        document.getElementById('lastUpdate').innerText = 'Xatolik: server javobi noto\'g\'ri';
+        return;
+      }
+
+      const [today, trend, debtors, stock] = await Promise.all([
+        todayRes.json(), trendRes.json(), debtorsRes.json(), stockRes.json(),
+      ]);
+
+      // Bugungi ko'rsatkichlar
+      document.getElementById('totalSales').innerText = (today.total_sales || 0).toLocaleString('uz-UZ');
+      document.getElementById('transactionCount').innerText = today.transaction_count || 0;
+      document.getElementById('cashAmount').innerText = (today.cash || 0).toLocaleString('uz-UZ');
+      document.getElementById('transferAmount').innerText = (today.transfer || 0).toLocaleString('uz-UZ');
+      const total = (today.cash || 0) + (today.transfer || 0);
+      const cashPercent = total > 0 ? (today.cash / total) * 100 : 0;
+      document.getElementById('cashRatioFill').style.width = cashPercent + '%';
+
+      // Qarzdorlar
+      const debtorList = document.getElementById('debtorList');
+      if (!Array.isArray(debtors) || debtors.length === 0) {
+        debtorList.innerHTML = '<li style="color:#94a3b8">Qarzdor yo\'q</li>';
+      } else {
+        debtorList.innerHTML = debtors
+          .map(d => `<li><span>${d.name}</span><span class="badge">${Number(d.debt).toLocaleString('uz-UZ')} so'm</span></li>`)
+          .join('');
+      }
+
+      // Ombor
+      document.getElementById('stockKg').innerText = (stock.currentKg || 0).toLocaleString('uz-UZ');
+      const statusEl = document.getElementById('stockStatus');
+      statusEl.className = stock.isLow ? 'warning' : 'ok';
+      statusEl.innerText = stock.isLow
+        ? '⚠️ Omborxonadagi mahsulot kamayib ketgan!'
+        : '✅ Zaxira yetarli';
+
+      // Trend grafigi
+      if (Array.isArray(trend) && trend.length > 1) drawTrendChart(trend);
+
+      document.getElementById('lastUpdate').innerText =
+        'Yangilandi: ' + new Date().toLocaleTimeString('uz-UZ');
+    } catch (err) {
+      console.error('[dashboard]', err);
+      document.getElementById('lastUpdate').innerText = 'Xatolik: ' + err.message;
+    }
+  }
+
+  function drawTrendChart(data) {
+    const svg = document.getElementById('trendChart');
+    const W = 600, H = 180, PAD = 10;
+    const maxVal = Math.max(...data.map(d => d.total_sales || 0), 1);
+    const xStep = (W - PAD * 2) / (data.length - 1);
+
+    const toX = (i) => PAD + i * xStep;
+    const toY = (v) => H - PAD - ((v || 0) / maxVal) * (H - PAD * 2);
+
+    const points = data.map((d, i) => `${toX(i)},${toY(d.total_sales)}`).join(' ');
+    const circles = data.map((d, i) =>
+      `<circle cx="${toX(i)}" cy="${toY(d.total_sales)}" r="5" fill="#10b981" stroke="white" stroke-width="2"/>`
+    ).join('');
+    const labels = data.map((d, i) =>
+      `<text x="${toX(i)}" y="${H + 14}" text-anchor="middle" font-size="11" fill="#64748b">${d.date ? d.date.slice(5) : ''}</text>`
+    ).join('');
+
+    svg.setAttribute('viewBox', `0 0 ${W} ${H + 20}`);
+    svg.innerHTML = `
+      <rect width="${W}" height="${H}" fill="#f8fafc" rx="8"/>
+      <polyline points="${points}" fill="none" stroke="#0f3b3f" stroke-width="2.5" stroke-linejoin="round"/>
+      ${circles}
+      ${labels}
+    `;
+  }
+
+  document.getElementById('refreshBtn').addEventListener('click', fetchDashboardData);
+
+  fetchDashboardData();
+  refreshTimer = setInterval(fetchDashboardData, 60_000);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      clearInterval(refreshTimer);
+    } else {
+      fetchDashboardData();
+      refreshTimer = setInterval(fetchDashboardData, 60_000);
+    }
+  });
+</script>
+</body>
+</html>
