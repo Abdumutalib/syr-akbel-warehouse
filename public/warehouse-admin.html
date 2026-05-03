@@ -129,6 +129,35 @@
       margin: 8px 0 14px;
     }
 
+    .search-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin: 8px 0 8px;
+    }
+
+    .search-row input {
+      margin: 0;
+      flex: 1;
+    }
+
+    .search-clear-btn {
+      min-width: 42px;
+      width: 42px;
+      height: 42px;
+      padding: 0;
+      border-radius: 12px;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .search-clear-btn.hidden {
+      display: none;
+    }
+
 
 
     .meta {
@@ -381,7 +410,10 @@
 
         <div class="card" style="margin-top: 20px; padding: 0; border: 0; box-shadow: none; background: transparent;">
           <h3 style="margin-top: 0;">Mijozni tez tahrirlash</h3>
-          <input id="customerSearchInput" type="search" placeholder="Ism yoki telefon bilan qidiring..." autocomplete="off" style="width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; margin: 0 0 8px; font: inherit; box-sizing: border-box;">
+          <div class="search-row">
+            <input id="customerSearchInput" type="search" placeholder="Ism yoki telefon bilan qidiring..." autocomplete="off" style="width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; margin: 0; font: inherit; box-sizing: border-box;">
+            <button id="customerSearchClear" class="secondary search-clear-btn hidden" type="button" aria-label="Qidiruvni tozalash">×</button>
+          </div>
           <label for="customerQuickSelect">Mijozni tanlang</label>
           <select id="customerQuickSelect" style="width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; margin: 8px 0 14px; font: inherit;">
             <option value="">Avval mijozni tanlang</option>
@@ -480,6 +512,7 @@
     const deletedCustomerListEl = document.getElementById("deletedCustomerList");
     const customerQuickSelectEl = document.getElementById("customerQuickSelect");
     const customerSearchInputEl = document.getElementById("customerSearchInput");
+    const customerSearchClearEl = document.getElementById("customerSearchClear");
     const openCustomerEditEl = document.getElementById("openCustomerEdit");
     const customerInlineEditEl = document.getElementById("customerInlineEdit");
     const inlineCustomerNameEl = document.getElementById("inlineCustomerName");
@@ -723,6 +756,12 @@
         .map((c) => `<option value="${c.id}">${c.fullName || "Noma'lum"}${c.phone ? ` (${c.phone})` : ""}</option>`)
         .join("");
       customerQuickSelectEl.innerHTML = `<option value="">Avval mijozni tanlang</option>${options}`;
+    }
+
+    function updateCustomerSearchClearVisibility() {
+      if (!customerSearchClearEl) return;
+      const hasQuery = Boolean((customerSearchInputEl?.value || "").trim());
+      customerSearchClearEl.classList.toggle("hidden", !hasQuery);
     }
 
     async function loadCustomerQuickSelect() {
@@ -1056,17 +1095,40 @@
       renderCustomerOptions(filtered);
       customerQuickSelectEl.value = "";
       customerInlineEditEl.classList.add("hidden");
+      updateCustomerSearchClearVisibility();
+    });
+
+    // Inputga qayta bosilganda eski matnni qo'lda o'chirmasdan darhol yangi qidiruv yozish uchun
+    customerSearchInputEl.addEventListener("focus", () => {
+      if (customerSearchInputEl.value) {
+        customerSearchInputEl.select();
+      }
     });
 
     customerQuickSelectEl.addEventListener("change", async () => {
       try {
-        await loadInlineCustomerDetail(customerQuickSelectEl.value);
-        if (customerQuickSelectEl.value) {
+        const selectedCustomerId = customerQuickSelectEl.value;
+        await loadInlineCustomerDetail(selectedCustomerId);
+        if (selectedCustomerId) {
+          // Bitta mijoz topilib tanlangach, keyingi qidiruv uchun oynani avtomatik tozalaymiz.
+          customerSearchInputEl.value = "";
+          renderCustomerOptions(allCustomersForSearch);
+          customerQuickSelectEl.value = selectedCustomerId;
+          updateCustomerSearchClearVisibility();
           setStatus("Mijoz ma'lumotlari yuklandi.");
         }
       } catch (error) {
         setStatus(error.message, true);
       }
+    });
+
+    customerSearchClearEl?.addEventListener("click", () => {
+      customerSearchInputEl.value = "";
+      renderCustomerOptions(allCustomersForSearch);
+      customerQuickSelectEl.value = "";
+      customerInlineEditEl.classList.add("hidden");
+      updateCustomerSearchClearVisibility();
+      customerSearchInputEl.focus();
     });
 
     saveCustomerInlineEl.addEventListener("click", async () => {
@@ -1099,6 +1161,7 @@
     });
 
     authUi.render();
+    updateCustomerSearchClearVisibility();
     if (pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
       loadPending().catch((error) => setStatus(error.message, true));
     } else if (pinAuth.hasPin()) {
