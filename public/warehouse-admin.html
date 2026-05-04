@@ -328,6 +328,47 @@
       <div id="status" class="status"></div>
     </section>
 
+    <!-- Янги мижоз қўшиш -->
+    <section class="card" style="margin-bottom: 20px; padding: 20px;">
+      <details id="addCustomerDetails">
+        <summary style="cursor: pointer; font-size: 18px; font-weight: bold; list-style: none; display: flex; align-items: center; gap: 10px; user-select: none;">
+          <span id="addCustomerToggleIcon" style="font-size: 22px; transition: transform 0.2s;">＋</span>
+          Янги мижоз қўшиш
+        </summary>
+        <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 20px; align-items: end;">
+          <div>
+            <label for="newCustomerName">F.I.Sh. <span style="color:#9f1239">*</span></label>
+            <input id="newCustomerName" placeholder="Алишер Каримов" autocomplete="off">
+          </div>
+          <div>
+            <label for="newCustomerPhone">Telefon</label>
+            <input id="newCustomerPhone" placeholder="+998901234567" autocomplete="off">
+          </div>
+          <div>
+            <label for="newCustomerTelegram">Telegram ID</label>
+            <input id="newCustomerTelegram" type="number" step="1" placeholder="123456789">
+          </div>
+          <div>
+            <label style="display:block; margin-bottom:6px;">To'lov toifasi</label>
+            <div style="display:flex; gap:16px; margin-top:4px;">
+              <label style="display:flex; gap:6px; align-items:center; font-size:14px;">
+                <input id="newCustomerCash" type="checkbox" style="width:auto; margin:0;">
+                Naqd
+              </label>
+              <label style="display:flex; gap:6px; align-items:center; font-size:14px;">
+                <input id="newCustomerTransfer" type="checkbox" style="width:auto; margin:0;">
+                O'tkazma
+              </label>
+            </div>
+          </div>
+          <div style="align-self:end;">
+            <button id="addCustomerBtn" style="width:100%; padding:12px 18px;">Мижозни сақлаш</button>
+          </div>
+        </div>
+        <div id="addCustomerStatus" style="margin-top:10px; min-height:20px; font-size:14px;"></div>
+      </details>
+    </section>
+
     <section class="grid">
       <aside class="card">
         <div id="authPanel">
@@ -487,6 +528,65 @@
 
   <script src="/warehouse/assets/warehouse-auth-pin.js"></script>
   <script>
+    // Янги мижоз қўшиш
+    const addCustomerDetails = document.getElementById("addCustomerDetails");
+    const addCustomerToggleIcon = document.getElementById("addCustomerToggleIcon");
+    addCustomerDetails.addEventListener("toggle", () => {
+      addCustomerToggleIcon.textContent = addCustomerDetails.open ? "−" : "＋";
+    });
+
+    document.getElementById("addCustomerBtn").addEventListener("click", async () => {
+      const nameVal = document.getElementById("newCustomerName").value.trim();
+      const phoneVal = document.getElementById("newCustomerPhone").value.trim();
+      const telegramVal = document.getElementById("newCustomerTelegram").value.trim();
+      const isCash = document.getElementById("newCustomerCash").checked;
+      const isTransfer = document.getElementById("newCustomerTransfer").checked;
+      const statusDiv = document.getElementById("addCustomerStatus");
+
+      if (!nameVal) {
+        statusDiv.style.color = "#9f1239";
+        statusDiv.textContent = "F.I.Sh. majburiy maydon!";
+        return;
+      }
+
+      const payload = { fullName: nameVal };
+      if (phoneVal) payload.phone = phoneVal;
+      if (telegramVal) payload.telegramId = Number(telegramVal);
+      const cats = [];
+      if (isCash) cats.push("cash");
+      if (isTransfer) cats.push("transfer");
+      if (cats.length) payload.paymentCategories = cats;
+
+      statusDiv.style.color = "var(--muted)";
+      statusDiv.textContent = "Сақланяпти...";
+
+      try {
+        const base = location.pathname.startsWith("/warehouse") ? "" : "";
+        const resp = await fetch(`${base}/api/warehouse/customers`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          credentials: "include",
+        });
+        const data = await resp.json();
+        if (resp.ok && data.ok) {
+          statusDiv.style.color = "var(--ok)";
+          statusDiv.textContent = `✓ ${nameVal} мижоз қўшилди (ID: ${data.customer?.id ?? "—"})`;
+          document.getElementById("newCustomerName").value = "";
+          document.getElementById("newCustomerPhone").value = "";
+          document.getElementById("newCustomerTelegram").value = "";
+          document.getElementById("newCustomerCash").checked = false;
+          document.getElementById("newCustomerTransfer").checked = false;
+        } else {
+          statusDiv.style.color = "#9f1239";
+          statusDiv.textContent = data.error || "Хато юз берди";
+        }
+      } catch (err) {
+        statusDiv.style.color = "#9f1239";
+        statusDiv.textContent = "Серверга уланиб бўлмади: " + err.message;
+      }
+    });
+
     const statusEl = document.getElementById("status");
     const pendingListEl = document.getElementById("pendingList");
     const usernameEl = document.getElementById("username");
