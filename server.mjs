@@ -1605,6 +1605,17 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
 
+  // Maxsus URL orqali kirish: http://server/19750104Abdumutalib
+  if (WAREHOUSE_SITE_TOKEN && u.pathname === `/${WAREHOUSE_SITE_TOKEN}` && req.method === "GET") {
+    res.writeHead(302, {
+      Location: "/warehouse/admin",
+      "Set-Cookie": `${SITE_GATE_COOKIE}=${WAREHOUSE_SITE_TOKEN}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
+      "Cache-Control": "no-store",
+    });
+    res.end();
+    return;
+  }
+
   // Parol bilan kirish (form POST)
   if (u.pathname === "/warehouse-login" && req.method === "POST") {
     const chunks = [];
