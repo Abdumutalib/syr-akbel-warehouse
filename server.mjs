@@ -6,7 +6,7 @@ import crypto from "node:crypto";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { handleWarehouseApiRoute } from "./server/handle-api.mjs";
-import { rateLimiter, securityHeaders, recordFailedAuth } from "./lib/rate-limiter.mjs";
+import { rateLimiter, securityHeaders, recordFailedAuth, getClientIp } from "./lib/rate-limiter.mjs";
 import { handleAnalyticsRoute } from "./lib/analytics.mjs";
 import {
   authenticateStaffAccessToken,
@@ -179,7 +179,8 @@ function normalizeGatePin(value) {
 }
 
 function hashGatePin(pin, salt) {
-  return crypto.createHash("sha256").update(`${salt}:${pin}`).digest("hex");
+  // scrypt — SHA-256 ga qaraganda million marta sekinroq, brute-force amalda imkonsiz
+  return crypto.scryptSync(pin, salt, 32, { N: 16384, r: 8, p: 1 }).toString("hex");
 }
 
 const gateAuthState = loadGateAuthState();
@@ -1036,7 +1037,7 @@ function assertWarehouseAdmin(req, res) {
   }
   const auth = parseBasicAuthHeader(req.headers.authorization);
   if (!auth || auth.username !== expectedUser || auth.password !== expectedPassword) {
-    const ip = req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.socket.remoteAddress;
+    const ip = getClientIp(req);
     recordFailedAuth(ip);
     res.writeHead(401, {
       ...baseApiJsonHeaders(),
@@ -1854,6 +1855,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
       const candidateHash = hashGatePin(enteredPin, gateAuthState.pinSalt);
       accepted = candidateHash === gateAuthState.pinHash;
       if (!accepted) {
+        recordFailedAuth(getClientIp(req));
         res.writeHead(302, { Location: "/warehouse-register?error=bad_pin", "Cache-Control": "no-store" });
         res.end();
         return;
@@ -1872,6 +1874,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         password === expectedPassword
       );
       if (!accepted) {
+        recordFailedAuth(getClientIp(req));
         res.writeHead(302, { Location: "/warehouse-register?login_error=1", "Cache-Control": "no-store" });
         res.end();
         return;
