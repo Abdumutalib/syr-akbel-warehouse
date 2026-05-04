@@ -749,7 +749,7 @@ function checkSiteGate(req, res, u) {
   <h1>Кириш</h1>
   <p>${pinEnabled ? "Davom etish uchun PIN kodni kiriting" : "Birinchi kirishda admin login/parol va yangi PIN kiriting"}</p>
   ${errorText ? `<div class="err">${errorText}</div>` : ""}
-  <form method="POST" action="/warehouse-register" autocomplete="new-password" id="gateForm">
+  <form method="POST" action="/warehouse-register" autocomplete="off" id="gateForm">
     <div id="inputSlot"></div>
     <button type="submit">Kirish</button>
   </form>
@@ -758,36 +758,56 @@ function checkSiteGate(req, res, u) {
 (function(){
   var pinMode = ${pinEnabled ? 'true' : 'false'};
   var slot = document.getElementById('inputSlot');
+  var form = document.getElementById('gateForm');
   var style = 'width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;font-size:16px;margin-bottom:12px;outline:none;box-sizing:border-box;';
 
-  function makeInput(type, name, placeholder, inputmode, maxlength) {
+  // Tasodifiy prefiks — brauzer bu nomlarni tanimaydi
+  var pfx = 'wh_' + Math.random().toString(36).slice(2,7) + '_';
+
+  function makeInput(type, fakeName, placeholder, inputmode, maxlength) {
     var el = document.createElement('input');
     el.type = type;
-    el.name = name;
+    el.name = pfx + fakeName;          // brauzer taniy olmaydi
     el.placeholder = placeholder;
     el.setAttribute('autocomplete', 'off');
+    el.setAttribute('data-real', fakeName); // haqiqiy nom — submitda ishlatamiz
     el.setAttribute('style', style);
     if (inputmode) el.setAttribute('inputmode', inputmode);
     if (maxlength) el.setAttribute('maxlength', maxlength);
     return el;
   }
 
+  var inputs = [];
+
   if (pinMode) {
     var pin = makeInput('tel', 'pin', 'PIN (4-8 raqam)', 'numeric', '8');
     slot.appendChild(pin);
+    inputs.push(pin);
     setTimeout(function(){ pin.focus(); }, 50);
   } else {
     var user = makeInput('text', 'username', 'Admin login', '', '');
     var pass = makeInput('text', 'password', 'Admin parol', '', '');
     var pinEl = makeInput('tel', 'pin', 'Yangi PIN (4-8 raqam)', 'numeric', '8');
-    // password shown as text initially to defeat autofill, switch on focus
     pass.addEventListener('focus', function(){ this.type = 'password'; });
     pinEl.addEventListener('focus', function(){ this.type = 'password'; });
     slot.appendChild(user);
     slot.appendChild(pass);
     slot.appendChild(pinEl);
+    inputs = [user, pass, pinEl];
     setTimeout(function(){ user.focus(); }, 50);
   }
+
+  // Submit paytida: fake nomlarni o'chirib, haqiqiy hidden inputlar qo'sh
+  form.addEventListener('submit', function(e){
+    inputs.forEach(function(el){
+      el.removeAttribute('name'); // fake nomni olib tashla — yuborilmasin
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = el.getAttribute('data-real');
+      hidden.value = el.value;
+      form.appendChild(hidden);
+    });
+  });
 })();
 </script>
 </body></html>`;
