@@ -754,12 +754,15 @@ function checkSiteGate(req, res, u) {
   <button id="submitBtn" style="width:100%;padding:12px;background:#5b8dea;color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer;font-weight:600">Kirish</button>
 </div>
 <style>
-  .wh-input {
-    width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;
+  .wh-field {
+    width:100%;min-height:46px;padding:12px 14px;border:1px solid #ddd;border-radius:10px;
     font-size:16px;margin-bottom:12px;outline:none;box-sizing:border-box;
-    -webkit-text-security: none;
+    background:#fff;cursor:text;white-space:nowrap;overflow:hidden;
+    color:#222;line-height:1.4;
   }
-  .wh-input.masked { -webkit-text-security: disc; }
+  .wh-field:empty:before { content:attr(data-ph); color:#aaa; pointer-events:none; }
+  .wh-field.masked { -webkit-text-security:disc; font-family:monospace; }
+  .wh-field:focus { border-color:#5b8dea; }
 </style>
 <script>
 (function(){
@@ -768,37 +771,48 @@ function checkSiteGate(req, res, u) {
   var btn = document.getElementById('submitBtn');
   var errMsg = document.getElementById('errMsg');
 
-  function makeField(placeholder, masked, inputmode, maxlength) {
-    var el = document.createElement('input');
-    el.type = 'text';                    // HECH QACHON type=password emas
-    el.className = 'wh-input' + (masked ? ' masked' : '');
-    el.placeholder = placeholder;
-    el.setAttribute('autocomplete', 'off');
-    el.setAttribute('autocorrect', 'off');
-    el.setAttribute('autocapitalize', 'off');
+  // contenteditable div — brauzer password manager HECH QACHON buni to'ldirmaydi
+  function makeField(placeholder, masked, numericOnly) {
+    var el = document.createElement('div');
+    el.contentEditable = 'true';
+    el.className = 'wh-field' + (masked ? ' masked' : '');
+    el.setAttribute('data-ph', placeholder);
+    el.setAttribute('role', 'textbox');
     el.setAttribute('spellcheck', 'false');
-    if (inputmode) el.setAttribute('inputmode', inputmode);
-    if (maxlength) el.setAttribute('maxlength', maxlength);
+    if (numericOnly) {
+      el.addEventListener('keypress', function(e){
+        if (!/[0-9]/.test(e.key) && e.key !== 'Enter') e.preventDefault();
+      });
+      el.addEventListener('paste', function(e){
+        e.preventDefault();
+        var t = (e.clipboardData||window.clipboardData).getData('text').replace(/\D/g,'');
+        document.execCommand('insertText', false, t);
+      });
+    }
     return el;
+  }
+
+  function getVal(el) {
+    return (el.textContent || el.innerText || '').trim();
   }
 
   var userEl, passEl, pinEl;
 
   if (pinMode) {
-    pinEl = makeField('PIN (4-8 raqam)', true, 'numeric', '8');
+    pinEl = makeField('PIN (4-8 raqam)', true, true);
     slot.appendChild(pinEl);
     setTimeout(function(){ pinEl.focus(); }, 50);
   } else {
-    userEl = makeField('Admin login', false, '', '');
-    passEl = makeField('Admin parol', true, '', '');
-    pinEl  = makeField('Yangi PIN (4-8 raqam)', true, 'numeric', '8');
+    userEl = makeField('Admin login', false, false);
+    passEl = makeField('Admin parol', true, false);
+    pinEl  = makeField('Yangi PIN (4-8 raqam)', true, true);
     slot.appendChild(userEl);
     slot.appendChild(passEl);
     slot.appendChild(pinEl);
     setTimeout(function(){ userEl.focus(); }, 50);
   }
 
-  // Enter tugmasi bilan ham yuborish
+  // Enter = keydown (contenteditable da keydown ishlatamiz)
   slot.addEventListener('keydown', function(e){
     if (e.key === 'Enter') { e.preventDefault(); doSubmit(); }
   });
@@ -807,11 +821,11 @@ function checkSiteGate(req, res, u) {
   function doSubmit() {
     var data = new URLSearchParams();
     if (pinMode) {
-      data.set('pin', pinEl.value);
+      data.set('pin', getVal(pinEl));
     } else {
-      data.set('username', userEl.value);
-      data.set('password', passEl.value);
-      data.set('pin', pinEl.value);
+      data.set('username', getVal(userEl));
+      data.set('password', getVal(passEl));
+      data.set('pin', getVal(pinEl));
     }
     btn.disabled = true;
     btn.textContent = '...';
@@ -823,7 +837,6 @@ function checkSiteGate(req, res, u) {
     }).then(function(r){
       if (r.redirected) { window.location.href = r.url; return; }
       return r.text().then(function(html){
-        // Server xato HTML qaytarsa — sahifani yangilash
         document.open(); document.write(html); document.close();
       });
     }).catch(function(){
