@@ -1635,13 +1635,14 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     const password = (params.get("password") || "").trim();
     const expectedUser = process.env.WAREHOUSE_ADMIN_USERNAME?.trim() || "";
     const expectedPassword = process.env.WAREHOUSE_ADMIN_PASSWORD?.trim() || "";
-    let accepted = false;
-    if (username && password && expectedUser && expectedPassword && username === expectedUser && password === expectedPassword) {
-      accepted = true;
-    } else if (username && password) {
-      const state = loadWarehouse();
-      accepted = Boolean(authenticateStaffAccount(state, username, password, { roles: [], permission: null }));
-    }
+    const accepted = Boolean(
+      username &&
+      password &&
+      expectedUser &&
+      expectedPassword &&
+      username === expectedUser &&
+      password === expectedPassword
+    );
 
     if (accepted) {
       res.writeHead(302, {
