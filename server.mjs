@@ -7,6 +7,7 @@ import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { handleWarehouseApiRoute } from "./server/handle-api.mjs";
 import { rateLimiter, securityHeaders, recordFailedAuth, getClientIp } from "./lib/rate-limiter.mjs";
+import { setupMagicLinkHandlers } from "./lib/magic-link.mjs";
 import { handleAnalyticsRoute } from "./lib/analytics.mjs";
 import {
   authenticateStaffAccessToken,
@@ -95,8 +96,10 @@ const WAREHOUSE_MAX_REQUEST_BYTES = Math.max(
 const WAREHOUSE_STATE_PATH = resolveWarehouseStatePath();
 const WAREHOUSE_TRANSACTION_PHOTO_DIR = path.join(path.dirname(WAREHOUSE_STATE_PATH), "transaction-photos");
 const SCHEDULER_STATE_PATH = path.join(path.dirname(WAREHOUSE_STATE_PATH), "scheduler.json");
-const GATE_AUTH_STATE_PATH = path.join(path.dirname(WAREHOUSE_STATE_PATH), "gate-auth.json");
+const MAGIC_LINK_STATE_PATH = path.join(path.dirname(WAREHOUSE_STATE_PATH), "magic-links.json");
 const WAREHOUSE_SITE_TOKEN = process.env.WAREHOUSE_SITE_TOKEN?.trim() || "";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.trim() || "admin@localhost";
+const MAGIC_LINK_TTL_MS = 15 * 60 * 1000; // 15 дақиқа
 
 // --- Qarz eslatma scheduler holati ---
 const DEBT_REMINDER_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 kun
@@ -133,6 +136,13 @@ let yandexUploadTimer = null;
 let yandexUploadInFlight = false;
 let yandexUploadRequested = false;
 
+// Magic link sistema
+const magicLink = setupMagicLinkHandlers(
+  path.dirname(WAREHOUSE_STATE_PATH),
+  process.env.TELEGRAM_ADMIN_CHAT_ID?.trim(),
+  process.env.TELEGRAM_BOT_TOKEN?.trim()
+);
+
 function resolveWarehouseStatePath() {
   const configured = process.env.WAREHOUSE_STATE_FILE?.trim() || "data/warehouse.json";
   return path.isAbsolute(configured) ? configured : path.join(ROOT, configured);
@@ -150,40 +160,6 @@ function resolveAppVersion() {
 function loadWarehouse() {
   return warehouseStateCache;
 }
-
-function loadGateAuthState() {
-  try {
-    if (!fs.existsSync(GATE_AUTH_STATE_PATH)) {
-      return { pinHash: null, pinSalt: null, pinEnabledAt: null };
-    }
-    const raw = fs.readFileSync(GATE_AUTH_STATE_PATH, "utf8");
-    const parsed = JSON.parse(raw);
-    return {
-      pinHash: typeof parsed.pinHash === "string" ? parsed.pinHash : null,
-      pinSalt: typeof parsed.pinSalt === "string" ? parsed.pinSalt : null,
-      pinEnabledAt: typeof parsed.pinEnabledAt === "string" ? parsed.pinEnabledAt : null,
-    };
-  } catch {
-    return { pinHash: null, pinSalt: null, pinEnabledAt: null };
-  }
-}
-
-function saveGateAuthState(state) {
-  fs.mkdirSync(path.dirname(GATE_AUTH_STATE_PATH), { recursive: true });
-  fs.writeFileSync(GATE_AUTH_STATE_PATH, JSON.stringify(state, null, 2), "utf8");
-}
-
-function normalizeGatePin(value) {
-  const pin = String(value || "").trim();
-  return /^\d{4,8}$/.test(pin) ? pin : null;
-}
-
-function hashGatePin(pin, salt) {
-  // scrypt — SHA-256 ga qaraganda million marta sekinroq, brute-force amalda imkonsiz
-  return crypto.scryptSync(pin, salt, 32, { N: 16384, r: 8, p: 1 }).toString("hex");
-}
-
-const gateAuthState = loadGateAuthState();
 
 function buildCsvContent(state, mode = "all") {
   const userMap = new Map(state.users.map((u) => [u.id, u.fullName]));
@@ -723,133 +699,66 @@ function checkSiteGate(req, res, u) {
   const errorText =
     errorCode === "link_revoked"
       ? "Ruxsat havolasi bekor qilingan"
-      : errorCode === "link_required"
-      ? "Xodim kirishi uchun sizga berilgan havoladan foydalaning"
-      : errorCode === "bad_pin"
-      ? "PIN noto'g'ri"
-      : errorCode === "pin_required"
-      ? "PIN kiriting (4-8 raqam)"
-      : errorCode === "pin_invalid"
-      ? "PIN 4-8 ta raqamdan iborat bo'lsin"
+      : errorCode === "link_expired"
+      ? "Havolaning muddati tugadi"
+      : errorCode === "link_invalid"
+      ? "Havola noto'g'ri"
       : showError
-      ? "Login yoki parol noto'g'ri"
+      ? "Xatolik yuz berdi"
       : "";
-  const pinEnabled = Boolean(gateAuthState.pinHash && gateAuthState.pinSalt);
-  const body = `<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>Registration</title>
+  
+  const body = `<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>Admin Login</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   *{box-sizing:border-box}body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f0f0f0;}
   .card{background:#fff;border-radius:18px;box-shadow:0 4px 28px rgba(0,0,0,.12);padding:30px;width:min(90vw,360px)}
   h1{margin:0 0 14px;font-size:20px;text-align:center}
   p{margin:0 0 14px;color:#666;text-align:center;font-size:14px}
-  input{width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;font-size:16px;margin-bottom:12px;outline:none}
+  input{width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;font-size:16px;margin-bottom:12px;outline:none;box-sizing:border-box}
   button{width:100%;padding:12px;background:#5b8dea;color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer;font-weight:600}
   .err{color:#c0392b;font-size:13px;margin-bottom:10px;text-align:center}
+  .info{color:#27ae60;font-size:13px;margin-bottom:10px;text-align:center;display:none}
 </style></head>
 <body><div class="card">
-  <h1>Кириш</h1>
-  <p>${pinEnabled ? "Davom etish uchun PIN kodni kiriting" : "Birinchi kirishda admin login/parol va yangi PIN kiriting"}</p>
+  <h1>Admin Kiriş</h1>
+  <p>Электрон почтага юборилган ҳаволаӣ кунед</p>
   ${errorText ? `<div class="err">${errorText}</div>` : ""}
-  <div id="inputSlot"></div>
-  <div id="errMsg" style="color:#c0392b;font-size:13px;margin-bottom:10px;text-align:center;display:none"></div>
-  <button id="submitBtn" style="width:100%;padding:12px;background:#5b8dea;color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer;font-weight:600">Kirish</button>
+  <div id="infoMsg" class="info"></div>
+  <input type="email" id="emailInput" placeholder="Admin email" value="${ADMIN_EMAIL}" readonly style="background:#f5f5f5">
+  <button id="sendBtn" onclick="sendMagicLink()">Ҳаволаи кириш фуристӣ</button>
 </div>
-<style>
-  .wh-field {
-    width:100%;min-height:46px;padding:12px 14px;border:1px solid #ddd;border-radius:10px;
-    font-size:16px;margin-bottom:12px;outline:none;box-sizing:border-box;
-    background:#fff;cursor:text;white-space:nowrap;overflow:hidden;
-    color:#222;line-height:1.4;
-  }
-  .wh-field:empty:before { content:attr(data-ph); color:#aaa; pointer-events:none; }
-  .wh-field.masked { -webkit-text-security:disc; font-family:monospace; }
-  .wh-field:focus { border-color:#5b8dea; }
-</style>
 <script>
-(function(){
-  var pinMode = ${pinEnabled ? 'true' : 'false'};
-  var slot = document.getElementById('inputSlot');
-  var btn = document.getElementById('submitBtn');
-  var errMsg = document.getElementById('errMsg');
-
-  // contenteditable div — brauzer password manager HECH QACHON buni to'ldirmaydi
-  function makeField(placeholder, masked, numericOnly) {
-    var el = document.createElement('div');
-    el.contentEditable = 'true';
-    el.className = 'wh-field' + (masked ? ' masked' : '');
-    el.setAttribute('data-ph', placeholder);
-    el.setAttribute('role', 'textbox');
-    el.setAttribute('spellcheck', 'false');
-    if (numericOnly) {
-      el.addEventListener('keypress', function(e){
-        if (!/[0-9]/.test(e.key) && e.key !== 'Enter') e.preventDefault();
-      });
-      el.addEventListener('paste', function(e){
-        e.preventDefault();
-        var t = (e.clipboardData||window.clipboardData).getData('text').replace(/\D/g,'');
-        document.execCommand('insertText', false, t);
-      });
-    }
-    return el;
-  }
-
-  function getVal(el) {
-    return (el.textContent || el.innerText || '').trim();
-  }
-
-  var userEl, passEl, pinEl;
-
-  if (pinMode) {
-    pinEl = makeField('PIN (4-8 raqam)', true, true);
-    slot.appendChild(pinEl);
-    setTimeout(function(){ pinEl.focus(); }, 50);
-  } else {
-    userEl = makeField('Admin login', false, false);
-    passEl = makeField('Admin parol', true, false);
-    pinEl  = makeField('Yangi PIN (4-8 raqam)', true, true);
-    slot.appendChild(userEl);
-    slot.appendChild(passEl);
-    slot.appendChild(pinEl);
-    setTimeout(function(){ userEl.focus(); }, 50);
-  }
-
-  // Enter = keydown (contenteditable da keydown ishlatamiz)
-  slot.addEventListener('keydown', function(e){
-    if (e.key === 'Enter') { e.preventDefault(); doSubmit(); }
-  });
-  btn.addEventListener('click', doSubmit);
-
-  function doSubmit() {
-    var data = new URLSearchParams();
-    if (pinMode) {
-      data.set('pin', getVal(pinEl));
+function sendMagicLink() {
+  var btn = document.getElementById('sendBtn');
+  var infoMsg = document.getElementById('infoMsg');
+  btn.disabled = true;
+  btn.textContent = '...';
+  fetch('/warehouse-magic-link', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: '${ADMIN_EMAIL}' })
+  }).then(function(r){
+    if (r.ok) {
+      infoMsg.textContent = 'Ҳавола Telegramга фуристода шуд';
+      infoMsg.style.display = 'block';
     } else {
-      data.set('username', getVal(userEl));
-      data.set('password', getVal(passEl));
-      data.set('pin', getVal(pinEl));
+      infoMsg.textContent = 'Хатолик юз берди';
+      infoMsg.style.display = 'block';
     }
-    btn.disabled = true;
-    btn.textContent = '...';
-    fetch('/warehouse-register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: data.toString(),
-      redirect: 'follow'
-    }).then(function(r){
-      if (r.redirected) { window.location.href = r.url; return; }
-      return r.text().then(function(html){
-        document.open(); document.write(html); document.close();
-      });
-    }).catch(function(){
-      errMsg.textContent = "Xatolik yuz berdi, qayta urinib ko'ring";
-      errMsg.style.display = 'block';
-      btn.disabled = false;
-      btn.textContent = 'Kirish';
-    });
-  }
-})();
+    btn.disabled = false;
+    btn.textContent = 'Ҳаволаи кириш фуристӣ';
+  }).catch(function(){
+    infoMsg.textContent = 'Шабака хатолик';
+    infoMsg.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Ҳаволаи кириш фуристӣ';
+  });
+}
 </script>
 </body></html>`;
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+  res.end(body);
+  return { allowed: false };
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(body);
   return { allowed: false };
@@ -1836,72 +1745,60 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
 
-  // Parol bilan kirish (form POST)
-  if ((u.pathname === "/warehouse-register" || u.pathname === "/warehouse-login") && req.method === "POST") {
+  // Magic link orqali havola фуристиш
+  if (u.pathname === "/warehouse-magic-link" && req.method === "POST") {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const body = Buffer.concat(chunks).toString("utf8");
-    const params = new URLSearchParams(body);
-    const pinEnabled = Boolean(gateAuthState.pinHash && gateAuthState.pinSalt);
-    let accepted = false;
-
-    if (pinEnabled) {
-      const enteredPin = normalizeGatePin(params.get("pin"));
-      if (!enteredPin) {
-        res.writeHead(302, { Location: "/warehouse-register?error=pin_required", "Cache-Control": "no-store" });
-        res.end();
-        return;
-      }
-      const candidateHash = hashGatePin(enteredPin, gateAuthState.pinSalt);
-      accepted = candidateHash === gateAuthState.pinHash;
-      if (!accepted) {
-        recordFailedAuth(getClientIp(req));
-        res.writeHead(302, { Location: "/warehouse-register?error=bad_pin", "Cache-Control": "no-store" });
-        res.end();
-        return;
-      }
-    } else {
-      const username = (params.get("username") || "").trim();
-      const password = (params.get("password") || "").trim();
-      const expectedUser = process.env.WAREHOUSE_ADMIN_USERNAME?.trim() || "";
-      const expectedPassword = process.env.WAREHOUSE_ADMIN_PASSWORD?.trim() || "";
-      accepted = Boolean(
-        username &&
-        password &&
-        expectedUser &&
-        expectedPassword &&
-        username === expectedUser &&
-        password === expectedPassword
-      );
-      if (!accepted) {
-        recordFailedAuth(getClientIp(req));
-        res.writeHead(302, { Location: "/warehouse-register?login_error=1", "Cache-Control": "no-store" });
-        res.end();
-        return;
-      }
-      const pin = normalizeGatePin(params.get("pin"));
-      if (!pin) {
-        res.writeHead(302, { Location: "/warehouse-register?error=pin_invalid", "Cache-Control": "no-store" });
-        res.end();
-        return;
-      }
-      gateAuthState.pinSalt = crypto.randomBytes(16).toString("hex");
-      gateAuthState.pinHash = hashGatePin(pin, gateAuthState.pinSalt);
-      gateAuthState.pinEnabledAt = new Date().toISOString();
-      saveGateAuthState(gateAuthState);
+    const parsed = JSON.parse(body || "{}");
+    const email = String(parsed.email || "").trim();
+    
+    if (email !== ADMIN_EMAIL) {
+      sendApiJson(res, 403, { error: "Email noto'g'ri" });
+      return;
     }
 
-    if (accepted) {
-      res.writeHead(302, {
-        Location: "/warehouse/admin",
-        "Set-Cookie": `${SITE_GATE_COOKIE}=${siteGateCookieValue()}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
-        "Cache-Control": "no-store",
-      });
-      res.end();
-    } else {
-      res.writeHead(302, { Location: "/warehouse-register?login_error=1", "Cache-Control": "no-store" });
-      res.end();
+    const token = magicLink.createToken(email);
+    const appUrl = `http://${req.headers.host || "localhost:8792"}`;
+    const sent = await magicLink.sendMagicLinkViaTelegram(token, email, appUrl);
+
+    if (!sent) {
+      sendApiJson(res, 500, { error: "Telegramga yuborishda xatolik" });
+      return;
     }
+
+    sendApiJson(res, 200, { ok: true, message: "Ҳавола Telegramга фуристода шуд" });
+    return;
+  }
+
+  // Magic link таъйиди
+  if (u.pathname === "/warehouse-verify-link" && req.method === "GET") {
+    const token = u.searchParams.get("token");
+    if (!token) {
+      redirectTo(res, "/warehouse-register?error=link_invalid");
+      return;
+    }
+
+    const email = magicLink.verifyToken(token);
+    if (!email) {
+      redirectTo(res, "/warehouse-register?error=link_expired");
+      return;
+    }
+
+    // Token хуш — session cookie ўрнатиш
+    res.writeHead(302, {
+      Location: "/warehouse/admin",
+      "Set-Cookie": `${SITE_GATE_COOKIE}=${siteGateCookieValue()}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
+      "Cache-Control": "no-store",
+    });
+    res.end();
+    return;
+  }
+
+  // Parol bilan kirish (form POST) — ENDI ZARUR EMAS, O'CHIRIB YUBORISH
+  if ((u.pathname === "/warehouse-register" || u.pathname === "/warehouse-login") && req.method === "POST") {
+    // Magic link orqali kirguvchi kerak, bu POST endi ishlamaydi
+    redirectTo(res, "/warehouse-register");
     return;
   }
 
