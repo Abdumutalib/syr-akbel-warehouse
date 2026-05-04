@@ -824,6 +824,7 @@
     const isIos = /iphone|ipad|ipod/.test(ua);
     const isSafari = isIos && /safari/.test(ua) && !/crios|fxios|edgios/.test(ua);
     const isAndroid = /android/.test(ua);
+    const isWebView = /(fbav|fb_iab|instagram|line|micromessenger|wv\)|; wv\b)/.test(ua);
     const isLikelyMobile = isIos || isAndroid || window.innerWidth <= 900;
 
     function isStandalone() {
@@ -841,10 +842,15 @@
       return;
     }
 
+    if (isWebView) {
+      return;
+    }
+
     let deferredPrompt = null;
+    let installSheet = null;
     const button = document.createElement('button');
     button.type = 'button';
-    button.hidden = false;
+    button.hidden = true;
     button.textContent = 'Ilovani o\'rnatish';
     button.setAttribute('aria-label', 'Ilovani o\'rnatish');
     button.style.position = 'fixed';
@@ -874,45 +880,69 @@
       button.hidden = !visible;
     }
 
-    setVisible(true, isSafari ? 'Home screenga qo\'shish' : 'Ilovani o\'rnatish');
+    function closeInstallSheet() {
+      if (installSheet && installSheet.parentNode) {
+        installSheet.parentNode.removeChild(installSheet);
+      }
+      installSheet = null;
+    }
+
+    function openInstallSheet() {
+      if (installSheet) {
+        return;
+      }
+      installSheet = document.createElement('div');
+      installSheet.style.cssText = [
+        'position:fixed',
+        'left:14px',
+        'right:14px',
+        'bottom:66px',
+        'z-index:10001',
+        'padding:16px',
+        'border-radius:18px',
+        'background:#fffdf9',
+        'color:#18140f',
+        'border:1px solid rgba(125,80,29,.18)',
+        'box-shadow:0 18px 48px rgba(0,0,0,.18)',
+        'font:500 14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif'
+      ].join(';');
+      installSheet.innerHTML = [
+        '<div style="display:flex;align-items:flex-start;gap:12px;">',
+        '<div style="flex:1 1 auto;min-width:0;">',
+        '<div style="font-weight:700;font-size:15px;margin-bottom:6px;">iPhone yoki iPadga o\'rnatish</div>',
+        '<div style="color:#5f5345;">Safari menyusidan 3 qadam bilan o\'rnating:</div>',
+        '<ol style="margin:10px 0 0 18px;padding:0;color:#2f2418;">',
+        '<li>Pastdagi <strong>Share</strong> tugmasini bosing</li>',
+        '<li><strong>Add to Home Screen</strong> ni tanlang</li>',
+        '<li><strong>Add</strong> ni bosing</li>',
+        '</ol>',
+        '</div>',
+        '<button type="button" aria-label="Yopish" style="flex:0 0 auto;border:0;background:transparent;color:#7d501d;font:700 18px/1 system-ui;cursor:pointer;padding:0 2px;">×</button>',
+        '</div>'
+      ].join('');
+      const closeButton = installSheet.querySelector('button');
+      if (closeButton) {
+        closeButton.addEventListener('click', closeInstallSheet);
+      }
+      document.body.appendChild(installSheet);
+    }
+
+    if (isSafari) {
+      setVisible(true, 'iPhonega o\'rnatish');
+    }
 
     window.addEventListener('beforeinstallprompt', function (event) {
       event.preventDefault();
       deferredPrompt = event;
+      closeInstallSheet();
       setVisible(true, 'Ilovani o\'rnatish');
     });
 
     window.addEventListener('appinstalled', function () {
       deferredPrompt = null;
+      closeInstallSheet();
       setVisible(false);
     });
-
-    // Inline hint banner (no alert)
-    let hintEl = null;
-    function showInstallHint(msg) {
-      if (!hintEl) {
-        hintEl = document.createElement('div');
-        hintEl.style.cssText = [
-          'position:fixed', 'right:14px', 'bottom:66px', 'z-index:10001',
-          'max-width:calc(100vw - 28px)', 'padding:12px 16px',
-          'background:#2c1a09', 'color:#fff', 'border-radius:16px',
-          'font:500 13px/1.5 system-ui,-apple-system,Segoe UI,sans-serif',
-          'box-shadow:0 8px 24px rgba(0,0,0,.3)', 'white-space:pre-line',
-          'cursor:pointer',
-        ].join(';');
-        hintEl.setAttribute('role', 'tooltip');
-        hintEl.addEventListener('click', function () {
-          hintEl.remove();
-          hintEl = null;
-        });
-        document.body.appendChild(hintEl);
-      }
-      hintEl.textContent = msg;
-      clearTimeout(hintEl._timer);
-      hintEl._timer = setTimeout(function () {
-        if (hintEl) { hintEl.remove(); hintEl = null; }
-      }, 7000);
-    }
 
     button.addEventListener('click', async function () {
       if (deferredPrompt) {
@@ -927,12 +957,11 @@
       }
 
       if (isSafari) {
-        showInstallHint('⬆ Safari pastki panelidagi "Share" (ulashish) tugmasini bosing,\nso\'ng "Add to Home Screen" ni tanlang.');
+        openInstallSheet();
         return;
       }
 
-      // Chrome/Edge/Samsung – try re-requesting native prompt or show quiet hint
-      showInstallHint('Brauzer menyusini oching (⋮)\nva "Ilovani o\'rnatish" yoki "Add to Home screen" ni tanlang.');
+      setVisible(false);
     });
   }
 

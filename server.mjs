@@ -1794,6 +1794,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     const pageMap = {
       seller: "/warehouse/seller",
       customers: "/warehouse/customers",
+      orders: "/warehouse/orders",
       sale: "/warehouse/seller/sale/cash",
       admin: "/warehouse/admin",
       ledger: "/warehouse/admin/cash",
