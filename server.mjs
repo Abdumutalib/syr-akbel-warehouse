@@ -7,7 +7,6 @@ import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { handleWarehouseApiRoute } from "./server/handle-api.mjs";
 import { rateLimiter, securityHeaders, recordFailedAuth, getClientIp } from "./lib/rate-limiter.mjs";
-import { setupMagicLinkHandlers } from "./lib/magic-link.mjs";
 import { handleAnalyticsRoute } from "./lib/analytics.mjs";
 import {
   authenticateStaffAccessToken,
@@ -96,10 +95,7 @@ const WAREHOUSE_MAX_REQUEST_BYTES = Math.max(
 const WAREHOUSE_STATE_PATH = resolveWarehouseStatePath();
 const WAREHOUSE_TRANSACTION_PHOTO_DIR = path.join(path.dirname(WAREHOUSE_STATE_PATH), "transaction-photos");
 const SCHEDULER_STATE_PATH = path.join(path.dirname(WAREHOUSE_STATE_PATH), "scheduler.json");
-const MAGIC_LINK_STATE_PATH = path.join(path.dirname(WAREHOUSE_STATE_PATH), "magic-links.json");
 const WAREHOUSE_SITE_TOKEN = process.env.WAREHOUSE_SITE_TOKEN?.trim() || "";
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.trim() || "admin@localhost";
-const MAGIC_LINK_TTL_MS = 15 * 60 * 1000; // 15 дақиқа
 
 // --- Qarz eslatma scheduler holati ---
 const DEBT_REMINDER_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 kun
@@ -135,13 +131,6 @@ let warehouseWriteQueue = Promise.resolve();
 let yandexUploadTimer = null;
 let yandexUploadInFlight = false;
 let yandexUploadRequested = false;
-
-// Magic link sistema
-const magicLink = setupMagicLinkHandlers(
-  path.dirname(WAREHOUSE_STATE_PATH),
-  process.env.TELEGRAM_ADMIN_CHAT_ID?.trim(),
-  process.env.TELEGRAM_BOT_TOKEN?.trim()
-);
 
 function resolveWarehouseStatePath() {
   const configured = process.env.WAREHOUSE_STATE_FILE?.trim() || "data/warehouse.json";
@@ -699,12 +688,10 @@ function checkSiteGate(req, res, u) {
   const errorText =
     errorCode === "link_revoked"
       ? "Ruxsat havolasi bekor qilingan"
-      : errorCode === "link_expired"
-      ? "Havolaning muddati tugadi"
-      : errorCode === "link_invalid"
-      ? "Havola noto'g'ri"
+      : errorCode === "missing_credentials"
+      ? "Login va parolni kiriting"
       : showError
-      ? "Xatolik yuz berdi"
+      ? "Login yoki parol noto'g'ri"
       : "";
   
   const body = `<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>Admin Login</title>
@@ -716,45 +703,20 @@ function checkSiteGate(req, res, u) {
   p{margin:0 0 14px;color:#666;text-align:center;font-size:14px}
   input{width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;font-size:16px;margin-bottom:12px;outline:none;box-sizing:border-box}
   button{width:100%;padding:12px;background:#5b8dea;color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer;font-weight:600}
+  .muted{margin-top:10px;font-size:13px;color:#666;line-height:1.45}
   .err{color:#c0392b;font-size:13px;margin-bottom:10px;text-align:center}
-  .info{color:#27ae60;font-size:13px;margin-bottom:10px;text-align:center;display:none}
 </style></head>
 <body><div class="card">
   <h1>Admin Kiriş</h1>
-  <p>Электрон почтага юборилган ҳаволаӣ кунед</p>
+  <p>Admin login va parol bilan kiring</p>
   ${errorText ? `<div class="err">${errorText}</div>` : ""}
-  <div id="infoMsg" class="info"></div>
-  <input type="email" id="emailInput" placeholder="Admin email" value="${ADMIN_EMAIL}" readonly style="background:#f5f5f5">
-  <button id="sendBtn" onclick="sendMagicLink()">Ҳаволаи кириш фуристӣ</button>
+  <form method="post" action="/warehouse-register" autocomplete="off">
+    <input type="text" name="username" placeholder="Admin login" autocomplete="username" autofocus>
+    <input type="password" name="password" placeholder="Parol" autocomplete="current-password">
+    <button type="submit">Kirish</button>
+  </form>
+  <div class="muted">Parolni faqat admin beradi. Xodimlar admin bergan ruxsat havolasi bilan telefon yoki planshetda ilovani o'rnatib, keyin PIN bilan kirib ishlayveradi.</div>
 </div>
-<script>
-function sendMagicLink() {
-  var btn = document.getElementById('sendBtn');
-  var infoMsg = document.getElementById('infoMsg');
-  btn.disabled = true;
-  btn.textContent = '...';
-  fetch('/warehouse-magic-link', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: '${ADMIN_EMAIL}' })
-  }).then(function(r){
-    if (r.ok) {
-      infoMsg.textContent = 'Ҳавола Telegramга фуристода шуд';
-      infoMsg.style.display = 'block';
-    } else {
-      infoMsg.textContent = 'Хатолик юз берди';
-      infoMsg.style.display = 'block';
-    }
-    btn.disabled = false;
-    btn.textContent = 'Ҳаволаи кириш фуристӣ';
-  }).catch(function(){
-    infoMsg.textContent = 'Шабака хатолик';
-    infoMsg.style.display = 'block';
-    btn.disabled = false;
-    btn.textContent = 'Ҳаволаи кириш фуристӣ';
-  });
-}
-</script>
 </body></html>`;
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(body);
@@ -1745,60 +1707,43 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
 
-  // Magic link orqali havola фуристиш
-  if (u.pathname === "/warehouse-magic-link" && req.method === "POST") {
+  // Admin login orqali kirish
+  if ((u.pathname === "/warehouse-register" || u.pathname === "/warehouse-login") && req.method === "POST") {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const body = Buffer.concat(chunks).toString("utf8");
-    const parsed = JSON.parse(body || "{}");
-    const email = String(parsed.email || "").trim();
-    
-    if (email !== ADMIN_EMAIL) {
-      sendApiJson(res, 403, { error: "Email noto'g'ri" });
+    const params = new URLSearchParams(body);
+    const username = String(params.get("username") || "").trim();
+    const password = String(params.get("password") || "").trim();
+    const expectedUser = process.env.WAREHOUSE_ADMIN_USERNAME?.trim() || "";
+    const expectedPassword = process.env.WAREHOUSE_ADMIN_PASSWORD?.trim() || "";
+
+    if (!username || !password) {
+      redirectTo(res, "/warehouse-register?error=missing_credentials");
       return;
     }
 
-    const token = magicLink.createToken(email);
-    const appUrl = `http://${req.headers.host || "localhost:8792"}`;
-    const sent = await magicLink.sendMagicLinkViaTelegram(token, email, appUrl);
+    const accepted = Boolean(
+      username &&
+      password &&
+      expectedUser &&
+      expectedPassword &&
+      username === expectedUser &&
+      password === expectedPassword
+    );
 
-    if (!sent) {
-      sendApiJson(res, 500, { error: "Telegramga yuborishda xatolik" });
+    if (!accepted) {
+      recordFailedAuth(getClientIp(req));
+      redirectTo(res, "/warehouse-register?login_error=1");
       return;
     }
 
-    sendApiJson(res, 200, { ok: true, message: "Ҳавола Telegramга фуристода шуд" });
-    return;
-  }
-
-  // Magic link таъйиди
-  if (u.pathname === "/warehouse-verify-link" && req.method === "GET") {
-    const token = u.searchParams.get("token");
-    if (!token) {
-      redirectTo(res, "/warehouse-register?error=link_invalid");
-      return;
-    }
-
-    const email = magicLink.verifyToken(token);
-    if (!email) {
-      redirectTo(res, "/warehouse-register?error=link_expired");
-      return;
-    }
-
-    // Token хуш — session cookie ўрнатиш
     res.writeHead(302, {
       Location: "/warehouse/admin",
       "Set-Cookie": `${SITE_GATE_COOKIE}=${siteGateCookieValue()}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
       "Cache-Control": "no-store",
     });
     res.end();
-    return;
-  }
-
-  // Parol bilan kirish (form POST) — ENDI ZARUR EMAS, O'CHIRIB YUBORISH
-  if ((u.pathname === "/warehouse-register" || u.pathname === "/warehouse-login") && req.method === "POST") {
-    // Magic link orqali kirguvchi kerak, bu POST endi ishlamaydi
-    redirectTo(res, "/warehouse-register");
     return;
   }
 
