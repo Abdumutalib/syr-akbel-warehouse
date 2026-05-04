@@ -285,7 +285,7 @@
           <div id="status" class="status"></div>
         </div>
 
-        <div class="card">
+        <div class="card" id="umumiyKorsatkichCard">
           <h2>Umumiy ko'rsatkich</h2>
           <div class="stats">
             <div class="stat">Mijozlar soni<strong id="countValue">0</strong></div>
@@ -390,7 +390,7 @@
         </div>
       </aside>
 
-      <main class="card">
+      <main class="card" id="mijozlarQarzlarCard">
         <h2>Mijozlar ва қарзлар</h2>
         <div id="customerList" class="customer-list"></div>
       </main>
@@ -493,6 +493,10 @@
       const transferSalePageLink = document.getElementById('transferSalePageLink');
       const sellerCashReportLink = document.getElementById('sellerCashReportLink');
       if (adminDashboardLink) adminDashboardLink.classList.toggle('hidden', !isAdmin);
+      const umumiyEl = document.getElementById('umumiyKorsatkichCard');
+      const mijozlarEl = document.getElementById('mijozlarQarzlarCard');
+      if (umumiyEl) umumiyEl.classList.toggle('hidden', !isAdmin);
+      if (mijozlarEl) mijozlarEl.classList.toggle('hidden', !isAdmin);
       if (sellerCustomersLink) sellerCustomersLink.classList.toggle('hidden', !canSeeCustomers);
       if (cashSalePageLink) cashSalePageLink.classList.toggle('hidden', !canSeeCashSale);
       document.getElementById('cashSalePageCardLink').classList.toggle('hidden', !canSeeCashSale);
