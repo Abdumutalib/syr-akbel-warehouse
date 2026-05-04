@@ -749,15 +749,32 @@ function checkSiteGate(req, res, u) {
   <h1>Кириш</h1>
   <p>${pinEnabled ? "Davom etish uchun PIN kodni kiriting" : "Birinchi kirishda admin login/parol va yangi PIN kiriting"}</p>
   ${errorText ? `<div class="err">${errorText}</div>` : ""}
-  <form method="POST" action="/warehouse-register" autocomplete="off">
-    <input type="text" name="fake_user_" style="display:none" tabindex="-1" aria-hidden="true">
-    <input type="password" name="fake_pass_" style="display:none" tabindex="-1" aria-hidden="true">
+  <form method="POST" action="/warehouse-register" autocomplete="off" id="gateForm">
     ${pinEnabled
-      ? '<input type="password" name="pin" inputmode="numeric" maxlength="8" placeholder="PIN (4-8 raqam)" autofocus autocomplete="off">'
-      : '<input type="text" name="username" placeholder="Admin login" autofocus autocomplete="off">\n    <input type="password" name="password" placeholder="Admin parol" autocomplete="new-password">\n    <input type="password" name="pin" inputmode="numeric" maxlength="8" placeholder="Yangi PIN (4-8 raqam)" autocomplete="new-password">'}
+      ? '<input type="password" id="pinInput" name="pin" inputmode="numeric" maxlength="8" placeholder="PIN (4-8 raqam)" readonly autocomplete="off">'
+      : '<input type="text" id="usernameInput" name="username" placeholder="Admin login" readonly autocomplete="off">\n    <input type="password" id="passwordInput" name="password" placeholder="Admin parol" readonly autocomplete="off">\n    <input type="password" id="pinInput" name="pin" inputmode="numeric" maxlength="8" placeholder="Yangi PIN (4-8 raqam)" readonly autocomplete="off">'}
     <button type="submit">Kirish</button>
   </form>
-</div></body></html>`;
+</div>
+<script>
+(function(){
+  // Remove readonly on focus so user can type, but browser won't autofill readonly fields
+  document.querySelectorAll('#gateForm input').forEach(function(el){
+    el.addEventListener('focus', function(){ this.removeAttribute('readonly'); });
+    el.addEventListener('blur', function(){ if(!this.value) this.setAttribute('readonly',''); });
+  });
+  // Clear any autofilled values on load
+  setTimeout(function(){
+    document.querySelectorAll('#gateForm input').forEach(function(el){ 
+      if(el.value){ el.value=''; }
+    });
+  }, 100);
+  // Auto focus first input
+  var first = document.querySelector('#gateForm input');
+  if(first){ setTimeout(function(){ first.focus(); }, 150); }
+})();
+</script>
+</body></html>`;
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(body);
   return { allowed: false };
