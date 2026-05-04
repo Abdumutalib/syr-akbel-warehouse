@@ -561,6 +561,40 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   const customerDetailMatch = apiPath.match(/^\/api\/warehouse\/customers\/(\d+)$/);
+  if (customerDetailMatch && req.method === "PUT") {
+    const operator = assertWarehouseOperator(req, res, {
+      roles: ["seller"],
+      allowAdmin: true,
+      realm: "warehouse-seller",
+      message: "Mijozni tahrirlash учун sotuvchi yoki admin ruxsati kerak",
+    });
+    if (!operator) {
+      return true;
+    }
+    const body = await readPostJson(req);
+    if (body === null) {
+      sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
+      return true;
+    }
+    try {
+      const outcome = await writeWarehouse((state) => {
+        const customerId = Number(customerDetailMatch[1]);
+        const detail = getCustomerDetail(state, customerId, currentWarehousePricing(state));
+        if (!canAccessCustomer(operator, detail?.customer || null)) {
+          const err = new Error("Bu mijozga ruxsat yo'q");
+          err.statusCode = 403;
+          throw err;
+        }
+        const customer = upsertCustomer(state, { ...body, userId: customerId }, { actor: operator });
+        return { ok: true, customer };
+      });
+      sendApiJson(res, 200, outcome);
+    } catch (e) {
+      sendApiJson(res, e.statusCode || 400, { error: e.message || "Mijozni yangilab bo'lmadi" });
+    }
+    return true;
+  }
+
   if (customerDetailMatch && req.method === "DELETE") {
     const operator = assertWarehouseOperator(req, res, {
       roles: ["seller"],

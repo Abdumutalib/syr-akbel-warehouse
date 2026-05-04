@@ -145,6 +145,10 @@
     .modal-close { background: transparent; border: 0; font-size: 24px; cursor: pointer; color: var(--ink); padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
     .modal-close:hover { opacity: 0.7; }
     @media (max-width: 960px) { .layout, .group-grid { grid-template-columns: 1fr; } }
+    .customer-card { display: flex; align-items: stretch; gap: 8px; }
+    .customer-card .customer-link { flex: 1; }
+    .edit-customer-btn { flex-shrink: 0; padding: 10px 14px; border-radius: 14px; font-size: 13px; background: #eadfce; color: var(--ink); border: 1px solid var(--line); cursor: pointer; white-space: nowrap; align-self: center; font-family: inherit; }
+    .edit-customer-btn:hover { background: var(--accent); color: #fff; }
   </style>
 </head>
 <body>
@@ -338,6 +342,10 @@
       // Naqd/O'tkazma/Boshqa mijozlar soni faqat admin uchun
       const statsEl = document.querySelector('.stats');
       if (statsEl) statsEl.classList.toggle('hidden', !isAdmin);
+      // Tahrirlash tugmalari faqat seller/admin uchun
+      document.querySelectorAll('.customer-edit-control').forEach((btn) => {
+        btn.classList.toggle('hidden', !canSeeSeller);
+      });
     }
 
     function authHeader() {
@@ -407,6 +415,12 @@
       if (document.getElementById('customerCategoryTransfer').checked) categories.push('transfer');
       return categories;
     }
+    function selectedEditCustomerCategories() {
+      const categories = [];
+      if (document.getElementById('editCustomerCategoryCash').checked) categories.push('cash');
+      if (document.getElementById('editCustomerCategoryTransfer').checked) categories.push('transfer');
+      return categories;
+    }
     function selectedModalCustomerCategories() {
       const categories = [];
       if (document.getElementById('modalCustomerCategoryCash').checked) categories.push('cash');
@@ -434,6 +448,99 @@
       el.classList.toggle('error', Boolean(isError));
     }
     
+    let editCustomerIdCurrent = null;
+    async function openEditCustomerModal(customerId) {
+      editCustomerIdCurrent = customerId;
+      document.getElementById('editCustomerStatus').textContent = '';
+      document.getElementById('editCustomerStatus').classList.remove('error');
+      // Avval mavjud ma'lumotlarni yuklaymiz
+      try {
+        const data = await apiFetch(`/api/warehouse/customers/${customerId}`);
+        const c = data.customer || {};
+        document.getElementById('editCustomerOrganizationName').value = c.organizationName || '';
+        setMultiInputValues('editCustomerNameList', Array.isArray(c.fullNames) && c.fullNames.length ? c.fullNames : [c.fullName || ''], { placeholder: 'Али ака' });
+        setMultiInputValues('editCustomerPhoneList', c.phones || [], { placeholder: '+99890...' });
+        document.getElementById('editCustomerTaxId').value = c.taxId || '';
+        setMultiInputValues('editCustomerTelegramList', (c.telegramIds || []).map(String), { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
+        const cats = c.paymentCategories || [];
+        document.getElementById('editCustomerCategoryCash').checked = cats.includes('cash');
+        document.getElementById('editCustomerCategoryTransfer').checked = cats.includes('transfer');
+        document.getElementById('editCustomerModal').classList.add('active');
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    }
+    function closeEditCustomerModal() {
+      document.getElementById('editCustomerModal').classList.remove('active');
+      editCustomerIdCurrent = null;
+    }
+    function setEditStatus(message, isError = false) {
+      const el = document.getElementById('editCustomerStatus');
+      el.textContent = message || '';
+      el.classList.toggle('error', Boolean(isError));
+    }
+    function bindEditCustomerModalEvents() {
+      const closeBtn = document.getElementById('closeEditCustomerModal');
+      const cancelBtn = document.getElementById('editCustomerCancel');
+      const backdrop = document.getElementById('editCustomerModal');
+      const addNameBtn = document.getElementById('editCustomerAddName');
+      const addPhoneBtn = document.getElementById('editCustomerAddPhone');
+      const addTelegramBtn = document.getElementById('editCustomerAddTelegram');
+      const saveBtn = document.getElementById('editCustomerSave');
+      if (closeBtn && !closeBtn.dataset.bound) {
+        closeBtn.addEventListener('click', closeEditCustomerModal);
+        closeBtn.dataset.bound = '1';
+      }
+      if (cancelBtn && !cancelBtn.dataset.bound) {
+        cancelBtn.addEventListener('click', closeEditCustomerModal);
+        cancelBtn.dataset.bound = '1';
+      }
+      if (backdrop && !backdrop.dataset.bound) {
+        backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeEditCustomerModal(); });
+        backdrop.dataset.bound = '1';
+      }
+      if (addNameBtn && !addNameBtn.dataset.bound) {
+        addNameBtn.addEventListener('click', () => appendMultiInput('editCustomerNameList', { placeholder: 'Али ака' }));
+        addNameBtn.dataset.bound = '1';
+      }
+      if (addPhoneBtn && !addPhoneBtn.dataset.bound) {
+        addPhoneBtn.addEventListener('click', () => appendMultiInput('editCustomerPhoneList', { placeholder: '+99890...' }));
+        addPhoneBtn.dataset.bound = '1';
+      }
+      if (addTelegramBtn && !addTelegramBtn.dataset.bound) {
+        addTelegramBtn.addEventListener('click', () => appendMultiInput('editCustomerTelegramList', { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' }));
+        addTelegramBtn.dataset.bound = '1';
+      }
+      if (saveBtn && !saveBtn.dataset.bound) {
+        saveBtn.addEventListener('click', async () => {
+          if (!editCustomerIdCurrent) return;
+          try {
+            const paymentCategories = selectedEditCustomerCategories();
+            const fullNames = collectMultiInputValues('editCustomerNameList');
+            if (!paymentCategories.length) throw new Error("Kamida bitta to'lov toifasini belgilang.");
+            if (!fullNames.length) throw new Error('Kamida bitta F.I.Sh. kiriting.');
+            await apiFetch(`/api/warehouse/customers/${editCustomerIdCurrent}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                organizationName: document.getElementById('editCustomerOrganizationName').value.trim(),
+                fullNames,
+                phones: collectMultiInputValues('editCustomerPhoneList'),
+                taxId: document.getElementById('editCustomerTaxId').value.trim(),
+                telegramIds: collectMultiInputValues('editCustomerTelegramList'),
+                paymentCategories,
+              }),
+            });
+            setEditStatus('Saqlandi.');
+            closeEditCustomerModal();
+            await loadCatalog();
+          } catch (err) {
+            setEditStatus(err.message, true);
+          }
+        });
+        saveBtn.dataset.bound = '1';
+      }
+    }
     function withAccess(url) {
       return accessToken ? `${url}${url.includes('?') ? '&' : '?'}access=${encodeURIComponent(accessToken)}` : url;
     }
@@ -465,11 +572,20 @@
         return;
       }
       host.innerHTML = customers.map((customer) => `
-        <a class="customer-link" href="${withAccess(`/warehouse/customers/${customer.id}`)}">
-          <strong>${customer.fullName}</strong>
-          <span class="muted">Tashkilot: ${customer.organizationName || '-'} · Telefonlar: ${(customer.phones || []).join(', ') || '-'}</span>
-        </a>
+        <div class="customer-card">
+          <a class="customer-link" href="${withAccess(`/warehouse/customers/${customer.id}`)}">
+            <strong>${customer.fullName}</strong>
+            <span class="muted">Tashkilot: ${customer.organizationName || '-'} · Telefonlar: ${(customer.phones || []).join(', ') || '-'}</span>
+          </a>
+          <button class="edit-customer-btn customer-edit-control" data-cid="${customer.id}" type="button">Tahrirlash</button>
+        </div>
       `).join('');
+      host.querySelectorAll('.edit-customer-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          openEditCustomerModal(Number(btn.dataset.cid));
+        });
+      });
     }
     function matchesCustomerSearch(customer, query) {
       const normalizedQuery = String(query || '').trim().toLocaleLowerCase('ru');
@@ -707,7 +823,8 @@
       }
     }
     bindAddCustomerModalEvents();
-    window.addEventListener('DOMContentLoaded', bindAddCustomerModalEvents);
+    bindEditCustomerModalEvents();
+    window.addEventListener('DOMContentLoaded', () => { bindAddCustomerModalEvents(); bindEditCustomerModalEvents(); });
     
     setMultiInputValues('customerNameList', [], { placeholder: 'Али ака' });
     setMultiInputValues('customerPhoneList', [], { placeholder: '+99890...' });
@@ -770,6 +887,48 @@
           <button id="modalCancelAddCustomer" class="secondary" type="button">Bekor qilish</button>
         </div>
         <div id="modalStatus" class="status"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mijozni tahrirlash modali -->
+  <div id="editCustomerModal" class="modal-backdrop">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Mijozni tahrirlash</h2>
+        <button class="modal-close" id="closeEditCustomerModal" type="button">&times;</button>
+      </div>
+      <div>
+        <label for="editCustomerOrganizationName">Tashkilot nomi</label>
+        <input id="editCustomerOrganizationName" placeholder="Masalan: AKBEL SAVDO MCHJ">
+        <div class="field-label-row">
+          <label>F.I.Sh.</label>
+          <button id="editCustomerAddName" class="secondary add-mini" type="button">+</button>
+        </div>
+        <div id="editCustomerNameList" class="multi-input-list"></div>
+        <div class="field-label-row">
+          <label>Telefon</label>
+          <button id="editCustomerAddPhone" class="secondary add-mini" type="button">+</button>
+        </div>
+        <div id="editCustomerPhoneList" class="multi-input-list"></div>
+        <label for="editCustomerTaxId">Tashkilot INN</label>
+        <input id="editCustomerTaxId" placeholder="123456789">
+        <div class="field-label-row">
+          <label>Telegram ID</label>
+          <button id="editCustomerAddTelegram" class="secondary add-mini" type="button">+</button>
+        </div>
+        <div id="editCustomerTelegramList" class="multi-input-list"></div>
+        <div>To'lov toifasi</div>
+        <div class="check-grid">
+          <label class="check-row" for="editCustomerCategoryCash"><input id="editCustomerCategoryCash" type="checkbox">Naqd to'lovchi</label>
+          <label class="check-row" for="editCustomerCategoryTransfer"><input id="editCustomerCategoryTransfer" type="checkbox">O'tkazma to'lovchi</label>
+        </div>
+        <div class="muted" style="margin-top: -8px; margin-bottom: 12px;">Ikkalasini ham belgilasangiz, mijoz ikkala ro'yxatda ham ko'rinadi.</div>
+        <div class="links">
+          <button id="editCustomerSave">Saqlash</button>
+          <button id="editCustomerCancel" class="secondary" type="button">Bekor qilish</button>
+        </div>
+        <div id="editCustomerStatus" class="status"></div>
       </div>
     </div>
   </div>
