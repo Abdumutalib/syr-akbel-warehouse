@@ -1099,9 +1099,15 @@
     }
 
     function syncCustomerState(customers) {
+      // Нақд режимда фақат cash, ўтказма режимда фақат transfer мижозлар кўринади
+      const filtered = customers.filter((c) => {
+        const cats = Array.isArray(c.paymentCategories) ? c.paymentCategories : [];
+        if (saleMode === 'transfer') return cats.includes('transfer');
+        return cats.includes('cash');
+      });
       customersState.length = 0;
-      customersState.push(...customers);
-      setCustomerOptions(customers);
+      customersState.push(...filtered);
+      setCustomerOptions(filtered);
       if (saleDraftRestorePending) {
         restoreSaleDraft();
       }
