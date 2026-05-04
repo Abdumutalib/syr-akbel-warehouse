@@ -95,6 +95,7 @@ const WAREHOUSE_MAX_REQUEST_BYTES = Math.max(
 const WAREHOUSE_STATE_PATH = resolveWarehouseStatePath();
 const WAREHOUSE_TRANSACTION_PHOTO_DIR = path.join(path.dirname(WAREHOUSE_STATE_PATH), "transaction-photos");
 const SCHEDULER_STATE_PATH = path.join(path.dirname(WAREHOUSE_STATE_PATH), "scheduler.json");
+const GATE_AUTH_STATE_PATH = path.join(path.dirname(WAREHOUSE_STATE_PATH), "gate-auth.json");
 const WAREHOUSE_SITE_TOKEN = process.env.WAREHOUSE_SITE_TOKEN?.trim() || "";
 
 // --- Qarz eslatma scheduler holati ---
@@ -149,6 +150,39 @@ function resolveAppVersion() {
 function loadWarehouse() {
   return warehouseStateCache;
 }
+
+function loadGateAuthState() {
+  try {
+    if (!fs.existsSync(GATE_AUTH_STATE_PATH)) {
+      return { pinHash: null, pinSalt: null, pinEnabledAt: null };
+    }
+    const raw = fs.readFileSync(GATE_AUTH_STATE_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    return {
+      pinHash: typeof parsed.pinHash === "string" ? parsed.pinHash : null,
+      pinSalt: typeof parsed.pinSalt === "string" ? parsed.pinSalt : null,
+      pinEnabledAt: typeof parsed.pinEnabledAt === "string" ? parsed.pinEnabledAt : null,
+    };
+  } catch {
+    return { pinHash: null, pinSalt: null, pinEnabledAt: null };
+  }
+}
+
+function saveGateAuthState(state) {
+  fs.mkdirSync(path.dirname(GATE_AUTH_STATE_PATH), { recursive: true });
+  fs.writeFileSync(GATE_AUTH_STATE_PATH, JSON.stringify(state, null, 2), "utf8");
+}
+
+function normalizeGatePin(value) {
+  const pin = String(value || "").trim();
+  return /^\d{4,8}$/.test(pin) ? pin : null;
+}
+
+function hashGatePin(pin, salt) {
+  return crypto.createHash("sha256").update(`${salt}:${pin}`).digest("hex");
+}
+
+const gateAuthState = loadGateAuthState();
 
 function buildCsvContent(state, mode = "all") {
   const userMap = new Map(state.users.map((u) => [u.id, u.fullName]));
@@ -618,6 +652,18 @@ function checkSiteGate(req, res, u) {
   }
 
   const showError = u.searchParams.get("login_error") === "1";
+  const errorCode = (u.searchParams.get("error") || "").trim();
+  const errorText =
+    errorCode === "bad_pin"
+      ? "PIN noto'g'ri"
+      : errorCode === "pin_required"
+      ? "PIN kiriting (4-8 raqam)"
+      : errorCode === "pin_invalid"
+      ? "PIN 4-8 ta raqamdan iborat bo'lsin"
+      : showError
+      ? "Login yoki parol noto'g'ri"
+      : "";
+  const pinEnabled = Boolean(gateAuthState.pinHash && gateAuthState.pinSalt);
   const body = `<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>Registration</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -631,11 +677,12 @@ function checkSiteGate(req, res, u) {
 </style></head>
 <body><div class="card">
   <h1>Кириш</h1>
-  <p>Сизга берилган логин ва паролни киритинг</p>
-  ${showError ? '<div class="err">Parol noto\'g\'ri</div>' : ''}
+  <p>${pinEnabled ? "Davom etish uchun PIN kodni kiriting" : "Birinchi kirishda admin login/parol va yangi PIN kiriting"}</p>
+  ${errorText ? `<div class="err">${errorText}</div>` : ""}
   <form method="POST" action="/warehouse-register">
-    <input type="text" name="username" placeholder="Login" autofocus autocomplete="username">
-    <input type="password" name="password" placeholder="Parol" autocomplete="current-password">
+    ${pinEnabled
+      ? '<input type="password" name="pin" inputmode="numeric" maxlength="8" placeholder="PIN (4-8 raqam)" autofocus autocomplete="one-time-code">'
+      : '<input type="text" name="username" placeholder="Admin login" autofocus autocomplete="username">\n    <input type="password" name="password" placeholder="Admin parol" autocomplete="current-password">\n    <input type="password" name="pin" inputmode="numeric" maxlength="8" placeholder="Yangi PIN (4-8 raqam)">'}
     <button type="submit">Kirish</button>
   </form>
 </div></body></html>`;
@@ -1631,18 +1678,52 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     for await (const chunk of req) chunks.push(chunk);
     const body = Buffer.concat(chunks).toString("utf8");
     const params = new URLSearchParams(body);
-    const username = (params.get("username") || "").trim();
-    const password = (params.get("password") || "").trim();
-    const expectedUser = process.env.WAREHOUSE_ADMIN_USERNAME?.trim() || "";
-    const expectedPassword = process.env.WAREHOUSE_ADMIN_PASSWORD?.trim() || "";
-    const accepted = Boolean(
-      username &&
-      password &&
-      expectedUser &&
-      expectedPassword &&
-      username === expectedUser &&
-      password === expectedPassword
-    );
+    const pinEnabled = Boolean(gateAuthState.pinHash && gateAuthState.pinSalt);
+    let accepted = false;
+
+    if (pinEnabled) {
+      const enteredPin = normalizeGatePin(params.get("pin"));
+      if (!enteredPin) {
+        res.writeHead(302, { Location: "/warehouse-register?error=pin_required", "Cache-Control": "no-store" });
+        res.end();
+        return;
+      }
+      const candidateHash = hashGatePin(enteredPin, gateAuthState.pinSalt);
+      accepted = candidateHash === gateAuthState.pinHash;
+      if (!accepted) {
+        res.writeHead(302, { Location: "/warehouse-register?error=bad_pin", "Cache-Control": "no-store" });
+        res.end();
+        return;
+      }
+    } else {
+      const username = (params.get("username") || "").trim();
+      const password = (params.get("password") || "").trim();
+      const expectedUser = process.env.WAREHOUSE_ADMIN_USERNAME?.trim() || "";
+      const expectedPassword = process.env.WAREHOUSE_ADMIN_PASSWORD?.trim() || "";
+      accepted = Boolean(
+        username &&
+        password &&
+        expectedUser &&
+        expectedPassword &&
+        username === expectedUser &&
+        password === expectedPassword
+      );
+      if (!accepted) {
+        res.writeHead(302, { Location: "/warehouse-register?login_error=1", "Cache-Control": "no-store" });
+        res.end();
+        return;
+      }
+      const pin = normalizeGatePin(params.get("pin"));
+      if (!pin) {
+        res.writeHead(302, { Location: "/warehouse-register?error=pin_invalid", "Cache-Control": "no-store" });
+        res.end();
+        return;
+      }
+      gateAuthState.pinSalt = crypto.randomBytes(16).toString("hex");
+      gateAuthState.pinHash = hashGatePin(pin, gateAuthState.pinSalt);
+      gateAuthState.pinEnabledAt = new Date().toISOString();
+      saveGateAuthState(gateAuthState);
+    }
 
     if (accepted) {
       res.writeHead(302, {
