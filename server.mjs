@@ -749,10 +749,12 @@ function checkSiteGate(req, res, u) {
   <h1>Кириш</h1>
   <p>${pinEnabled ? "Davom etish uchun PIN kodni kiriting" : "Birinchi kirishda admin login/parol va yangi PIN kiriting"}</p>
   ${errorText ? `<div class="err">${errorText}</div>` : ""}
-  <form method="POST" action="/warehouse-register">
+  <form method="POST" action="/warehouse-register" autocomplete="off">
+    <input type="text" name="fake_user_" style="display:none" tabindex="-1" aria-hidden="true">
+    <input type="password" name="fake_pass_" style="display:none" tabindex="-1" aria-hidden="true">
     ${pinEnabled
-      ? '<input type="password" name="pin" inputmode="numeric" maxlength="8" placeholder="PIN (4-8 raqam)" autofocus autocomplete="one-time-code">'
-      : '<input type="text" name="username" placeholder="Admin login" autofocus autocomplete="username">\n    <input type="password" name="password" placeholder="Admin parol" autocomplete="current-password">\n    <input type="password" name="pin" inputmode="numeric" maxlength="8" placeholder="Yangi PIN (4-8 raqam)">'}
+      ? '<input type="password" name="pin" inputmode="numeric" maxlength="8" placeholder="PIN (4-8 raqam)" autofocus autocomplete="off">'
+      : '<input type="text" name="username" placeholder="Admin login" autofocus autocomplete="off">\n    <input type="password" name="password" placeholder="Admin parol" autocomplete="new-password">\n    <input type="password" name="pin" inputmode="numeric" maxlength="8" placeholder="Yangi PIN (4-8 raqam)" autocomplete="new-password">'}
     <button type="submit">Kirish</button>
   </form>
 </div></body></html>`;
