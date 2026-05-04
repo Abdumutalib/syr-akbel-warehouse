@@ -95,6 +95,7 @@ const WAREHOUSE_MAX_REQUEST_BYTES = Math.max(
 const WAREHOUSE_STATE_PATH = resolveWarehouseStatePath();
 const WAREHOUSE_TRANSACTION_PHOTO_DIR = path.join(path.dirname(WAREHOUSE_STATE_PATH), "transaction-photos");
 const SCHEDULER_STATE_PATH = path.join(path.dirname(WAREHOUSE_STATE_PATH), "scheduler.json");
+const WAREHOUSE_SITE_TOKEN = process.env.WAREHOUSE_SITE_TOKEN?.trim() || "";
 
 // --- Qarz eslatma scheduler holati ---
 const DEBT_REMINDER_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 kun
@@ -557,6 +558,57 @@ function requiredWarehouseRoutePermissions(pathname) {
     return ["transfer"];
   }
   return null;
+}
+
+// Site-wide gate: WAREHOUSE_SITE_TOKEN sozlangan bo'lsa, sahifani ochish uchun
+// ?access=TOKEN yoki Cookie: warehouse-site=TOKEN talab qilinadi.
+// Token to'g'ri bo'lsa, cookie o'rnatib, keyingi tashrif uchun URL kerak bo'lmaydi.
+function parseCookies(req) {
+  const raw = req.headers.cookie || "";
+  const result = {};
+  for (const part of raw.split(";")) {
+    const idx = part.indexOf("=");
+    if (idx > 0) {
+      result[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+    }
+  }
+  return result;
+}
+
+const SITE_GATE_COOKIE = "warehouse-site";
+const SITE_GATE_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 kun
+
+function checkSiteGate(req, res, u) {
+  if (!WAREHOUSE_SITE_TOKEN) return { allowed: true };
+  // API, healthz, SW, manifest, rasm — tekshirilmaydi
+  const skipPrefixes = ["/warehouse/api/", "/api/", "/warehouse/sw.js", "/warehouse/manifest.json", "/warehouse/assets/", "/warehouse/uploads/", "/warehouse-top-nav.js", "/favicon", "/icon-"];
+  if (skipPrefixes.some((p) => u.pathname.startsWith(p))) return { allowed: true };
+
+  // Tokenni URL dan yoki cookie dan ol
+  const tokenFromQuery = u.searchParams.get("access") || "";
+  const cookies = parseCookies(req);
+  const tokenFromCookie = cookies[SITE_GATE_COOKIE] || "";
+
+  const provided = (tokenFromQuery || tokenFromCookie).trim();
+  if (provided === WAREHOUSE_SITE_TOKEN) {
+    // Token to'g'ri — agar URL dan kelgan bo'lsa, cookie o'rnat
+    const setCookie = tokenFromQuery
+      ? `${SITE_GATE_COOKIE}=${WAREHOUSE_SITE_TOKEN}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`
+      : null;
+    return { allowed: true, setCookie };
+  }
+
+  // Token noto'g'ri yoki yo'q — 403 sahifasi ko'rsat
+  const body = `<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>Ruxsat yo'q</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f5f5;}div{text-align:center;padding:40px;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);}h1{color:#c0392b;}p{color:#555;}</style></head>
+<body><div><h1>🔒 Kirish taqiqlangan</h1><p>Bu sahifaga faqat maxsus havola orqali kirish mumkin.<br>Adminga murojaat qiling.</p></div></body></html>`;
+  res.writeHead(403, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
+  res.end(body);
+  return { allowed: false };
 }
 
 function hasWarehouseRouteAccess(req, u) {
@@ -1534,6 +1586,13 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   if ((u.pathname === "/" || u.pathname === "/warehouse" || u.pathname === "/warehouse/") && req.method === "GET") {
     redirectTo(res, `/warehouse/admin${u.search}`);
     return;
+  }
+
+  // Site-wide gate tekshiruvi
+  const siteGate = checkSiteGate(req, res, u);
+  if (!siteGate.allowed) return;
+  if (siteGate.setCookie) {
+    res.setHeader("Set-Cookie", siteGate.setCookie);
   }
 
   if (req.method === "GET" && !hasWarehouseRouteAccess(req, u)) {
