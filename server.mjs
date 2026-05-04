@@ -578,6 +578,20 @@ function parseCookies(req) {
 const SITE_GATE_COOKIE = "warehouse-site";
 const SITE_GATE_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 kun
 
+function siteGateCookieValue() {
+  const base =
+    WAREHOUSE_SITE_TOKEN ||
+    process.env.WAREHOUSE_ADMIN_PASSWORD?.trim() ||
+    process.env.WAREHOUSE_ADMIN_USERNAME?.trim() ||
+    "warehouse";
+  return crypto.createHash("sha256").update(`${base}|warehouse-gate|v1`).digest("hex");
+}
+
+function isGateAuthenticatedByCookie(req) {
+  const cookies = parseCookies(req);
+  return cookies[SITE_GATE_COOKIE] === siteGateCookieValue();
+}
+
 function checkSiteGate(req, res, u) {
   if (!WAREHOUSE_SITE_TOKEN) return { allowed: true };
   // API, healthz, SW, manifest, rasm — tekshirilmaydi
@@ -591,17 +605,8 @@ function checkSiteGate(req, res, u) {
     return { allowed: true };
   }
 
-  // Tokenni URL dan yoki cookie dan ol
-  const tokenFromQuery = u.searchParams.get("access") || "";
-  const cookies = parseCookies(req);
-  const tokenFromCookie = cookies[SITE_GATE_COOKIE] || "";
-
-  const provided = (tokenFromQuery || tokenFromCookie).trim();
-  if (provided === WAREHOUSE_SITE_TOKEN) {
-    const setCookie = tokenFromQuery
-      ? `${SITE_GATE_COOKIE}=${WAREHOUSE_SITE_TOKEN}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`
-      : null;
-    return { allowed: true, setCookie };
+  if (isGateAuthenticatedByCookie(req)) {
+    return { allowed: true };
   }
 
   // Login qilinmagan bo'lsa, har doim registration sahifasiga yo'naltir
@@ -618,14 +623,19 @@ function checkSiteGate(req, res, u) {
 <style>
   *{box-sizing:border-box}body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f0f0f0;}
   .card{background:#fff;border-radius:18px;box-shadow:0 4px 28px rgba(0,0,0,.12);padding:30px;width:min(90vw,360px)}
+  h1{margin:0 0 14px;font-size:20px;text-align:center}
+  p{margin:0 0 14px;color:#666;text-align:center;font-size:14px}
   input{width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;font-size:16px;margin-bottom:12px;outline:none}
   button{width:100%;padding:12px;background:#5b8dea;color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer;font-weight:600}
   .err{color:#c0392b;font-size:13px;margin-bottom:10px;text-align:center}
 </style></head>
 <body><div class="card">
+  <h1>Кириш</h1>
+  <p>Сизга берилган логин ва паролни киритинг</p>
   ${showError ? '<div class="err">Parol noto\'g\'ri</div>' : ''}
   <form method="POST" action="/warehouse-register">
-    <input type="password" name="password" placeholder="Parol" autofocus autocomplete="current-password">
+    <input type="text" name="username" placeholder="Login" autofocus autocomplete="username">
+    <input type="password" name="password" placeholder="Parol" autocomplete="current-password">
     <button type="submit">Kirish</button>
   </form>
 </div></body></html>`;
@@ -1615,28 +1625,28 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
 
-  // Maxsus URL orqali kirish: http://server/19750104Abdumutalib
-  if (WAREHOUSE_SITE_TOKEN && u.pathname === `/${WAREHOUSE_SITE_TOKEN}` && req.method === "GET") {
-    res.writeHead(302, {
-      Location: "/warehouse/admin",
-      "Set-Cookie": `${SITE_GATE_COOKIE}=${WAREHOUSE_SITE_TOKEN}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
-      "Cache-Control": "no-store",
-    });
-    res.end();
-    return;
-  }
-
   // Parol bilan kirish (form POST)
   if ((u.pathname === "/warehouse-register" || u.pathname === "/warehouse-login") && req.method === "POST") {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const body = Buffer.concat(chunks).toString("utf8");
     const params = new URLSearchParams(body);
+    const username = (params.get("username") || "").trim();
     const password = (params.get("password") || "").trim();
-    if (WAREHOUSE_SITE_TOKEN && password === WAREHOUSE_SITE_TOKEN) {
+    const expectedUser = process.env.WAREHOUSE_ADMIN_USERNAME?.trim() || "";
+    const expectedPassword = process.env.WAREHOUSE_ADMIN_PASSWORD?.trim() || "";
+    let accepted = false;
+    if (username && password && expectedUser && expectedPassword && username === expectedUser && password === expectedPassword) {
+      accepted = true;
+    } else if (username && password) {
+      const state = loadWarehouse();
+      accepted = Boolean(authenticateStaffAccount(state, username, password, { roles: [], permission: null }));
+    }
+
+    if (accepted) {
       res.writeHead(302, {
         Location: "/warehouse/admin",
-        "Set-Cookie": `${SITE_GATE_COOKIE}=${WAREHOUSE_SITE_TOKEN}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
+        "Set-Cookie": `${SITE_GATE_COOKIE}=${siteGateCookieValue()}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
         "Cache-Control": "no-store",
       });
       res.end();
