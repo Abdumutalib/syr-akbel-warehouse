@@ -610,6 +610,7 @@ function parseCookies(req) {
 }
 
 const SITE_GATE_COOKIE = "warehouse-site";
+const STAFF_LINK_COOKIE = "warehouse-staff-link";
 const SITE_GATE_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 kun
 
 function siteGateCookieValue() {
@@ -624,6 +625,52 @@ function siteGateCookieValue() {
 function isGateAuthenticatedByCookie(req) {
   const cookies = parseCookies(req);
   return cookies[SITE_GATE_COOKIE] === siteGateCookieValue();
+}
+
+function getStaffLinkTokenFromRequest(req, u) {
+  const fromQuery = String(u.searchParams.get("access") || "").trim();
+  const cookies = parseCookies(req);
+  const fromCookie = String(cookies[STAFF_LINK_COOKIE] || "").trim();
+  return {
+    fromQuery,
+    fromCookie,
+    token: fromQuery || fromCookie,
+  };
+}
+
+function routePermissionsForStaffLink(pathname) {
+  const direct = requiredWarehouseRoutePermissions(pathname);
+  if (Array.isArray(direct) && direct.length) {
+    return direct;
+  }
+  if (pathname === "/warehouse/seller/sale") {
+    return ["seller"];
+  }
+  return null;
+}
+
+function authenticateStaffLinkForRoute(req, u) {
+  const routePermissions = routePermissionsForStaffLink(u.pathname);
+  if (!routePermissions) {
+    return { ok: false, reason: "no-route-permission" };
+  }
+  const tokenInfo = getStaffLinkTokenFromRequest(req, u);
+  if (!tokenInfo.token) {
+    return { ok: false, reason: "no-token" };
+  }
+  const state = loadWarehouse();
+  for (const permission of routePermissions) {
+    const operator = authenticateStaffAccessToken(state, tokenInfo.token, permission);
+    if (operator) {
+      return {
+        ok: true,
+        token: tokenInfo.token,
+        fromQuery: Boolean(tokenInfo.fromQuery),
+        cookieToken: tokenInfo.fromCookie,
+      };
+    }
+  }
+  return { ok: false, reason: "invalid-token" };
 }
 
 function checkSiteGate(req, res, u) {
@@ -643,10 +690,29 @@ function checkSiteGate(req, res, u) {
     return { allowed: true };
   }
 
+  const staffLinkAuth = authenticateStaffLinkForRoute(req, u);
+  if (staffLinkAuth.ok) {
+    const shouldSetCookie =
+      staffLinkAuth.fromQuery || !staffLinkAuth.cookieToken || staffLinkAuth.cookieToken !== staffLinkAuth.token;
+    return {
+      allowed: true,
+      setStaffCookie: shouldSetCookie
+        ? `${STAFF_LINK_COOKIE}=${staffLinkAuth.token}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`
+        : null,
+    };
+  }
+
   // Login qilinmagan bo'lsa, har doim registration sahifasiga yo'naltir
   const destination = "/warehouse-register";
   if (u.pathname !== destination) {
-    res.writeHead(302, { Location: destination, "Cache-Control": "no-store" });
+    const hasStaffToken = Boolean(getStaffLinkTokenFromRequest(req, u).token);
+    const redirectLocation = hasStaffToken ? `${destination}?error=link_revoked` : destination;
+    const clearStaffCookie = `${STAFF_LINK_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`;
+    res.writeHead(302, {
+      Location: redirectLocation,
+      "Cache-Control": "no-store",
+      "Set-Cookie": clearStaffCookie,
+    });
     res.end();
     return { allowed: false };
   }
@@ -654,7 +720,11 @@ function checkSiteGate(req, res, u) {
   const showError = u.searchParams.get("login_error") === "1";
   const errorCode = (u.searchParams.get("error") || "").trim();
   const errorText =
-    errorCode === "bad_pin"
+    errorCode === "link_revoked"
+      ? "Ruxsat havolasi bekor qilingan"
+      : errorCode === "link_required"
+      ? "Xodim kirishi uchun sizga berilgan havoladan foydalaning"
+      : errorCode === "bad_pin"
       ? "PIN noto'g'ri"
       : errorCode === "pin_required"
       ? "PIN kiriting (4-8 raqam)"
@@ -1742,8 +1812,11 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   // Site-wide gate tekshiruvi
   const siteGate = checkSiteGate(req, res, u);
   if (!siteGate.allowed) return;
-  if (siteGate.setCookie) {
-    res.setHeader("Set-Cookie", siteGate.setCookie);
+  const cookiesToSet = [];
+  if (siteGate.setCookie) cookiesToSet.push(siteGate.setCookie);
+  if (siteGate.setStaffCookie) cookiesToSet.push(siteGate.setStaffCookie);
+  if (cookiesToSet.length) {
+    res.setHeader("Set-Cookie", cookiesToSet);
   }
 
   if (req.method === "GET" && !hasWarehouseRouteAccess(req, u)) {
