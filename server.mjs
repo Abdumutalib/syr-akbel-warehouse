@@ -583,6 +583,8 @@ function checkSiteGate(req, res, u) {
   // API, healthz, SW, manifest, rasm — tekshirilmaydi
   const skipPrefixes = ["/warehouse/api/", "/api/", "/warehouse/sw.js", "/warehouse/manifest.json", "/warehouse/assets/", "/warehouse/uploads/", "/warehouse-top-nav.js", "/favicon", "/icon-"];
   if (skipPrefixes.some((p) => u.pathname.startsWith(p))) return { allowed: true };
+  // Login form POST endpointi — gate dan exempt
+  if (u.pathname === "/warehouse-login") return { allowed: true };
 
   // Tokenni URL dan yoki cookie dan ol
   const tokenFromQuery = u.searchParams.get("access") || "";
@@ -591,22 +593,37 @@ function checkSiteGate(req, res, u) {
 
   const provided = (tokenFromQuery || tokenFromCookie).trim();
   if (provided === WAREHOUSE_SITE_TOKEN) {
-    // Token to'g'ri — agar URL dan kelgan bo'lsa, cookie o'rnat
     const setCookie = tokenFromQuery
       ? `${SITE_GATE_COOKIE}=${WAREHOUSE_SITE_TOKEN}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`
       : null;
     return { allowed: true, setCookie };
   }
 
-  // Token noto'g'ri yoki yo'q — 403 sahifasi ko'rsat
-  const body = `<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>Ruxsat yo'q</title>
+  // Token noto'g'ri yoki yo'q — parol kiritish formasi ko'rsat
+  const redirectBack = encodeURIComponent(u.pathname + (u.search || ""));
+  const showError = u.searchParams.get("login_error") === "1";
+  const body = `<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>Kirish</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f5f5;}div{text-align:center;padding:40px;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);}h1{color:#c0392b;}p{color:#555;}</style></head>
-<body><div><h1>🔒 Kirish taqiqlangan</h1><p>Bu sahifaga faqat maxsus havola orqali kirish mumkin.<br>Adminga murojaat qiling.</p></div></body></html>`;
-  res.writeHead(403, {
-    "Content-Type": "text/html; charset=utf-8",
-    "Cache-Control": "no-store",
-  });
+<style>
+  *{box-sizing:border-box}body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f0f0f0;}
+  .card{background:#fff;border-radius:18px;box-shadow:0 4px 28px rgba(0,0,0,.12);padding:36px 32px;width:min(90vw,380px);text-align:center;}
+  h1{margin:0 0 6px;font-size:22px}p{color:#666;margin:0 0 22px;font-size:14px}
+  input{width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;font-size:16px;margin-bottom:14px;outline:none;}
+  input:focus{border-color:#5b8dea}
+  button{width:100%;padding:12px;background:#5b8dea;color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer;font-weight:600}
+  button:hover{background:#4a7cd9}.err{color:#c0392b;font-size:13px;margin-bottom:12px}
+</style></head>
+<body><div class="card">
+  <h1>🔐 Сыр АКБЕЛ</h1>
+  <p>Davom etish uchun parolni kiriting</p>
+  ${showError ? '<div class="err">❌ Parol noto\'g\'ri. Qayta urinib ko\'ring.</div>' : ''}
+  <form method="POST" action="/warehouse-login">
+    <input type="hidden" name="redirect" value="${u.pathname}${u.search ? u.search.replace(/[&?]login_error=1/, '') : ''}">
+    <input type="password" name="password" placeholder="Parolni kiriting" autofocus autocomplete="current-password">
+    <button type="submit">Kirish</button>
+  </form>
+</div></body></html>`;
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(body);
   return { allowed: false };
 }
@@ -1585,6 +1602,31 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
 
   if ((u.pathname === "/" || u.pathname === "/warehouse" || u.pathname === "/warehouse/") && req.method === "GET") {
     redirectTo(res, `/warehouse/admin${u.search}`);
+    return;
+  }
+
+  // Parol bilan kirish (form POST)
+  if (u.pathname === "/warehouse-login" && req.method === "POST") {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const body = Buffer.concat(chunks).toString("utf8");
+    const params = new URLSearchParams(body);
+    const password = (params.get("password") || "").trim();
+    const redirect = params.get("redirect") || "/warehouse/admin";
+    const safePath = redirect.startsWith("/") ? redirect : "/warehouse/admin";
+    if (WAREHOUSE_SITE_TOKEN && password === WAREHOUSE_SITE_TOKEN) {
+      res.writeHead(302, {
+        Location: safePath,
+        "Set-Cookie": `${SITE_GATE_COOKIE}=${WAREHOUSE_SITE_TOKEN}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
+        "Cache-Control": "no-store",
+      });
+      res.end();
+    } else {
+      // Noto'g'ri parol — formaga qayt
+      const failPath = safePath.includes("?") ? `${safePath}&login_error=1` : `${safePath}?login_error=1`;
+      res.writeHead(302, { Location: failPath, "Cache-Control": "no-store" });
+      res.end();
+    }
     return;
   }
 
