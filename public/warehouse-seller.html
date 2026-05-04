@@ -438,8 +438,6 @@
       pinEl,
       setStatus,
       sessionKey: 'warehouse-seller-session',
-      initialUsername: localStorage.getItem('warehouse-seller-username') || localStorage.getItem('warehouse-admin-username') || '',
-      initialPassword: localStorage.getItem('warehouse-seller-password') || localStorage.getItem('warehouse-admin-password') || '',
       lockedMessage: 'PIN saqlangan. PIN bilan kiring yoki username/passwordni qayta yozing.',
       credentialsMessage: 'Sotuvchi yoki admin username va password kiriting.',
     });
@@ -523,13 +521,12 @@
       if (accessToken) {
         return null;
       }
-      const username = usernameEl.value.trim();
-      const password = passwordEl.value;
+      const credentials = pinAuth.getAuthCredentials ? pinAuth.getAuthCredentials() : null;
+      const username = credentials && credentials.username ? credentials.username.trim() : usernameEl.value.trim();
+      const password = credentials && credentials.password ? credentials.password : passwordEl.value;
       if (!username || !password) {
         throw new Error('Sotuvchi yoki admin username va password kiriting.');
       }
-      localStorage.setItem('warehouse-seller-username', username);
-      pinAuth.syncPasswordStorage(password, 'warehouse-seller-password');
       return 'Basic ' + btoa(username + ':' + password);
     }
 

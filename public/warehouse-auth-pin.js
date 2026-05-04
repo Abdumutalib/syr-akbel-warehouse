@@ -4,6 +4,12 @@
   const OPERATOR_PROFILE_KEY = 'warehouse-operator-profile-v1';
   const WAREHOUSE_STORAGE_PREFIX = 'warehouse-';
   const STAFF_PERMISSION_KEYS = ['seller', 'customers', 'cash', 'transfer'];
+  const LEGACY_USERNAME_KEYS = [
+    'warehouse-admin-username',
+    'warehouse-seller-username',
+    'warehouse-accountant-username',
+    'warehouse-staff-username',
+  ];
   const LEGACY_PASSWORD_KEYS = [
     'warehouse-admin-password',
     'warehouse-seller-password',
@@ -297,6 +303,10 @@
     LEGACY_PASSWORD_KEYS.forEach((key) => localStorage.removeItem(key));
   }
 
+  function clearLegacyUsernames() {
+    LEGACY_USERNAME_KEYS.forEach((key) => localStorage.removeItem(key));
+  }
+
   function normalizePin(pin) {
     return String(pin || '').trim();
   }
@@ -391,15 +401,11 @@
     }
 
     const sessionCredentials = readSessionCredentials();
-    const sessionUsername = sessionCredentials && sessionCredentials.username ? sessionCredentials.username : '';
-    const sessionPassword = sessionCredentials && sessionCredentials.password ? sessionCredentials.password : '';
     const vaultStore = readVaultStore();
-    const initialProfile = resolveProfileForCurrentUser(
-      vaultStore,
-      sessionUsername || initialUsername || vaultStore.lastUsername
-    );
-    usernameEl.value = sessionUsername || (initialProfile && initialProfile.username) || initialUsername || vaultStore.lastUsername || '';
-    passwordEl.value = sessionPassword || (initialProfile ? '' : (initialPassword || ''));
+    clearLegacyUsernames();
+    clearLegacyPasswords();
+    usernameEl.value = initialUsername || '';
+    passwordEl.value = initialPassword || '';
 
     if (hasProfiles(vaultStore) && typeof setStatus === 'function') {
       setStatus(lockedMessage);
@@ -453,6 +459,19 @@
       return Boolean(session && session.username && session.password);
     }
 
+    function getAuthCredentials() {
+      const session = readSessionCredentials();
+      if (session && session.username && session.password) {
+        return session;
+      }
+      const username = usernameEl.value.trim();
+      const password = passwordEl.value;
+      if (!username || !password) {
+        return null;
+      }
+      return { username, password };
+    }
+
     async function unlockWithPin() {
       ensureSecurePinStorage();
       const pin = ensurePin(normalizePin(pinEl ? pinEl.value : ''));
@@ -501,16 +520,11 @@
     }
 
     function syncPasswordStorage(password, storageKey) {
-      const store = readVaultStore();
-      if (getProfileForUsername(store, usernameEl.value.trim())) {
-        clearLegacyPasswords();
-        if (storageKey) {
-          localStorage.removeItem(storageKey);
-        }
-        return;
-      }
+      void password;
+      clearLegacyUsernames();
+      clearLegacyPasswords();
       if (storageKey) {
-        localStorage.setItem(storageKey, password);
+        localStorage.removeItem(storageKey);
       }
     }
 
@@ -524,6 +538,7 @@
       },
       hasPin,
       hasActiveSession,
+      getAuthCredentials,
       markSessionActive,
       clearSession,
       rememberFromCredentials,
