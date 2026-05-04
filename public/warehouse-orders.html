@@ -596,12 +596,20 @@
       }
     }
 
-    document.getElementById('editOrderModal').addEventListener('click', (e) => {
-      if (e.target === document.getElementById('editOrderModal')) closeEditOrderModal();
-    });
-    document.getElementById('closeEditOrderModal').addEventListener('click', closeEditOrderModal);
-    document.getElementById('cancelEditOrder').addEventListener('click', closeEditOrderModal);
-    document.getElementById('saveEditOrder').addEventListener('click', async () => {
+    function bindEditOrderModalEvents() {
+      const editOrderModalEl = document.getElementById('editOrderModal');
+      const closeEditOrderModalEl = document.getElementById('closeEditOrderModal');
+      const cancelEditOrderEl = document.getElementById('cancelEditOrder');
+      const saveEditOrderEl = document.getElementById('saveEditOrder');
+      if (!editOrderModalEl || !closeEditOrderModalEl || !cancelEditOrderEl || !saveEditOrderEl) {
+        return;
+      }
+      editOrderModalEl.addEventListener('click', (e) => {
+        if (e.target === editOrderModalEl) closeEditOrderModal();
+      });
+      closeEditOrderModalEl.addEventListener('click', closeEditOrderModal);
+      cancelEditOrderEl.addEventListener('click', closeEditOrderModal);
+      saveEditOrderEl.addEventListener('click', async () => {
       if (!editOrderIdCurrent) return;
       const note = document.getElementById('editOrderNote').value.trim();
       if (!note) {
@@ -626,7 +634,14 @@
       } catch (err) {
         document.getElementById('editOrderStatus').textContent = err.message;
       }
-    });
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bindEditOrderModalEvents, { once: true });
+    } else {
+      bindEditOrderModalEvents();
+    }
     authUi.render();
     staffPicker.load().catch(() => {});
     if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
