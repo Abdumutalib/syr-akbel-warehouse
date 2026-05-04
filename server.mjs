@@ -749,29 +749,45 @@ function checkSiteGate(req, res, u) {
   <h1>Кириш</h1>
   <p>${pinEnabled ? "Davom etish uchun PIN kodni kiriting" : "Birinchi kirishda admin login/parol va yangi PIN kiriting"}</p>
   ${errorText ? `<div class="err">${errorText}</div>` : ""}
-  <form method="POST" action="/warehouse-register" autocomplete="off" id="gateForm">
-    ${pinEnabled
-      ? '<input type="password" id="pinInput" name="pin" inputmode="numeric" maxlength="8" placeholder="PIN (4-8 raqam)" readonly autocomplete="off">'
-      : '<input type="text" id="usernameInput" name="username" placeholder="Admin login" readonly autocomplete="off">\n    <input type="password" id="passwordInput" name="password" placeholder="Admin parol" readonly autocomplete="off">\n    <input type="password" id="pinInput" name="pin" inputmode="numeric" maxlength="8" placeholder="Yangi PIN (4-8 raqam)" readonly autocomplete="off">'}
+  <form method="POST" action="/warehouse-register" autocomplete="new-password" id="gateForm">
+    <div id="inputSlot"></div>
     <button type="submit">Kirish</button>
   </form>
 </div>
 <script>
 (function(){
-  // Remove readonly on focus so user can type, but browser won't autofill readonly fields
-  document.querySelectorAll('#gateForm input').forEach(function(el){
-    el.addEventListener('focus', function(){ this.removeAttribute('readonly'); });
-    el.addEventListener('blur', function(){ if(!this.value) this.setAttribute('readonly',''); });
-  });
-  // Clear any autofilled values on load
-  setTimeout(function(){
-    document.querySelectorAll('#gateForm input').forEach(function(el){ 
-      if(el.value){ el.value=''; }
-    });
-  }, 100);
-  // Auto focus first input
-  var first = document.querySelector('#gateForm input');
-  if(first){ setTimeout(function(){ first.focus(); }, 150); }
+  var pinMode = ${pinEnabled ? 'true' : 'false'};
+  var slot = document.getElementById('inputSlot');
+  var style = 'width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;font-size:16px;margin-bottom:12px;outline:none;box-sizing:border-box;';
+
+  function makeInput(type, name, placeholder, inputmode, maxlength) {
+    var el = document.createElement('input');
+    el.type = type;
+    el.name = name;
+    el.placeholder = placeholder;
+    el.setAttribute('autocomplete', 'off');
+    el.setAttribute('style', style);
+    if (inputmode) el.setAttribute('inputmode', inputmode);
+    if (maxlength) el.setAttribute('maxlength', maxlength);
+    return el;
+  }
+
+  if (pinMode) {
+    var pin = makeInput('tel', 'pin', 'PIN (4-8 raqam)', 'numeric', '8');
+    slot.appendChild(pin);
+    setTimeout(function(){ pin.focus(); }, 50);
+  } else {
+    var user = makeInput('text', 'username', 'Admin login', '', '');
+    var pass = makeInput('text', 'password', 'Admin parol', '', '');
+    var pinEl = makeInput('tel', 'pin', 'Yangi PIN (4-8 raqam)', 'numeric', '8');
+    // password shown as text initially to defeat autofill, switch on focus
+    pass.addEventListener('focus', function(){ this.type = 'password'; });
+    pinEl.addEventListener('focus', function(){ this.type = 'password'; });
+    slot.appendChild(user);
+    slot.appendChild(pass);
+    slot.appendChild(pinEl);
+    setTimeout(function(){ user.focus(); }, 50);
+  }
 })();
 </script>
 </body></html>`;
