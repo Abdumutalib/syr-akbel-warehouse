@@ -583,8 +583,13 @@ function checkSiteGate(req, res, u) {
   // API, healthz, SW, manifest, rasm — tekshirilmaydi
   const skipPrefixes = ["/warehouse/api/", "/api/", "/warehouse/sw.js", "/warehouse/manifest.json", "/warehouse/assets/", "/warehouse/uploads/", "/warehouse-top-nav.js", "/favicon", "/icon-"];
   if (skipPrefixes.some((p) => u.pathname.startsWith(p))) return { allowed: true };
-  // Login form POST endpointi — gate dan exempt
-  if (u.pathname === "/warehouse-login") return { allowed: true };
+  // Login endpointi POST bo'lsa — gate dan exempt
+  if (
+    req.method === "POST" &&
+    (u.pathname === "/warehouse-register" || u.pathname === "/warehouse-login")
+  ) {
+    return { allowed: true };
+  }
 
   // Tokenni URL dan yoki cookie dan ol
   const tokenFromQuery = u.searchParams.get("access") || "";
@@ -599,27 +604,28 @@ function checkSiteGate(req, res, u) {
     return { allowed: true, setCookie };
   }
 
-  // Token noto'g'ri yoki yo'q — parol kiritish formasi ko'rsat
-  const redirectBack = encodeURIComponent(u.pathname + (u.search || ""));
+  // Login qilinmagan bo'lsa, har doim registration sahifasiga yo'naltir
+  const destination = "/warehouse-register";
+  if (u.pathname !== destination) {
+    res.writeHead(302, { Location: destination, "Cache-Control": "no-store" });
+    res.end();
+    return { allowed: false };
+  }
+
   const showError = u.searchParams.get("login_error") === "1";
-  const body = `<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>Kirish</title>
+  const body = `<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>Registration</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   *{box-sizing:border-box}body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f0f0f0;}
-  .card{background:#fff;border-radius:18px;box-shadow:0 4px 28px rgba(0,0,0,.12);padding:36px 32px;width:min(90vw,380px);text-align:center;}
-  h1{margin:0 0 6px;font-size:22px}p{color:#666;margin:0 0 22px;font-size:14px}
-  input{width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;font-size:16px;margin-bottom:14px;outline:none;}
-  input:focus{border-color:#5b8dea}
+  .card{background:#fff;border-radius:18px;box-shadow:0 4px 28px rgba(0,0,0,.12);padding:30px;width:min(90vw,360px)}
+  input{width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;font-size:16px;margin-bottom:12px;outline:none}
   button{width:100%;padding:12px;background:#5b8dea;color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer;font-weight:600}
-  button:hover{background:#4a7cd9}.err{color:#c0392b;font-size:13px;margin-bottom:12px}
+  .err{color:#c0392b;font-size:13px;margin-bottom:10px;text-align:center}
 </style></head>
 <body><div class="card">
-  <h1>🔐 Сыр АКБЕЛ</h1>
-  <p>Davom etish uchun parolni kiriting</p>
-  ${showError ? '<div class="err">❌ Parol noto\'g\'ri. Qayta urinib ko\'ring.</div>' : ''}
-  <form method="POST" action="/warehouse-login">
-    <input type="hidden" name="redirect" value="${u.pathname}${u.search ? u.search.replace(/[&?]login_error=1/, '') : ''}">
-    <input type="password" name="password" placeholder="Parolni kiriting" autofocus autocomplete="current-password">
+  ${showError ? '<div class="err">Parol noto\'g\'ri</div>' : ''}
+  <form method="POST" action="/warehouse-register">
+    <input type="password" name="password" placeholder="Parol" autofocus autocomplete="current-password">
     <button type="submit">Kirish</button>
   </form>
 </div></body></html>`;
@@ -1601,7 +1607,11 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   }
 
   if ((u.pathname === "/" || u.pathname === "/warehouse" || u.pathname === "/warehouse/") && req.method === "GET") {
-    redirectTo(res, `/warehouse/admin${u.search}`);
+    if (WAREHOUSE_SITE_TOKEN) {
+      redirectTo(res, "/warehouse-register");
+    } else {
+      redirectTo(res, `/warehouse/admin${u.search}`);
+    }
     return;
   }
 
@@ -1617,25 +1627,21 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   }
 
   // Parol bilan kirish (form POST)
-  if (u.pathname === "/warehouse-login" && req.method === "POST") {
+  if ((u.pathname === "/warehouse-register" || u.pathname === "/warehouse-login") && req.method === "POST") {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const body = Buffer.concat(chunks).toString("utf8");
     const params = new URLSearchParams(body);
     const password = (params.get("password") || "").trim();
-    const redirect = params.get("redirect") || "/warehouse/admin";
-    const safePath = redirect.startsWith("/") ? redirect : "/warehouse/admin";
     if (WAREHOUSE_SITE_TOKEN && password === WAREHOUSE_SITE_TOKEN) {
       res.writeHead(302, {
-        Location: safePath,
+        Location: "/warehouse/admin",
         "Set-Cookie": `${SITE_GATE_COOKIE}=${WAREHOUSE_SITE_TOKEN}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
         "Cache-Control": "no-store",
       });
       res.end();
     } else {
-      // Noto'g'ri parol — formaga qayt
-      const failPath = safePath.includes("?") ? `${safePath}&login_error=1` : `${safePath}?login_error=1`;
-      res.writeHead(302, { Location: failPath, "Cache-Control": "no-store" });
+      res.writeHead(302, { Location: "/warehouse-register?login_error=1", "Cache-Control": "no-store" });
       res.end();
     }
     return;
