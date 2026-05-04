@@ -97,6 +97,21 @@
     .order-card strong { display: block; font-size: 22px; margin-bottom: 6px; }
     .order-meta { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0; color: var(--muted); font-size: 14px; }
     .order-note { white-space: pre-wrap; line-height: 1.5; }
+    .order-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .order-actions button { padding: 7px 14px; font-size: 13px; border-radius: 12px; }
+    .modal-backdrop {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5); z-index: 999;
+    }
+    .modal-backdrop.active { display: flex; align-items: center; justify-content: center; }
+    .modal-content {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 22px;
+      box-shadow: 0 18px 36px rgba(53,34,15,0.12); padding: 28px;
+      width: min(90vw, 580px); max-height: 90vh; overflow-y: auto;
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+    .modal-header h2 { margin: 0; }
+    .modal-close { background: transparent; border: 0; font-size: 24px; cursor: pointer; }
     @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -380,18 +395,28 @@
         return;
       }
       orderListEl.innerHTML = safeOrders.map((order) => `
-        <article class="order-card">
-          <strong>${order.customerName || order.organizationName || (order.taxId ? `INN: ${order.taxId}` : 'Zakaz')}</strong>
+        <article class="order-card" data-oid="${order.id}">
+          <strong>${escapeHtml(order.customerName || order.organizationName || (order.taxId ? `INN: ${order.taxId}` : 'Zakaz'))}</strong>
           <div class="order-meta">
-            <span>Tashkilot: ${order.organizationName || '-'}</span>
-            <span>INN: ${order.taxId || '-'}</span>
-            <span>Telefon: ${order.phone || '-'}</span>
-            <span>Yozgan: ${order.operatorFullName || order.operatorUsername || 'Noma\'lum'}</span>
+            <span>Tashkilot: ${escapeHtml(order.organizationName || '-')}</span>
+            <span>INN: ${escapeHtml(order.taxId || '-')}</span>
+            <span>Telefon: ${escapeHtml(order.phone || '-')}</span>
+            <span>Yozgan: ${escapeHtml(order.operatorFullName || order.operatorUsername || 'Noma\'lum')}</span>
             <span>Vaqti: ${formatDateTime(order.createdAt)}</span>
           </div>
-          <div class="order-note">${order.note}</div>
+          <div class="order-note">${escapeHtml(order.note)}</div>
+          <div class="order-actions">
+            <button class="secondary order-edit-btn" data-oid="${order.id}" type="button">Tahrirlash</button>
+            <button class="secondary order-delete-btn" data-oid="${order.id}" data-name="${escapeHtml(order.customerName || 'zakaz')}" type="button">O'chirish</button>
+          </div>
         </article>
       `).join('');
+      orderListEl.querySelectorAll('.order-edit-btn').forEach((btn) => {
+        btn.addEventListener('click', () => openEditOrderModal(Number(btn.dataset.oid)));
+      });
+      orderListEl.querySelectorAll('.order-delete-btn').forEach((btn) => {
+        btn.addEventListener('click', () => confirmDeleteOrder(Number(btn.dataset.oid), btn.dataset.name));
+      });
     }
 
     async function loadOrders() {
@@ -533,6 +558,71 @@
 
     syncOrderKgTotal();
 
+    // ---- Edit / Delete order logic ----
+    let editOrderIdCurrent = null;
+
+    function openEditOrderModal(orderId) {
+      editOrderIdCurrent = orderId;
+      // Find existing order data from rendered cards
+      const card = orderListEl.querySelector(`[data-oid="${orderId}"]`);
+      document.getElementById('editOrderCustomerName').value = card ? card.querySelector('strong').textContent : '';
+      const metaSpans = card ? Array.from(card.querySelectorAll('.order-meta span')) : [];
+      const get = (prefix) => (metaSpans.find((s) => s.textContent.startsWith(prefix))?.textContent.replace(prefix, '').trim() || '');
+      document.getElementById('editOrderOrganizationName').value = get('Tashkilot: ') === '-' ? '' : get('Tashkilot: ');
+      document.getElementById('editOrderTaxId').value = get('INN: ') === '-' ? '' : get('INN: ');
+      document.getElementById('editOrderPhone').value = get('Telefon: ') === '-' ? '' : get('Telefon: ');
+      document.getElementById('editOrderNote').value = card ? card.querySelector('.order-note').textContent : '';
+      document.getElementById('editOrderStatus').textContent = '';
+      document.getElementById('editOrderModal').classList.add('active');
+    }
+
+    function closeEditOrderModal() {
+      document.getElementById('editOrderModal').classList.remove('active');
+      editOrderIdCurrent = null;
+    }
+
+    async function confirmDeleteOrder(orderId, name) {
+      if (!confirm(`"${name}" zakazi o'chirilsinmi?`)) return;
+      try {
+        await apiFetch(`/api/warehouse/orders/${orderId}`, { method: 'DELETE' });
+        setStatus('Zakaz o\'chirildi.');
+        await loadOrders();
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    }
+
+    document.getElementById('editOrderModal').addEventListener('click', (e) => {
+      if (e.target === document.getElementById('editOrderModal')) closeEditOrderModal();
+    });
+    document.getElementById('closeEditOrderModal').addEventListener('click', closeEditOrderModal);
+    document.getElementById('cancelEditOrder').addEventListener('click', closeEditOrderModal);
+    document.getElementById('saveEditOrder').addEventListener('click', async () => {
+      if (!editOrderIdCurrent) return;
+      const note = document.getElementById('editOrderNote').value.trim();
+      if (!note) {
+        document.getElementById('editOrderStatus').textContent = 'Zakaz matnini kiriting.';
+        return;
+      }
+      try {
+        await apiFetch(`/api/warehouse/orders/${editOrderIdCurrent}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customerName: document.getElementById('editOrderCustomerName').value.trim() || null,
+            organizationName: document.getElementById('editOrderOrganizationName').value.trim() || null,
+            taxId: document.getElementById('editOrderTaxId').value.trim() || null,
+            phone: document.getElementById('editOrderPhone').value.trim() || null,
+            note,
+          }),
+        });
+        closeEditOrderModal();
+        setStatus('Zakaz yangilandi.');
+        await loadOrders();
+      } catch (err) {
+        document.getElementById('editOrderStatus').textContent = err.message;
+      }
+    });
     authUi.render();
     staffPicker.load().catch(() => {});
     if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
@@ -549,6 +639,31 @@
       }
     }, 60000);
   </script>
+  <!-- Zakazni tahrirlash modali -->
+  <div id="editOrderModal" class="modal-backdrop">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Zakazni tahrirlash</h2>
+        <button class="modal-close" id="closeEditOrderModal" type="button">&times;</button>
+      </div>
+      <label for="editOrderCustomerName">Mijoz nomi</label>
+      <input id="editOrderCustomerName" list="orderCustomerNameOptions" placeholder="Masalan: Ali aka">
+      <label for="editOrderOrganizationName">Tashkilot nomi</label>
+      <input id="editOrderOrganizationName" placeholder="AKBEL SAVDO MCHJ">
+      <label for="editOrderTaxId">INN</label>
+      <input id="editOrderTaxId" placeholder="123456789">
+      <label for="editOrderPhone">Telefon</label>
+      <input id="editOrderPhone" placeholder="+99890...">
+      <label for="editOrderNote">Zakaz matni</label>
+      <textarea id="editOrderNote" style="min-height:100px"></textarea>
+      <div id="editOrderStatus" class="status error" style="min-height:20px"></div>
+      <div class="links" style="margin-top:10px">
+        <button id="saveEditOrder">Saqlash</button>
+        <button id="cancelEditOrder" class="secondary" type="button">Bekor qilish</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/warehouse-top-nav.js"></script>
 </body>
 </html>

@@ -15,6 +15,8 @@ import {
   createStaffAccessLink,
   createStaffAccount,
   createWarehouseOrder,
+  updateWarehouseOrder,
+  deleteWarehouseOrder,
   createPendingTransaction,
   deleteCustomer,
   deleteStaffAccount,
@@ -1491,6 +1493,8 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         storeWarehouseTransactionPhotos,
         updateStaffAccountPermissions,
         updateWarehousePricing,
+        updateWarehouseOrder,
+        deleteWarehouseOrder,
         upsertCustomer,
         recordTelegramMessage: async ({ telegramId, text, type }) => {
           await withWarehouseWrite((state) => {

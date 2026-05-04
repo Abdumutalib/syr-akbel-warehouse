@@ -51,6 +51,8 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     approveTransaction,
     updateStaffAccountPermissions,
     updateWarehousePricing,
+    updateWarehouseOrder,
+    deleteWarehouseOrder,
     upsertCustomer,
   } = deps;
 
@@ -516,6 +518,78 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       sendApiJson(res, 201, { ok: true, order });
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Zakazni saqlab bo'lmadi" });
+    }
+    return true;
+  }
+
+  const orderDetailMatch = apiPath.match(/^\/api\/warehouse\/orders\/(\d+)$/);
+  if (orderDetailMatch && req.method === "PUT") {
+    const operator = assertWarehouseOperator(req, res, {
+      allowAdmin: true,
+      realm: "warehouse-staff",
+      permission: "customers",
+      message: "Zakazni tahrirlash uchun ruxsat kerak",
+    });
+    if (!operator) {
+      return true;
+    }
+    const body = await readPostJson(req);
+    if (body === null) {
+      sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
+      return true;
+    }
+    try {
+      const orderId = Number(orderDetailMatch[1]);
+      const order = await writeWarehouse((state) => {
+        const existing = (state.orders || []).find((e) => e.id === orderId);
+        if (!existing) {
+          const err = new Error("Zakaz topilmadi");
+          err.statusCode = 404;
+          throw err;
+        }
+        if (!isAdminOperator(operator) && Number(existing.operatorId) !== Number(operator.id)) {
+          const err = new Error("Bu zakazni tahrirlash uchun ruxsat yo'q");
+          err.statusCode = 403;
+          throw err;
+        }
+        return updateWarehouseOrder(state, orderId, body, operator);
+      });
+      sendApiJson(res, 200, { ok: true, order });
+    } catch (e) {
+      sendApiJson(res, e.statusCode || 400, { error: e.message || "Zakazni yangilab bo'lmadi" });
+    }
+    return true;
+  }
+
+  if (orderDetailMatch && req.method === "DELETE") {
+    const operator = assertWarehouseOperator(req, res, {
+      allowAdmin: true,
+      realm: "warehouse-staff",
+      permission: "customers",
+      message: "Zakazni o'chirish uchun ruxsat kerak",
+    });
+    if (!operator) {
+      return true;
+    }
+    try {
+      const orderId = Number(orderDetailMatch[1]);
+      const result = await writeWarehouse((state) => {
+        const existing = (state.orders || []).find((e) => e.id === orderId);
+        if (!existing) {
+          const err = new Error("Zakaz topilmadi");
+          err.statusCode = 404;
+          throw err;
+        }
+        if (!isAdminOperator(operator) && Number(existing.operatorId) !== Number(operator.id)) {
+          const err = new Error("Bu zakazni o'chirish uchun ruxsat yo'q");
+          err.statusCode = 403;
+          throw err;
+        }
+        return deleteWarehouseOrder(state, orderId);
+      });
+      sendApiJson(res, 200, { ok: true, ...result });
+    } catch (e) {
+      sendApiJson(res, e.statusCode || 400, { error: e.message || "Zakazni o'chirib bo'lmadi" });
     }
     return true;
   }
