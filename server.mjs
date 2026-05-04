@@ -836,9 +836,6 @@ function checkSiteGate(req, res, u) {
 })();
 </script>
 </body></html>`;
-})();
-</script>
-</body></html>`;
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(body);
   return { allowed: false };
