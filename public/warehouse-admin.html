@@ -626,8 +626,9 @@
     const STAFF_PERMISSION_LABELS = {
       seller: "Sotuvchi sahifasi",
       customers: "Mijozlar sahifalari",
-      cash: "Naqd hisobot",
-      transfer: "O'tkazma hisobot",
+      cash: "Naqd hisobot (Admin naqd)",
+      transfer: "O'tkazma hisobot (Admin o'tkazma)",
+      admin_panel: "Admin panel kirishi",
     };
 
     function setStatus(message, isError = false) {
@@ -733,6 +734,7 @@
         customers: '/warehouse/customers',
         cash: '/warehouse/admin/cash',
         transfer: '/warehouse/admin/transfer',
+        admin_panel: '/warehouse/admin',
       };
       return `${location.origin}${pathMap[permission] || '/warehouse/customers'}?access=${encodeURIComponent(token)}`;
     }

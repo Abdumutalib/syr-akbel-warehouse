@@ -16,7 +16,10 @@
       label: "Admin panel",
       href: "/warehouse/admin",
       isVisible(profile) {
-        return !profile || profile.role === "admin";
+        // Фақат admin ёки admin_panel рухсати берилган ходим
+        if (!profile) return false;
+        if (profile.role === "admin") return true;
+        return hasPermission(profile, "admin_panel");
       },
       isActive(pathname) {
         return pathname === "/warehouse/admin";
@@ -26,6 +29,9 @@
       label: "Admin naqd",
       href: "/warehouse/admin/cash",
       isVisible(profile) {
+        // Фақат admin ёки cash рухсати берилган ходим
+        if (!profile) return false;
+        if (profile.role === "admin") return true;
         return hasPermission(profile, "cash");
       },
       isActive(pathname) {
@@ -36,6 +42,9 @@
       label: "Admin o'tkazma",
       href: "/warehouse/admin/transfer",
       isVisible(profile) {
+        // Фақат admin ёки transfer рухсати берилган ходим
+        if (!profile) return false;
+        if (profile.role === "admin") return true;
         return hasPermission(profile, "transfer");
       },
       isActive(pathname) {
@@ -46,6 +55,9 @@
       label: "Umumiy hisobot",
       href: "/warehouse/ledger",
       isVisible(profile) {
+        // Фақат admin ёки cash ва transfer иккаласи берилган ходим
+        if (!profile) return false;
+        if (profile.role === "admin") return true;
         return hasPermission(profile, ["cash", "transfer"]);
       },
       isActive(pathname) {
