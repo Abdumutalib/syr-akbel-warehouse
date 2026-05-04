@@ -728,10 +728,11 @@
       salePageShortcutsEl.remove();
       saleCardTitleEl.hidden = true;
       saleModeBannerEl.hidden = true;
+      // Нақд режим: фақат нақд майдони; ўтказма режим: фақат ўтказма майдони
       saleCashGroupEl.classList.toggle('hidden-field', transferMode);
-      saleTransferGroupEl.classList.remove('hidden-field');
+      saleTransferGroupEl.classList.toggle('hidden-field', !transferMode);
       saleCashLabelEl.textContent = 'Naqd to\'lov';
-      saleTransferLabelEl.textContent = transferMode ? "O'tkazma to'lov" : "Plastik to'lov";
+      saleTransferLabelEl.textContent = "O'tkazma to'lov";
       saleCashEl.placeholder = '0';
       saleTransferEl.placeholder = '0';
     }
@@ -1131,10 +1132,14 @@
       const balanceText = (value) => `${numberFormat(Math.abs(Number(value || 0)))} so'm ${balanceLabel(value)}`;
       const pricing = activeCustomerPricing(customer);
       document.getElementById('selectedCustomerDebt').innerHTML = customer
-        ? `Jami savdo: ${numberFormat(customer.totalSales)} so'm · Jami balans: <span class="${debtClass(customer.currentDebt)}">${balanceText(customer.currentDebt)}</span><br>Naqd balans: <span class="${debtClass(customer.cashDebt)}">${balanceText(customer.cashDebt || 0)}</span> · O'tkazma balans: <span class="${debtClass(customer.transferDebt)}">${balanceText(customer.transferDebt || 0)}</span>`
+        ? saleMode === 'transfer'
+          ? `Jami savdo: ${numberFormat(customer.totalSales)} so'm · O'tkazma balans: <span class="${debtClass(customer.transferDebt)}">${balanceText(customer.transferDebt || 0)}</span>`
+          : `Jami savdo: ${numberFormat(customer.totalSales)} so'm · Naqd balans: <span class="${debtClass(customer.cashDebt)}">${balanceText(customer.cashDebt || 0)}</span>`
         : '';
       priceEl.textContent = customer
-        ? `Naqd narx: ${numberFormat(pricing.cashPricePerKg)} so'm/kg${pricing.customCashPricePerKg ? ' · maxsus' : ''} · O'tkazma narx: ${numberFormat(pricing.transferPricePerKg)} so'm/kg${pricing.customTransferPricePerKg ? ' · maxsus' : ''}`
+        ? saleMode === 'transfer'
+          ? `O'tkazma narx: ${numberFormat(pricing.transferPricePerKg)} so'm/kg${pricing.customTransferPricePerKg ? ' · maxsus' : ''}`
+          : `Naqd narx: ${numberFormat(pricing.cashPricePerKg)} so'm/kg${pricing.customCashPricePerKg ? ' · maxsus' : ''}`
         : '';
       if (customer) {
         historyLinkEl.href = withAccess(`/warehouse/customers/${customer.id}`);
