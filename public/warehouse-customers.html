@@ -335,6 +335,9 @@
       if (sellerLink) sellerLink.classList.toggle('hidden', !canSeeSeller);
       document.getElementById('customerManagementPanel').classList.toggle('hidden', !canSeeSeller);
       document.getElementById('mainActions').style.display = canSeeSeller ? 'flex' : 'none';
+      // Naqd/O'tkazma/Boshqa mijozlar soni faqat admin uchun
+      const statsEl = document.querySelector('.stats');
+      if (statsEl) statsEl.classList.toggle('hidden', !isAdmin);
     }
 
     function authHeader() {
