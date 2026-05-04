@@ -827,11 +827,9 @@
     }
 
     let deferredPrompt = null;
-    let hintTimer = null;
     const button = document.createElement('button');
-    const hint = document.createElement('div');
     button.type = 'button';
-    button.hidden = true;
+    button.hidden = false;
     button.textContent = 'Ilovani o\'rnatish';
     button.setAttribute('aria-label', 'Ilovani o\'rnatish');
     button.style.position = 'fixed';
@@ -847,24 +845,9 @@
     button.style.boxShadow = '0 8px 24px rgba(0,0,0,.2)';
     button.style.cursor = 'pointer';
 
-    hint.hidden = true;
-    hint.style.position = 'fixed';
-    hint.style.right = '14px';
-    hint.style.bottom = '58px';
-    hint.style.maxWidth = '260px';
-    hint.style.padding = '10px 12px';
-    hint.style.borderRadius = '10px';
-    hint.style.background = 'rgba(24, 19, 15, 0.92)';
-    hint.style.color = '#fff';
-    hint.style.font = '500 12px/1.35 system-ui, -apple-system, Segoe UI, sans-serif';
-    hint.style.zIndex = '10000';
-
     function mountButton() {
       if (!button.isConnected && document.body) {
         document.body.appendChild(button);
-      }
-      if (!hint.isConnected && document.body) {
-        document.body.appendChild(hint);
       }
     }
 
@@ -874,28 +857,9 @@
         button.textContent = text;
       }
       button.hidden = !visible;
-      if (!visible) {
-        hint.hidden = true;
-      }
     }
 
-    function showHint(message) {
-      mountButton();
-      if (!message) {
-        hint.hidden = true;
-        return;
-      }
-      hint.textContent = message;
-      hint.hidden = false;
-      if (hintTimer) {
-        window.clearTimeout(hintTimer);
-      }
-      hintTimer = window.setTimeout(function () {
-        hint.hidden = true;
-      }, 4200);
-    }
-
-    setVisible(Boolean(isSafari), isSafari ? 'Home screenga qo\'shish' : 'Ilovani o\'rnatish');
+    setVisible(true, isSafari ? 'Home screenga qo\'shish' : 'Ilovani o\'rnatish');
 
     window.addEventListener('beforeinstallprompt', function (event) {
       event.preventDefault();
@@ -907,6 +871,33 @@
       deferredPrompt = null;
       setVisible(false);
     });
+
+    // Inline hint banner (no alert)
+    let hintEl = null;
+    function showInstallHint(msg) {
+      if (!hintEl) {
+        hintEl = document.createElement('div');
+        hintEl.style.cssText = [
+          'position:fixed', 'right:14px', 'bottom:66px', 'z-index:10001',
+          'max-width:calc(100vw - 28px)', 'padding:12px 16px',
+          'background:#2c1a09', 'color:#fff', 'border-radius:16px',
+          'font:500 13px/1.5 system-ui,-apple-system,Segoe UI,sans-serif',
+          'box-shadow:0 8px 24px rgba(0,0,0,.3)', 'white-space:pre-line',
+          'cursor:pointer',
+        ].join(';');
+        hintEl.setAttribute('role', 'tooltip');
+        hintEl.addEventListener('click', function () {
+          hintEl.remove();
+          hintEl = null;
+        });
+        document.body.appendChild(hintEl);
+      }
+      hintEl.textContent = msg;
+      clearTimeout(hintEl._timer);
+      hintEl._timer = setTimeout(function () {
+        if (hintEl) { hintEl.remove(); hintEl = null; }
+      }, 7000);
+    }
 
     button.addEventListener('click', async function () {
       if (deferredPrompt) {
@@ -921,11 +912,12 @@
       }
 
       if (isSafari) {
-        showHint('Safari: Share → Add to Home Screen ni tanlang.');
+        showInstallHint('⬆ Safari pastki panelidagi "Share" (ulashish) tugmasini bosing,\nso\'ng "Add to Home Screen" ni tanlang.');
         return;
       }
 
-      showHint('Brauzer menyusidan Install app yoki Add to Home screen ni tanlang.');
+      // Chrome/Edge/Samsung – try re-requesting native prompt or show quiet hint
+      showInstallHint('Brauzer menyusini oching (⋮)\nva "Ilovani o\'rnatish" yoki "Add to Home screen" ni tanlang.');
     });
   }
 
