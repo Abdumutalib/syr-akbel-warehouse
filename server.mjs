@@ -749,65 +749,93 @@ function checkSiteGate(req, res, u) {
   <h1>Кириш</h1>
   <p>${pinEnabled ? "Davom etish uchun PIN kodni kiriting" : "Birinchi kirishda admin login/parol va yangi PIN kiriting"}</p>
   ${errorText ? `<div class="err">${errorText}</div>` : ""}
-  <form method="POST" action="/warehouse-register" autocomplete="off" id="gateForm">
-    <div id="inputSlot"></div>
-    <button type="submit">Kirish</button>
-  </form>
+  <div id="inputSlot"></div>
+  <div id="errMsg" style="color:#c0392b;font-size:13px;margin-bottom:10px;text-align:center;display:none"></div>
+  <button id="submitBtn" style="width:100%;padding:12px;background:#5b8dea;color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer;font-weight:600">Kirish</button>
 </div>
+<style>
+  .wh-input {
+    width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;
+    font-size:16px;margin-bottom:12px;outline:none;box-sizing:border-box;
+    -webkit-text-security: none;
+  }
+  .wh-input.masked { -webkit-text-security: disc; }
+</style>
 <script>
 (function(){
   var pinMode = ${pinEnabled ? 'true' : 'false'};
   var slot = document.getElementById('inputSlot');
-  var form = document.getElementById('gateForm');
-  var style = 'width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;font-size:16px;margin-bottom:12px;outline:none;box-sizing:border-box;';
+  var btn = document.getElementById('submitBtn');
+  var errMsg = document.getElementById('errMsg');
 
-  // Tasodifiy prefiks — brauzer bu nomlarni tanimaydi
-  var pfx = 'wh_' + Math.random().toString(36).slice(2,7) + '_';
-
-  function makeInput(type, fakeName, placeholder, inputmode, maxlength) {
+  function makeField(placeholder, masked, inputmode, maxlength) {
     var el = document.createElement('input');
-    el.type = type;
-    el.name = pfx + fakeName;          // brauzer taniy olmaydi
+    el.type = 'text';                    // HECH QACHON type=password emas
+    el.className = 'wh-input' + (masked ? ' masked' : '');
     el.placeholder = placeholder;
     el.setAttribute('autocomplete', 'off');
-    el.setAttribute('data-real', fakeName); // haqiqiy nom — submitda ishlatamiz
-    el.setAttribute('style', style);
+    el.setAttribute('autocorrect', 'off');
+    el.setAttribute('autocapitalize', 'off');
+    el.setAttribute('spellcheck', 'false');
     if (inputmode) el.setAttribute('inputmode', inputmode);
     if (maxlength) el.setAttribute('maxlength', maxlength);
     return el;
   }
 
-  var inputs = [];
+  var userEl, passEl, pinEl;
 
   if (pinMode) {
-    var pin = makeInput('tel', 'pin', 'PIN (4-8 raqam)', 'numeric', '8');
-    slot.appendChild(pin);
-    inputs.push(pin);
-    setTimeout(function(){ pin.focus(); }, 50);
-  } else {
-    var user = makeInput('text', 'username', 'Admin login', '', '');
-    var pass = makeInput('text', 'password', 'Admin parol', '', '');
-    var pinEl = makeInput('tel', 'pin', 'Yangi PIN (4-8 raqam)', 'numeric', '8');
-    pass.addEventListener('focus', function(){ this.type = 'password'; });
-    pinEl.addEventListener('focus', function(){ this.type = 'password'; });
-    slot.appendChild(user);
-    slot.appendChild(pass);
+    pinEl = makeField('PIN (4-8 raqam)', true, 'numeric', '8');
     slot.appendChild(pinEl);
-    inputs = [user, pass, pinEl];
-    setTimeout(function(){ user.focus(); }, 50);
+    setTimeout(function(){ pinEl.focus(); }, 50);
+  } else {
+    userEl = makeField('Admin login', false, '', '');
+    passEl = makeField('Admin parol', true, '', '');
+    pinEl  = makeField('Yangi PIN (4-8 raqam)', true, 'numeric', '8');
+    slot.appendChild(userEl);
+    slot.appendChild(passEl);
+    slot.appendChild(pinEl);
+    setTimeout(function(){ userEl.focus(); }, 50);
   }
 
-  // Submit paytida: fake nomlarni o'chirib, haqiqiy hidden inputlar qo'sh
-  form.addEventListener('submit', function(e){
-    inputs.forEach(function(el){
-      el.removeAttribute('name'); // fake nomni olib tashla — yuborilmasin
-      var hidden = document.createElement('input');
-      hidden.type = 'hidden';
-      hidden.name = el.getAttribute('data-real');
-      hidden.value = el.value;
-      form.appendChild(hidden);
-    });
+  // Enter tugmasi bilan ham yuborish
+  slot.addEventListener('keydown', function(e){
+    if (e.key === 'Enter') { e.preventDefault(); doSubmit(); }
   });
+  btn.addEventListener('click', doSubmit);
+
+  function doSubmit() {
+    var data = new URLSearchParams();
+    if (pinMode) {
+      data.set('pin', pinEl.value);
+    } else {
+      data.set('username', userEl.value);
+      data.set('password', passEl.value);
+      data.set('pin', pinEl.value);
+    }
+    btn.disabled = true;
+    btn.textContent = '...';
+    fetch('/warehouse-register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: data.toString(),
+      redirect: 'follow'
+    }).then(function(r){
+      if (r.redirected) { window.location.href = r.url; return; }
+      return r.text().then(function(html){
+        // Server xato HTML qaytarsa — sahifani yangilash
+        document.open(); document.write(html); document.close();
+      });
+    }).catch(function(){
+      errMsg.textContent = "Xatolik yuz berdi, qayta urinib ko'ring";
+      errMsg.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Kirish';
+    });
+  }
+})();
+</script>
+</body></html>`;
 })();
 </script>
 </body></html>`;
