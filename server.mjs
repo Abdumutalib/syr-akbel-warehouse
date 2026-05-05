@@ -746,12 +746,15 @@ function hasWarehouseRouteAccess(req, u) {
 
 function staticResponseHeaders(contentType, filePath, etag = null) {
   const extension = path.extname(filePath).toLowerCase();
+  const baseName = path.basename(filePath).toLowerCase();
   const isImage = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico"].includes(extension);
   const isScript = extension === ".js";
   const isCss = extension === ".css";
   const isHtml = extension === ".html";
   let cacheControl;
-  if (isImage) {
+  if (baseName === "warehouse-sw.js") {
+    cacheControl = "no-store, no-cache, must-revalidate, max-age=0";
+  } else if (isImage) {
     // Images change rarely — cache 7 days
     cacheControl = "public, max-age=604800, immutable";
   } else if (isScript || isCss) {
