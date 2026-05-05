@@ -682,6 +682,21 @@ function checkSiteGate(req, res, u) {
     return { allowed: false };
   }
 
+  const loginCacheBuster = String(APP_BUILD || APP_VERSION || "1").slice(0, 16);
+  if (!u.searchParams.get("__v")) {
+    const nextParams = new URLSearchParams(u.searchParams);
+    nextParams.set("__v", loginCacheBuster);
+    const nextLocation = `${u.pathname}?${nextParams.toString()}`;
+    res.writeHead(302, {
+      Location: nextLocation,
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+      Pragma: "no-cache",
+      Expires: "0",
+    });
+    res.end();
+    return { allowed: false };
+  }
+
   const showError = u.searchParams.get("login_error") === "1";
   const errorCode = (u.searchParams.get("error") || "").trim();
   const errorText =
@@ -851,9 +866,30 @@ function checkSiteGate(req, res, u) {
       <div class="hint">Xodimlar admin bergan maxsus havola orqali PIN bilan kiradi</div>
     </div>
   </div>
+  <script>
+    (function () {
+      try {
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
+          }).catch(function () {});
+        }
+        if ("caches" in window) {
+          caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+          }).catch(function () {});
+        }
+      } catch (e) {}
+    })();
+  </script>
 </body>
 </html>`;
-  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+  res.writeHead(200, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    Pragma: "no-cache",
+    Expires: "0",
+  });
   res.end(body);
   return { allowed: false };
 }
