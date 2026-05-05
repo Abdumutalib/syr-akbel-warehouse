@@ -560,9 +560,9 @@ function requiredWarehouseRoutePermissions(pathname) {
   return null;
 }
 
-// Site-wide gate: WAREHOUSE_SITE_TOKEN sozlangan bo'lsa, sahifani ochish uchun
-// ?access=TOKEN yoki Cookie: warehouse-site=TOKEN talab qilinadi.
-// Token to'g'ri bo'lsa, cookie o'rnatib, keyingi tashrif uchun URL kerak bo'lmaydi.
+// Site-wide gate: warehouse sahifalarini ochish uchun admin login yoki staff link kerak.
+// WAREHOUSE_SITE_TOKEN bo'lsa, ?access=TOKEN yoki Cookie: warehouse-site=TOKEN ham ishlaydi.
+// Token to'g'ri bo'lsa, cookie o'rnatilib, keyingi tashrif uchun URL kerak bo'lmaydi.
 function parseCookies(req) {
   const raw = req.headers.cookie || "";
   const result = {};
@@ -640,7 +640,6 @@ function authenticateStaffLinkForRoute(req, u) {
 }
 
 function checkSiteGate(req, res, u) {
-  if (!WAREHOUSE_SITE_TOKEN) return { allowed: true };
   // API, healthz, SW, manifest, rasm — tekshirilmaydi
   const skipPrefixes = ["/warehouse/api/", "/api/", "/warehouse/sw.js", "/warehouse/manifest.json", "/warehouse/assets/", "/warehouse/uploads/", "/warehouse-top-nav.js", "/favicon", "/icon-"];
   if (skipPrefixes.some((p) => u.pathname.startsWith(p))) return { allowed: true };
@@ -1699,11 +1698,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   }
 
   if ((u.pathname === "/" || u.pathname === "/warehouse" || u.pathname === "/warehouse/") && req.method === "GET") {
-    if (WAREHOUSE_SITE_TOKEN) {
-      redirectTo(res, "/warehouse-register");
-    } else {
-      redirectTo(res, `/warehouse/admin${u.search}`);
-    }
+    redirectTo(res, "/warehouse-register");
     return;
   }
 
