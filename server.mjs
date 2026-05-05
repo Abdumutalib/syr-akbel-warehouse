@@ -693,33 +693,166 @@ function checkSiteGate(req, res, u) {
       ? "Login yoki parol noto'g'ri"
       : "";
   
-  const body = `<!DOCTYPE html><html lang="uz"><head><meta charset="utf-8"><title>Admin Login</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-  *{box-sizing:border-box}body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f0f0f0;}
-  .card{background:#fff;border-radius:18px;box-shadow:0 4px 28px rgba(0,0,0,.12);padding:30px;width:min(90vw,360px)}
-  h1{margin:0 0 14px;font-size:20px;text-align:center}
-  p{margin:0 0 14px;color:#666;text-align:center;font-size:14px}
-  input{width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:10px;font-size:16px;margin-bottom:12px;outline:none;box-sizing:border-box}
-  button{width:100%;padding:12px;background:#5b8dea;color:#fff;border:none;border-radius:10px;font-size:16px;cursor:pointer;font-weight:600}
-  .muted{margin-top:10px;font-size:13px;color:#666;line-height:1.45}
-  .err{color:#c0392b;font-size:13px;margin-bottom:10px;text-align:center}
-</style></head>
-<body><div class="card">
-  <h1>Admin Kiriş</h1>
-  <p>Admin login va parol bilan kiring</p>
-  ${errorText ? `<div class="err">${errorText}</div>` : ""}
-  <form method="post" action="/warehouse-register" autocomplete="off">
-    <input type="text" name="username" placeholder="Admin login" autocomplete="username" autofocus>
-    <input type="password" name="password" placeholder="Parol" autocomplete="current-password">
-    <button type="submit">Kirish</button>
-  </form>
-  <div class="muted">Parolni faqat admin beradi. Xodimlar admin bergan ruxsat havolasi bilan telefon yoki planshetda ilovani o'rnatib, keyin PIN bilan kirib ishlayveradi.</div>
-</div>
-</body></html>`;
-  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
-  res.end(body);
-  return { allowed: false };
+  const body = `<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Сыр АКБЕЛ — Kirish</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #1a1f2e 0%, #2d3561 100%);
+      padding: 20px;
+    }
+    .wrap {
+      width: 100%;
+      max-width: 380px;
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .logo-icon {
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, #f5a623, #f07c00);
+      border-radius: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      margin-bottom: 14px;
+      box-shadow: 0 8px 24px rgba(245,166,35,.35);
+    }
+    .logo-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.3px;
+    }
+    .logo-sub {
+      font-size: 13px;
+      color: rgba(255,255,255,.5);
+      margin-top: 4px;
+    }
+    .card {
+      background: rgba(255,255,255,.06);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 20px;
+      padding: 32px 28px;
+    }
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .card-desc {
+      font-size: 13px;
+      color: rgba(255,255,255,.5);
+      margin-bottom: 24px;
+    }
+    .field {
+      margin-bottom: 14px;
+    }
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255,255,255,.6);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 6px;
+    }
+    .field input {
+      width: 100%;
+      padding: 13px 16px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 12px;
+      font-size: 16px;
+      color: #fff;
+      outline: none;
+      transition: border-color .2s, background .2s;
+      -webkit-appearance: none;
+    }
+    .field input::placeholder { color: rgba(255,255,255,.3); }
+    .field input:focus {
+      border-color: rgba(245,166,35,.6);
+      background: rgba(255,255,255,.12);
+    }
+    .err-box {
+      background: rgba(220,53,69,.18);
+      border: 1px solid rgba(220,53,69,.4);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #ff8a90;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #f5a623, #f07c00);
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      cursor: pointer;
+      margin-top: 6px;
+      box-shadow: 0 4px 16px rgba(245,166,35,.35);
+      transition: opacity .15s, transform .1s;
+      -webkit-appearance: none;
+    }
+    .btn:active { opacity: .85; transform: scale(.98); }
+    .hint {
+      margin-top: 20px;
+      font-size: 12px;
+      color: rgba(255,255,255,.35);
+      line-height: 1.55;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">
+      <div class="logo-icon">🧀</div>
+      <div class="logo-title">Сыр АКБЕЛ</div>
+      <div class="logo-sub">Омбор бошқарув тизими</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Tizimga kirish</div>
+      <div class="card-desc">Admin login va parolni kiriting</div>
+      ${errorText ? `<div class="err-box"><span>⚠️</span><span>${errorText}</span></div>` : ""}
+      <form method="post" action="/warehouse-register" autocomplete="off">
+        <div class="field">
+          <label>Login</label>
+          <input type="text" name="username" placeholder="Admin login" autocomplete="username" autofocus>
+        </div>
+        <div class="field">
+          <label>Parol</label>
+          <input type="password" name="password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn">Kirish →</button>
+      </form>
+      <div class="hint">Xodimlar admin bergan maxsus havola orqali PIN bilan kiradi</div>
+    </div>
+  </div>
+</body>
+</html>`;
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(body);
   return { allowed: false };
