@@ -209,15 +209,14 @@
       overflow: hidden;
       min-height: 46px;
     }
-    .file-trigger input {
+    .hidden-file-input {
       position: absolute;
-      inset: 0;
+      width: 1px;
+      height: 1px;
       opacity: 0;
-      cursor: pointer;
       margin: 0;
       padding: 0;
-      width: 100%;
-      height: 100%;
+      pointer-events: none;
     }
     #selectedCustomerDebt {
       font-size: 22px;
@@ -623,16 +622,12 @@
           <textarea id="saleNote" placeholder="Masalan: do'kon orqali savdo"></textarea>
           <label for="salePhotoInput">Rasm</label>
           <div class="photo-tools">
-            <label id="openSaleCamera" class="file-trigger" for="saleCameraInput">
-              <span>Kamera</span>
-              <input id="saleCameraInput" type="file" accept="image/*" capture="environment">
-            </label>
-            <label id="openSaleGallery" class="file-trigger" for="salePhotoInput">
-              <span>Galereya</span>
-              <input id="salePhotoInput" type="file" accept="image/*" multiple>
-            </label>
+            <button id="openSaleCamera" type="button" class="file-trigger">Kamera</button>
+            <button id="openSaleGallery" type="button" class="file-trigger">Galereya</button>
             <button id="clearSalePhoto" type="button" class="secondary hidden">Barcha rasmlarni olib tashlash</button>
           </div>
+          <input id="saleCameraInput" class="hidden-file-input" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+          <input id="salePhotoInput" class="hidden-file-input" type="file" accept="image/*" multiple tabindex="-1" aria-hidden="true">
           <div class="muted" style="margin-top: -6px; margin-bottom: 12px;">Android va iPhone'da kamera uchun Kamera, mavjud rasmlar uchun Galereya tugmasi ishlaydi. Kompyuterda ham bir nechta rasm tanlash mumkin.</div>
           <div id="salePhotoPreviewWrap" class="photo-preview hidden">
             <div id="salePhotoPreviewGrid" class="photo-preview-grid"></div>
@@ -1630,6 +1625,14 @@
     saleCashEl.addEventListener('input', applySaleModePayments);
     saleTransferEl.addEventListener('input', applySaleModePayments);
     saleNoteEl.addEventListener('input', writeSaleDraft);
+    openSaleCameraButtonEl.addEventListener('click', () => {
+      saleCameraInputEl.value = '';
+      saleCameraInputEl.click();
+    });
+    openSaleGalleryButtonEl.addEventListener('click', () => {
+      salePhotoInputEl.value = '';
+      salePhotoInputEl.click();
+    });
     clearSalePhotoButtonEl.addEventListener('click', () => {
       clearSalePhoto();
       setStatus('Rasmlar olib tashlandi.');
