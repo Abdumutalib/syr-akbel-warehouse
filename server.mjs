@@ -1689,8 +1689,28 @@ function redirectTo(res, target) {
   res.end();
 }
 
+let isShuttingDown = false;
+
 function withSafeRequestHandling(handler) {
   return async (req, res) => {
+    // Restart paytida yangi so'rovlarni rad etish
+    if (isShuttingDown) {
+      res.writeHead(503, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Retry-After": "5",
+        "Cache-Control": "no-store",
+      });
+      res.end("Server qayta ishga tushmoqda, 5 soniyadan so'ng qayta urinib ko'ring.");
+      return;
+    }
+    // 30 soniya ichida javob qaytarilmasa so'rovni o'chirish
+    req.setTimeout(30000, () => {
+      if (!res.writableEnded) {
+        res.writeHead(408, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("So'rov vaqti tugadi");
+      }
+      req.destroy();
+    });
     try {
       await handler(req, res);
     } catch (error) {
@@ -2143,6 +2163,29 @@ process.on("unhandledRejection", (reason) => {
 process.on("uncaughtException", (error) => {
   console.error("[FATAL][UNCAUGHT_EXCEPTION]", error);
 });
+
+// Northflank va Docker SIGTERM jo'natadi — graceful shutdown
+function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`[SHUTDOWN] ${signal} — yangi so'rovlar to'xtatildi, mavjud so'rovlar tugaguncha kutilmoqda...`);
+  server.close((err) => {
+    if (err) {
+      console.error("[SHUTDOWN] server.close xatoligi:", err);
+      process.exit(1);
+    }
+    console.log("[SHUTDOWN] Barcha ulanishlar yopildi, server o'chdi.");
+    process.exit(0);
+  });
+  // 15 soniyadan keyin majburiy o'chirish (in-flight so'rovlar tugab bo'lmasa ham)
+  setTimeout(() => {
+    console.error("[SHUTDOWN] Vaqt tugadi, majburiy o'chirish.");
+    process.exit(1);
+  }, 15000).unref();
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT",  () => gracefulShutdown("SIGINT"));
 
 // Keep connections alive longer than Northflank's LB (60s default) to avoid mid-request drops
 server.keepAliveTimeout = 65000;
