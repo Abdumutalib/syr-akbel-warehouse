@@ -28,6 +28,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     readPostJson,
     recordApprovedSale,
     recordCustomerPayment,
+    recordSellerCashHandoff,
     restoreDeletedCustomer,
     revokeStaffAccessLink,
     saveWarehouse,
@@ -442,6 +443,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     });
     sendApiJson(res, 200, {
       ok: true,
+      operator,
       ...catalog,
     });
     return true;
@@ -1084,6 +1086,55 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       sendApiJson(res, statusCode, responseBody);
     } catch (e) {
       sendApiJson(res, e.statusCode || 400, { error: e.message || "To'lovni yozib bo'lmadi" });
+    }
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/seller-cash-handoffs" && req.method === "POST") {
+    const operator = assertWarehouseOperator(req, res, {
+      allowAdmin: true,
+      realm: "warehouse-seller",
+      permission: "seller",
+      message: "Pul topshirishni yozish uchun sotuvchi ruxsati kerak",
+    });
+    if (!operator) {
+      return true;
+    }
+    const body = await readPostJson(req);
+    if (body === null) {
+      sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
+      return true;
+    }
+    const idempotencyKey = extractIdempotencyKey(req);
+    const idempotencyFingerprint = buildIdempotencyFingerprint(apiPath, body, operator);
+    try {
+      const { replay, statusCode, responseBody } = await writeWarehouse((state) => {
+        const hit = getIdempotencyHit(state, idempotencyKey, idempotencyFingerprint);
+        if (hit.type === "conflict") {
+          const err = new Error("Idempotency key boshqa so'rov bilan ishlatilgan");
+          err.statusCode = 409;
+          throw err;
+        }
+        if (hit.type === "replay") {
+          return {
+            replay: true,
+            statusCode: hit.statusCode,
+            responseBody: hit.responseBody,
+          };
+        }
+        const handoff = recordSellerCashHandoff(state, body, {
+          actor: operator,
+        });
+        const responseBody = {
+          ok: true,
+          handoff,
+        };
+        saveIdempotencyResult(state, idempotencyKey, idempotencyFingerprint, 201, responseBody);
+        return { replay: false, statusCode: 201, responseBody };
+      });
+      sendApiJson(res, statusCode, responseBody);
+    } catch (e) {
+      sendApiJson(res, e.statusCode || 400, { error: e.message || "Pul topshirishni yozib bo'lmadi" });
     }
     return true;
   }
