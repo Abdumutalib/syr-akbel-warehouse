@@ -365,10 +365,21 @@
         authValue ? { Authorization: authValue } : {},
         accessToken ? { 'X-Warehouse-Access': accessToken } : {}
       );
-      const response = await fetch(normalizedUrl, {
+      let response;
+      try {
+        response = await fetch(normalizedUrl, {
         ...options,
         headers: requestHeaders,
       });
+      } catch (err) {
+        if (options && options.method && options.method !== 'GET') {
+          if (window.warehouseOfflineQueue) {
+            await window.warehouseOfflineQueue.addRequest(normalizedUrl, options, typeof authValue !== 'undefined' ? authValue : '', typeof accessToken !== 'undefined' ? accessToken : '');
+            return { success: true, offline: true, message: 'Oflayn saqlandi' };
+          }
+        }
+        throw err;
+      }
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'So\'rov bajarilmadi');
       return data;
@@ -932,5 +943,6 @@
   </div>
 
   <script src="/warehouse-top-nav.js"></script>
+  <script src="/warehouse/assets/warehouse-offline.js"></script>
 </body>
 </html>
