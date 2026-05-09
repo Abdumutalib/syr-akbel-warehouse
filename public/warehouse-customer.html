@@ -287,6 +287,7 @@
     </div>
   </div>
 
+  <script src="/warehouse/assets/warehouse-api.js"></script>
   <script src="/warehouse/assets/warehouse-auth-pin.js"></script>
   <script>
     const usernameGroupEl = document.getElementById('usernameGroup');
@@ -388,37 +389,8 @@
       if (!username || !password) throw new Error('Xodim yoki admin login va parolini kiriting.');
       return 'Basic ' + btoa(username + ':' + password);
     }
-    async function apiFetch(url, options = {}) {
-      const normalizedUrl = typeof url === 'string' && url.startsWith('/api/warehouse')
-        ? `/warehouse/api${url.slice('/api'.length)}`
-        : url;
-      const authValue = authHeader();
-      const requestHeaders = Object.assign(
-        {},
-        options.headers || {},
-        authValue ? { Authorization: authValue } : {},
-        accessToken ? { 'X-Warehouse-Access': accessToken } : {}
-      );
-      let response;
-      try {
-        response = await fetch(normalizedUrl, {
-        ...options,
-        headers: requestHeaders,
-      });
-      } catch (err) {
-        if (options && options.method && options.method !== 'GET') {
-          if (window.warehouseOfflineQueue) {
-            await window.warehouseOfflineQueue.addRequest(normalizedUrl, options, typeof authValue !== 'undefined' ? authValue : '', typeof accessToken !== 'undefined' ? accessToken : '');
-            return { success: true, offline: true, message: 'Oflayn saqlandi' };
-          }
-        }
-        throw err;
-      }
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'So\'rov bajarilmadi');
-      return data;
-    }
-    function numberFormat(value) { return new Intl.NumberFormat('ru-RU').format(Number(value || 0)); }
+    const apiFetch = (url, options = {}) => window.warehouseApi.fetch(url, options, typeof authHeader === 'function' ? authHeader() : '', typeof accessToken !== 'undefined' ? accessToken : '');
+    const numberFormat = (val) => window.warehouseApi.numberFormat(val);
     function setDebtTone(element, value) {
       if (!element) return;
       const amount = Number(value || 0);

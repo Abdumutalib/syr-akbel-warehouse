@@ -649,6 +649,7 @@
     </section>
   </div>
 
+  <script src="/warehouse/assets/warehouse-api.js"></script>
   <script src="/warehouse/assets/warehouse-auth-pin.js"></script>
   <script>
     const usernameGroupEl = document.getElementById('usernameGroup');
@@ -792,43 +793,9 @@
       return 'Basic ' + btoa(username + ':' + password);
     }
 
-    async function apiFetch(url, options = {}) {
-      const normalizedUrl = typeof url === 'string' && url.startsWith('/api/warehouse')
-        ? `/warehouse/api${url.slice('/api'.length)}`
-        : url;
-      const headers = new Headers(options.headers || {});
-      const authValue = authHeader();
-      if (authValue) {
-        headers.set('Authorization', authValue);
-      }
-      if (accessToken) {
-        headers.set('X-Warehouse-Access', accessToken);
-      }
-      if (options.body && !headers.has('Content-Type')) {
-        headers.set('Content-Type', 'application/json');
-      }
-      let response;
-      try {
-        response = await fetch(normalizedUrl, { ...options, headers });
-      } catch (err) {
-        if (options && options.method && options.method !== 'GET') {
-          if (window.warehouseOfflineQueue) {
-            await window.warehouseOfflineQueue.addRequest(normalizedUrl, options, typeof authValue !== 'undefined' ? authValue : '', typeof accessToken !== 'undefined' ? accessToken : '');
-            return { success: true, offline: true, message: 'Oflayn saqlandi' };
-          }
-        }
-        throw err;
-      }
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.error || 'So\'rov bajarilmadi');
-      }
-      return data;
-    }
+    const apiFetch = (url, options = {}) => window.warehouseApi.fetch(url, options, typeof authHeader === 'function' ? authHeader() : '', typeof accessToken !== 'undefined' ? accessToken : '');
 
-    function numberFormat(value) {
-      return new Intl.NumberFormat('ru-RU').format(Number(value || 0));
-    }
+    const numberFormat = (val) => window.warehouseApi.numberFormat(val);
 
     function debtClass(value) {
       const amount = Number(value || 0);
