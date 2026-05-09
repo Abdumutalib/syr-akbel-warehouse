@@ -2009,6 +2009,16 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
 
+  if (u.pathname === "/warehouse/assets/warehouse-api.js" && req.method === "GET") {
+    serveWarehouseAsset("warehouse-api.js", req, res);
+    return;
+  }
+
+  if (u.pathname === "/warehouse/assets/warehouse-offline.js" && req.method === "GET") {
+    serveWarehouseAsset("warehouse-offline.js", req, res);
+    return;
+  }
+
   if (u.pathname === "/warehouse/assets/warehouse-auth-pin.js" && req.method === "GET") {
     serveWarehouseAsset("warehouse-auth-pin.js", req, res);
     return;
