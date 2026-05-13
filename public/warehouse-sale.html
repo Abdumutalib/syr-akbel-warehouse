@@ -1425,6 +1425,10 @@
       writeSaleDraft();
     });
     saleKgExpressionEl.addEventListener('focus', openCalculator);
+    saleKgExpressionEl.addEventListener('mousedown', function(e) {
+      // Faqat bosilganda ham ochilsin
+      openCalculator();
+    });
     saleKgExpressionEl.addEventListener('blur', () => {
       setTimeout(() => {
         const activeElement = document.activeElement;
