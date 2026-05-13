@@ -1368,7 +1368,12 @@
 
     document.getElementById('save-auth').addEventListener('click', async () => {
       try {
-        await pinAuth.rememberFromCredentials();
+        // PIN бўлмаса, фақат логин-парол билан сессия очиш
+        if (pinEl && pinEl.value.trim()) {
+          await pinAuth.rememberFromCredentials();
+        } else {
+          pinAuth.markSessionActive({ username: usernameEl.value.trim(), password: passwordEl.value });
+        }
         authHeader();
         await loadCustomers();
         authUi.markAuthenticated({ username: usernameEl.value.trim(), password: passwordEl.value });
