@@ -1,4 +1,4 @@
-const CACHE_NAME = 'akbel-cache-v2';
+const CACHE_NAME = 'akbel-cache-v3';
 
 self.addEventListener('install', event => {
   self.skipWaiting();
@@ -24,7 +24,14 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Network First, fallback to cache
+  const url = new URL(req.url);
+
+  // API so'rovlarini keshlamaslik — doimo serverdan yangi ma'lumot olish
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/warehouse/api/')) {
+    return;
+  }
+
+  // Network First, fallback to cache (faqat statik fayllar uchun)
   event.respondWith(
     fetch(req).then(res => {
       // Tarmoq ishladi, javobni keshga saqlaymiz

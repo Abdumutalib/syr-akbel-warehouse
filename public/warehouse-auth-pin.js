@@ -20,8 +20,12 @@
   const encoder = typeof window.TextEncoder === 'function' ? new window.TextEncoder() : null;
   const decoder = typeof window.TextDecoder === 'function' ? new window.TextDecoder() : null;
 
+  const PERSISTENT_WAREHOUSE_KEYS = ['warehouse-access-token'];
+
   function isWarehouseStorageKey(key) {
-    return String(key || '').indexOf(WAREHOUSE_STORAGE_PREFIX) === 0;
+    const k = String(key || '');
+    if (PERSISTENT_WAREHOUSE_KEYS.indexOf(k) >= 0) return false;
+    return k.indexOf(WAREHOUSE_STORAGE_PREFIX) === 0;
   }
 
   function enforceEphemeralWarehouseStorage() {

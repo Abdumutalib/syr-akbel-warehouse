@@ -155,7 +155,7 @@
 
   function hasPermission(profile, requiredPermissions) {
     if (!profile) {
-      return true;
+      return false;
     }
     if (profile.role === "admin") {
       return true;

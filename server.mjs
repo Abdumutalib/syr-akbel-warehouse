@@ -44,8 +44,10 @@ import {
   summarizeOperatorDailyActivity,
   summarizeWarehouseReceipts,
   updateStaffAccountPermissions,
+  updateStaffAccountPin,
   updateWarehousePricing,
   upsertCustomer,
+  verifyStaffPin,
   recordTelegramMessage,
   listTelegramMessages,
 } from "./lib/warehouse-bot.mjs";
@@ -1104,12 +1106,19 @@ function authenticateWarehouseOperator(req, options = {}) {
       for (const permission of permissions) {
         const byToken = authenticateStaffAccessToken(state, accessToken, permission);
         if (byToken) {
+          // If the account has a PIN, it must be unlocked
+          if (byToken.hasPin && !byToken.isUnlocked) {
+            continue;
+          }
           return byToken;
         }
       }
     } else {
       const byToken = authenticateStaffAccessToken(state, accessToken, null);
       if (byToken) {
+        if (byToken.hasPin && !byToken.isUnlocked) {
+          return null; // Token exists but needs PIN
+        }
         return byToken;
       }
     }
@@ -1795,6 +1804,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         approveTransaction,
         assertWarehouseAdmin,
         assertWarehouseOperator,
+        authenticateStaffAccessToken,
         buildDebtReply,
         buildPendingReply,
         createStaffAccessLink,
@@ -1850,10 +1860,12 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         storeWarehouseTransactionPhoto,
         storeWarehouseTransactionPhotos,
         updateStaffAccountPermissions,
+        updateStaffAccountPin,
         updateWarehousePricing,
         updateWarehouseOrder,
         deleteWarehouseOrder,
         upsertCustomer,
+        verifyStaffPin,
         recordTelegramMessage: async ({ telegramId, text, type }) => {
           await withWarehouseWrite((state) => {
             // customerName ni telegramId bo'yicha topish

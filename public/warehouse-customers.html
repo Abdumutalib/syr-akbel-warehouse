@@ -315,7 +315,7 @@
       hintEl: authHintEl,
       fullTitle: 'Xodim yoki admin kirishi',
       pinTitle: 'PIN bilan kirish',
-      fullHint: 'Har safar login va parol qo\'lda yoziladi. Ilovani o\'rnatib PIN saqlasangiz, keyingi kirishda PIN yetadi.',
+      fullHint: 'Har safar login va parol qo\'lda yoziladi. Ilovani o\'rnatib PIN saqlasangiz, keyingi safar shu PIN yetadi.',
       pinHint: 'Ilova o\'rnatilgandan keyin username ni yozib, PIN kod bilan kiring.',
       activeHint: 'Kirish tasdiqlandi. Shu tab ichida qayta login so\'ralmaydi.',
     });
@@ -331,17 +331,15 @@
     function applyOperatorPermissions(profile) {
       const currentProfile = profile || (window.getWarehouseOperatorProfile ? window.getWarehouseOperatorProfile() : null);
       const isAdmin = Boolean(currentProfile && currentProfile.role === 'admin');
-      const canSeeSeller = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'seller') : true;
+      const canSeeSeller = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'seller') : false;
       const adminLink = document.getElementById('customerCatalogAdminLink');
       const sellerLink = document.getElementById('customerCatalogSellerLink');
       if (adminLink) adminLink.classList.toggle('hidden', !isAdmin);
       if (sellerLink) sellerLink.classList.toggle('hidden', !canSeeSeller);
       document.getElementById('customerManagementPanel').classList.toggle('hidden', !canSeeSeller);
       document.getElementById('mainActions').style.display = canSeeSeller ? 'flex' : 'none';
-      // Naqd/O'tkazma/Boshqa mijozlar soni faqat admin uchun
       const statsEl = document.querySelector('.stats');
       if (statsEl) statsEl.classList.toggle('hidden', !isAdmin);
-      // Tahrirlash tugmalari faqat seller/admin uchun
       document.querySelectorAll('.customer-edit-control').forEach((btn) => {
         btn.classList.toggle('hidden', !canSeeSeller);
       });
@@ -356,6 +354,71 @@
       return 'Basic ' + btoa(username + ':' + password);
     }
     const apiFetch = (url, options = {}) => window.warehouseApi.fetch(url, options, typeof authHeader === 'function' ? authHeader() : '', typeof accessToken !== 'undefined' ? accessToken : '');
+
+    async function checkStaffLinkAuth() {
+      if (!accessToken) return false;
+      try {
+        const data = await apiFetch('/api/warehouse/auth-status');
+        if (data.ok) {
+          if (data.isWaitingForPin) {
+            showPinOnlyUi(data);
+            return true;
+          }
+        }
+      } catch (e) {
+        console.error('Auth status check failed', e);
+      }
+      return false;
+    }
+
+    function showPinOnlyUi(data) {
+      authPanelEl.classList.remove('hidden');
+      authTitleEl.textContent = 'PIN кодни киритинг';
+      authHintEl.textContent = `${data.fullName} (${data.username}), илтимос ПИН-кодингизни киритинг.`;
+      
+      usernameGroupEl.classList.add('hidden');
+      passwordGroupEl.classList.add('hidden');
+      pinEl.closest('#pinGroup').classList.remove('hidden');
+      
+      saveAuthButtonEl.classList.add('hidden');
+      clearPinButtonEl.classList.add('hidden');
+      showLoginButtonEl.classList.add('hidden');
+      unlockPinButtonEl.classList.remove('hidden');
+      unlockPinButtonEl.textContent = 'Кириш';
+      
+      unlockPinButtonEl.onclick = async () => {
+        const pin = pinEl.value.trim();
+        if (!pin) {
+          setStatus('PIN киритинг', true);
+          return;
+        }
+        try {
+          const res = await apiFetch('/api/warehouse/verify-pin', {
+            method: 'POST',
+            body: JSON.stringify({ pin })
+          });
+          if (res.ok) {
+            if (window.setWarehouseOperatorProfile) {
+              window.setWarehouseOperatorProfile({
+                kind: 'staff',
+                role: data.role || 'seller',
+                username: data.username,
+                fullName: data.fullName,
+                permissions: data.permissions || [],
+              });
+            }
+            await loadCatalog();
+            authPanelEl.hidden = true;
+            activeSessionNoticeEl.hidden = false;
+            activeSessionNoticeEl.textContent = `${data.fullName} — кириш тасдиқланди.`;
+            setStatus('Тайёр.');
+          }
+        } catch (err) {
+          setStatus(err.message, true);
+        }
+      };
+    }
+
     const numberFormat = (val) => window.warehouseApi.numberFormat(val);
     function appendMultiInput(containerId, options = {}, value = '') {
       const host = document.getElementById(containerId);
@@ -431,7 +494,6 @@
       editCustomerIdCurrent = customerId;
       document.getElementById('editCustomerStatus').textContent = '';
       document.getElementById('editCustomerStatus').classList.remove('error');
-      // Avval mavjud ma'lumotlarni yuklaymiz
       try {
         const data = await apiFetch(`/api/warehouse/customers/${customerId}`);
         const c = data.customer || {};
@@ -533,6 +595,7 @@
     }
     function setDeleteOptions(customers) {
       const select = document.getElementById('deleteCustomerSelect');
+      if (!select) return;
       if (!customers.length || accessToken) {
         select.innerHTML = '';
         select.disabled = true;
@@ -706,7 +769,6 @@
     document.getElementById('addCustomerTelegram').addEventListener('click', () => {
       appendMultiInput('customerTelegramList', { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
     });
-    // Bind modal events after DOM is fully parsed because modal markup is placed below this script.
     function bindAddCustomerModalEvents() {
       const openModalBtn = document.getElementById('openAddCustomerModal');
       const closeModalBtn = document.getElementById('closeAddCustomerModal');
@@ -808,25 +870,36 @@
     setMultiInputValues('customerNameList', [], { placeholder: 'Али ака' });
     setMultiInputValues('customerPhoneList', [], { placeholder: '+99890...' });
     setMultiInputValues('customerTelegramList', [], { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
-    // Initialize modal fields
     setMultiInputValues('modalCustomerNameList', [], { placeholder: 'Али ака' });
     setMultiInputValues('modalCustomerPhoneList', [], { placeholder: '+99890...' });
     setMultiInputValues('modalCustomerTelegramList', [], { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
     authUi.render();
     applyOperatorPermissions();
     staffPicker.load().catch(() => {});
-    if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
-      loadCatalog().catch((error) => setStatus(error.message, true));
-    } else if (pinAuth.hasPin()) {
-      setStatus('PIN saqlangan. PIN bilan kiring, keyin mundarija yuklanadi.');
-    } else {
-      setStatus('Xodim, admin ёки link orqali kiring, keyin mundarija yuklanadi.');
+
+    async function initPage() {
+      if (accessToken) {
+        const isWaitingForPin = await checkStaffLinkAuth();
+        if (isWaitingForPin) return;
+      }
+
+      if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
+        loadCatalog().catch((error) => setStatus(error.message, true));
+      } else if (pinAuth.hasPin()) {
+        setStatus('PIN saqlangan. PIN bilan kiring, keyin mundarija yuklanadi.');
+      } else {
+        setStatus('Xodim, admin ёки link orqali kiring, keyin mundarija yuklanadi.');
+      }
     }
+
+    initPage();
+
     setInterval(() => {
       if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
         loadCatalog().catch(() => {});
       }
-    }, 60000);  </script>
+    }, 60000);
+  </script>
 
   <!-- Yangi mijoz qo'shish modali -->
   <div id="addCustomerModal" class="modal-backdrop">

@@ -721,10 +721,9 @@
       document.title = transferMode ? 'Перечисление' : 'Naqd savdo';
       salePageTitleEl.textContent = transferMode ? 'Перечисление' : 'Naqd savdo';
       salePageEyebrowEl.hidden = true;
-      salePageShortcutsEl.remove();
+      if (salePageShortcutsEl) salePageShortcutsEl.remove();
       saleCardTitleEl.hidden = true;
       saleModeBannerEl.hidden = true;
-      // Нақд режим: фақат нақд майдони; ўтказма режим: фақат ўтказма майдони
       saleCashGroupEl.classList.toggle('hidden-field', transferMode);
       saleTransferGroupEl.classList.toggle('hidden-field', !transferMode);
       saleCashLabelEl.textContent = 'Naqd to\'lov';
@@ -795,6 +794,70 @@
 
     const apiFetch = (url, options = {}) => window.warehouseApi.fetch(url, options, typeof authHeader === 'function' ? authHeader() : '', typeof accessToken !== 'undefined' ? accessToken : '');
 
+    async function checkStaffLinkAuth() {
+      if (!accessToken) return false;
+      try {
+        const data = await apiFetch('/api/warehouse/auth-status');
+        if (data.ok) {
+          if (data.isWaitingForPin) {
+            showPinOnlyUi(data);
+            return true;
+          }
+        }
+      } catch (e) {
+        console.error('Auth status check failed', e);
+      }
+      return false;
+    }
+
+    function showPinOnlyUi(data) {
+      authPanelEl.classList.remove('hidden');
+      authTitleEl.textContent = 'PIN кодни киритинг';
+      authHintEl.textContent = `${data.fullName} (${data.username}), илтимос ПИН-кодингизни киритинг.`;
+      
+      usernameGroupEl.classList.add('hidden');
+      passwordGroupEl.classList.add('hidden');
+      pinEl.closest('#pinGroup').classList.remove('hidden');
+      
+      saveAuthButtonEl.classList.add('hidden');
+      clearPinButtonEl.classList.add('hidden');
+      showLoginButtonEl.classList.add('hidden');
+      unlockPinButtonEl.classList.remove('hidden');
+      unlockPinButtonEl.textContent = 'Кириш';
+      
+      unlockPinButtonEl.onclick = async () => {
+        const pin = pinEl.value.trim();
+        if (!pin) {
+          setStatus('PIN киритинг', true);
+          return;
+        }
+        try {
+          const res = await apiFetch('/api/warehouse/verify-pin', {
+            method: 'POST',
+            body: JSON.stringify({ pin })
+          });
+          if (res.ok) {
+            if (window.setWarehouseOperatorProfile) {
+              window.setWarehouseOperatorProfile({
+                kind: 'staff',
+                role: data.role || 'seller',
+                username: data.username,
+                fullName: data.fullName,
+                permissions: data.permissions || [],
+              });
+            }
+            await loadCustomers();
+            authPanelEl.hidden = true;
+            activeSessionNoticeEl.hidden = false;
+            activeSessionNoticeEl.textContent = `${data.fullName} — кириш тасдиқланди.`;
+            setStatus('Тайёр.');
+          }
+        } catch (err) {
+          setStatus(err.message, true);
+        }
+      };
+    }
+
     const numberFormat = (val) => window.warehouseApi.numberFormat(val);
 
     function debtClass(value) {
@@ -804,170 +867,23 @@
       return '';
     }
 
-    function withAccess(url) {
-      return accessToken ? `${url}${url.includes('?') ? '&' : '?'}access=${encodeURIComponent(accessToken)}` : url;
+    function balanceLabel(value) {
+      const amount = Number(value || 0);
+      if (amount < 0) return 'haqdor';
+      if (amount > 0) return 'qarz';
+      return 'balans';
     }
 
-    function formatFileSize(bytes) {
-      const size = Number(bytes || 0);
-      if (!Number.isFinite(size) || size <= 0) {
-        return '0 KB';
-      }
-      if (size >= 1024 * 1024) {
-        return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-      }
-      return `${Math.max(1, Math.round(size / 1024))} KB`;
+    function balanceText(value) {
+      const amount = Number(value || 0);
+      return `${numberFormat(Math.abs(amount))} so'm ${balanceLabel(amount)}`;
     }
 
-    function totalPhotoSize(entries) {
-      return (Array.isArray(entries) ? entries : []).reduce((sum, entry) => sum + Number(entry && entry.sizeBytes ? entry.sizeBytes : 0), 0);
-    }
-
-    function readFileAsDataUrl(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = () => reject(new Error('Rasmni o\'qib bo\'lmadi'));
-        reader.readAsDataURL(file);
-      });
-    }
-
-    function isHeicLikeImage(mimeType, originalName) {
-      const normalizedMimeType = String(mimeType || '').toLocaleLowerCase('en-US');
-      const normalizedName = String(originalName || '').toLocaleLowerCase('en-US');
-      return normalizedMimeType === 'image/heic'
-        || normalizedMimeType === 'image/heif'
-        || normalizedMimeType === 'image/heic-sequence'
-        || normalizedMimeType === 'image/heif-sequence'
-        || /\.(heic|heif)$/i.test(normalizedName);
-    }
-
-    function loadImageFromDataUrl(dataUrl) {
-      return new Promise((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = () => reject(new Error('Rasmni tayyorlab bo\'lmadi'));
-        image.src = dataUrl;
-      });
-    }
-
-    async function buildSalePhotoPayload(file) {
-      if (!file) {
-        return null;
+    function formatDisplayDate(value) {
+      if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return 'bugun';
       }
-      if (!String(file.type || '').startsWith('image/')) {
-        throw new Error('Faqat rasm faylini tanlang');
-      }
-      const originalDataUrl = await readFileAsDataUrl(file);
-      let previewUrl = originalDataUrl;
-      let uploadDataUrl = originalDataUrl;
-      let mimeType = String(file.type || 'image/jpeg').toLocaleLowerCase('en-US');
-      const shouldNormalizeHeic = isHeicLikeImage(mimeType, file.name);
-      let width = 0;
-      let height = 0;
-      try {
-        const image = await loadImageFromDataUrl(originalDataUrl);
-        width = Number(image.naturalWidth || image.width || 0);
-        height = Number(image.naturalHeight || image.height || 0);
-        const maxEdge = 1600;
-        const longestEdge = Math.max(width, height);
-        if (shouldNormalizeHeic || longestEdge > maxEdge || file.size > 2.4 * 1024 * 1024) {
-          const scale = longestEdge > 0 ? Math.min(1, maxEdge / longestEdge) : 1;
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.max(1, Math.round(width * scale));
-          canvas.height = Math.max(1, Math.round(height * scale));
-          const context = canvas.getContext('2d');
-          if (!context) {
-            throw new Error('Canvas ishlamadi');
-          }
-          context.drawImage(image, 0, 0, canvas.width, canvas.height);
-          mimeType = 'image/jpeg';
-          let quality = 0.86;
-          uploadDataUrl = canvas.toDataURL(mimeType, quality);
-          while (uploadDataUrl.length > 2_600_000 && quality > 0.46) {
-            quality -= 0.08;
-            uploadDataUrl = canvas.toDataURL(mimeType, quality);
-          }
-          previewUrl = uploadDataUrl;
-          width = canvas.width;
-          height = canvas.height;
-        }
-      } catch (error) {
-      }
-      return {
-        dataUrl: uploadDataUrl,
-        previewUrl,
-        mimeType,
-        originalName: shouldNormalizeHeic ? ((file.name || 'sale-photo').replace(/\.(heic|heif)$/i, '.jpg')) : (file.name || 'sale-photo'),
-        sizeBytes: Math.max(file.size || 0, Math.round((uploadDataUrl.length * 3) / 4)),
-        width,
-        height,
-      };
-    }
-
-    function clearSalePhoto() {
-      salePhotoState = [];
-      salePhotoInputEl.value = '';
-      salePhotoPreviewGridEl.innerHTML = '';
-      salePhotoMetaEl.textContent = '';
-      salePhotoPreviewWrapEl.classList.add('hidden');
-      clearSalePhotoButtonEl.classList.add('hidden');
-    }
-
-    function renderSalePhotoPreview() {
-      if (!salePhotoState.length) {
-        clearSalePhoto();
-        return;
-      }
-      salePhotoPreviewGridEl.innerHTML = salePhotoState.map((entry, index) => `
-        <div class="photo-preview-item">
-          <img src="${entry.previewUrl}" alt="Savdo rasmi ${index + 1}">
-          <div class="muted">${entry.originalName || `Rasm ${index + 1}`} · ${entry.width && entry.height ? `${entry.width}×${entry.height}` : ''} ${formatFileSize(entry.sizeBytes)}</div>
-          <button type="button" class="secondary" data-remove-sale-photo="${index}">Olib tashlash</button>
-        </div>
-      `).join('');
-      salePhotoMetaEl.textContent = `${salePhotoState.length} ta rasm · jami ${formatFileSize(totalPhotoSize(salePhotoState))}`;
-      salePhotoPreviewWrapEl.classList.remove('hidden');
-      clearSalePhotoButtonEl.classList.remove('hidden');
-    }
-
-    function removeSalePhoto(index) {
-      const numericIndex = Number(index);
-      if (!Number.isInteger(numericIndex) || numericIndex < 0 || numericIndex >= salePhotoState.length) {
-        return;
-      }
-      salePhotoState.splice(numericIndex, 1);
-      renderSalePhotoPreview();
-    }
-
-    async function appendSalePhotos(fileList) {
-      const files = Array.from(fileList || []);
-      if (!files.length) {
-        return;
-      }
-      if (salePhotoState.length + files.length > 6) {
-        throw new Error('Bitta savdoga ko\'pi bilan 6 ta rasm biriktiring');
-      }
-      const nextEntries = [];
-      for (const file of files) {
-        const prepared = await buildSalePhotoPayload(file);
-        if (prepared) {
-          nextEntries.push(prepared);
-        }
-      }
-      salePhotoState.push(...nextEntries);
-      renderSalePhotoPreview();
-    }
-
-    async function handleSelectedPhotos(inputEl) {
-      const files = Array.from((inputEl && inputEl.files) || []);
-      if (!files.length) {
-        return;
-      }
-      setStatus('Rasmlar tayyorlanmoqda...');
-      await appendSalePhotos(files);
-      inputEl.value = '';
-      setStatus(`${salePhotoState.length} ta rasm biriktirildi. Savdo bilan birga saqlanadi.`);
+      return value.split('-').reverse().join('.');
     }
 
     function todayValue() {
@@ -983,520 +899,329 @@
       }
     }
 
-    function readSaleDraft() {
-      try {
-        const raw = localStorage.getItem(SALE_DRAFT_KEY);
-        return raw ? JSON.parse(raw) : null;
-      } catch (error) {
-        return null;
-      }
+    function syncCustomerState(customers) {
+      customersState.length = 0;
+      customersState.push(...customers);
+      const options = customers.map((customer) => `<option value="${customer.id}">${customer.fullName}</option>`).join('');
+      saleCustomerEl.innerHTML = options;
+      updateSelectedCustomerCard();
+      restoreSaleDraft();
     }
 
-    function writeSaleDraft() {
-      try {
-        localStorage.setItem(SALE_DRAFT_KEY, JSON.stringify({
-          userId: saleCustomerEl.value || '',
-          transactionDate: saleDateEl.value || '',
-          dateMode: saleDateEl.dataset.dateMode || 'auto',
-          kgExpression: saleKgExpressionEl.value || '',
-          blockCount: saleBlockCountEl.value || '',
-          blockCountMode: saleBlockCountEl.dataset.mode || 'auto',
-          cashPaidAmount: saleCashEl.value || '',
-          transferPaidAmount: saleTransferEl.value || '',
-          note: saleNoteEl.value || '',
-        }));
-      } catch (error) {
+    function updateSelectedCustomerCard() {
+      const customerId = Number(saleCustomerEl.value);
+      const customer = customersState.find((c) => c.id === customerId);
+      const nameEl = document.getElementById('selectedCustomerName');
+      const metaEl = document.getElementById('selectedCustomerMeta');
+      const priceEl = document.getElementById('selectedCustomerPrice');
+      const debtEl = document.getElementById('selectedCustomerDebt');
+      const historyLinkEl = document.getElementById('selectedCustomerHistoryLink');
+      if (!customer) {
+        nameEl.textContent = '-';
+        metaEl.textContent = 'Mijozni tanlang.';
+        priceEl.textContent = '';
+        debtEl.textContent = '';
+        historyLinkEl.classList.add('hidden');
+        return;
       }
-    }
-
-    function clearSaleDraft() {
-      try {
-        localStorage.removeItem(SALE_DRAFT_KEY);
-      } catch (error) {
+      nameEl.textContent = customer.fullName;
+      metaEl.textContent = `Tashkilot: ${customer.organizationName || '-'} · INN: ${customer.taxId || '-'}`;
+      const priceValue = saleMode === 'transfer' ? (customer.transferPricePerKg || currentPricing.transferPricePerKg) : (customer.cashPricePerKg || currentPricing.cashPricePerKg);
+      priceEl.textContent = `Narx: ${numberFormat(priceValue)} so'm/kg`;
+      if (customer.currentDebt != null) {
+        debtEl.textContent = balanceText(customer.currentDebt);
+        debtEl.className = debtClass(customer.currentDebt);
+      } else {
+        debtEl.textContent = '';
       }
+      const accessPart = accessToken ? `?access=${encodeURIComponent(accessToken)}` : '';
+      historyLinkEl.setAttribute('href', `/warehouse/customers/${customer.id}${accessPart}`);
+      historyLinkEl.classList.remove('hidden');
     }
 
     function syncExpressionHeight() {
       saleKgExpressionEl.style.height = 'auto';
-      saleKgExpressionEl.style.height = `${Math.max(saleKgExpressionEl.scrollHeight + 2, 64)}px`;
-    }
-
-    function syncCalculatorVisibility() {
-      kgCalculatorEl.classList.toggle('has-expression', Boolean(saleKgExpressionEl.value.trim()));
-    }
-
-    function isCoarsePointer() {
-      return Boolean(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-    }
-
-    function setCalculatorOverlayState(open) {
-      if (!calcBackdropEl) {
-        return;
-      }
-      const active = Boolean(open && isCoarsePointer());
-      calcBackdropEl.hidden = !active;
-      calcBackdropEl.classList.toggle('open', active);
-    }
-
-    function restoreSaleDraft() {
-      const draft = readSaleDraft();
-      if (!draft) {
-        applyAutoSaleDate(true);
-        saleDraftRestorePending = false;
-        return;
-      }
-      if (draft.userId && customersState.some((entry) => String(entry.id) === String(draft.userId))) {
-        saleCustomerEl.value = String(draft.userId);
-      }
-      const draftDateMode = draft.dateMode === 'manual' ? 'manual' : 'auto';
-      saleDateEl.value = draftDateMode === 'manual' && draft.transactionDate
-        ? draft.transactionDate
-        : todayValue();
-      saleDateEl.dataset.dateMode = draftDateMode;
-      saleKgExpressionEl.value = draft.kgExpression || '';
-      saleBlockCountEl.value = draft.blockCount || '';
-      saleBlockCountEl.dataset.mode = draft.blockCountMode === 'manual' ? 'manual' : 'auto';
-      syncExpressionHeight();
-      saleCashEl.value = draft.cashPaidAmount || '';
-      saleTransferEl.value = draft.transferPaidAmount || '';
-      saleNoteEl.value = draft.note || '';
-      saleDraftRestorePending = false;
-      updateSelectedCustomerCard();
-      updateCalculatorPreview();
-    }
-
-    function setCustomerOptions(customers) {
-      saleCustomerEl.innerHTML = customers.map((customer) => `<option value="${customer.id}">${customer.fullName}</option>`).join('');
-    }
-
-    function syncCustomerState(customers) {
-      // Нақд режимда фақат cash, ўтказма режимда фақат transfer мижозлар кўринади
-      const filtered = customers.filter((c) => {
-        const cats = Array.isArray(c.paymentCategories) ? c.paymentCategories : [];
-        if (saleMode === 'transfer') return cats.includes('transfer');
-        return cats.includes('cash');
-      });
-      customersState.length = 0;
-      customersState.push(...filtered);
-      setCustomerOptions(filtered);
-      if (saleDraftRestorePending) {
-        restoreSaleDraft();
-      }
-      updateSelectedCustomerCard();
-    }
-
-    function updateSelectedCustomerCard() {
-      const customer = customersState.find((entry) => Number(entry.id) === Number(saleCustomerEl.value));
-      const historyLinkEl = document.getElementById('selectedCustomerHistoryLink');
-      const priceEl = document.getElementById('selectedCustomerPrice');
-      document.getElementById('selectedCustomerName').textContent = customer && customer.fullName ? customer.fullName : '-';
-      document.getElementById('selectedCustomerMeta').textContent = customer
-        ? `Telefon: ${customer.phone || '-'} · Telegram: ${customer.telegramId || '-'}`
-        : 'Mijozni tanlang.';
-      const balanceLabel = (value) => {
-        const amount = Number(value || 0);
-        if (amount < 0) return 'haqdor';
-        if (amount > 0) return 'qarz';
-        return 'balans';
-      };
-      const balanceText = (value) => `${numberFormat(Math.abs(Number(value || 0)))} so'm ${balanceLabel(value)}`;
-      const pricing = activeCustomerPricing(customer);
-      document.getElementById('selectedCustomerDebt').innerHTML = customer
-        ? saleMode === 'transfer'
-          ? `Jami savdo: ${numberFormat(customer.totalSales)} so'm · O'tkazma balans: <span class="${debtClass(customer.transferDebt)}">${balanceText(customer.transferDebt || 0)}</span>`
-          : `Jami savdo: ${numberFormat(customer.totalSales)} so'm · Naqd balans: <span class="${debtClass(customer.cashDebt)}">${balanceText(customer.cashDebt || 0)}</span>`
-        : '';
-      priceEl.textContent = customer
-        ? saleMode === 'transfer'
-          ? `O'tkazma narx: ${numberFormat(pricing.transferPricePerKg)} so'm/kg${pricing.customTransferPricePerKg ? ' · maxsus' : ''}`
-          : `Naqd narx: ${numberFormat(pricing.cashPricePerKg)} so'm/kg${pricing.customCashPricePerKg ? ' · maxsus' : ''}`
-        : '';
-      if (customer) {
-        historyLinkEl.href = withAccess(`/warehouse/customers/${customer.id}`);
-        historyLinkEl.classList.remove('hidden');
-      } else {
-        historyLinkEl.href = withAccess('/warehouse/customers');
-        historyLinkEl.classList.add('hidden');
-      }
+      saleKgExpressionEl.style.height = `${saleKgExpressionEl.scrollHeight}px`;
     }
 
     function parseKgExpression(expression) {
-      const source = String(expression || '').replace(/\s+/g, '');
-      if (!source) {
-        return { ok: false, message: 'Kg miqdorini kiriting.' };
-      }
-      if (!/^[\d+\-*/()%.,]+$/.test(source)) {
-        return { ok: false, message: 'Faqat raqam, vergul, nuqta, +, -, *, /, % va () ishlating.' };
-      }
-      const normalized = source.replace(/,/g, '.');
-      const tokens = [];
-      let index = 0;
-      let expectNumber = true;
-
-      while (index < normalized.length) {
-        if (expectNumber) {
-          if (normalized[index] === '(') {
-            tokens.push({ type: 'leftParen', value: '(' });
-            index += 1;
-            continue;
-          }
-          let sign = 1;
-          while (normalized[index] === '+' || normalized[index] === '-') {
-            if (normalized[index] === '-') {
-              sign *= -1;
-            }
-            index += 1;
-          }
-          if (normalized[index] === '(') {
-            if (sign === -1) {
-              tokens.push({ type: 'number', value: -1 });
-              tokens.push({ type: 'operator', value: '*' });
-            }
-            tokens.push({ type: 'leftParen', value: '(' });
-            index += 1;
-            continue;
-          }
-          const numberMatch = normalized.slice(index).match(/^\d+(?:\.\d+)?/);
-          if (!numberMatch) {
-            return { ok: false, message: 'Ifoda noto\'g\'ri. Masalan: (10,285+10,895)-2,000 yoki 10*(4+1)' };
-          }
-          tokens.push({ type: 'number', value: sign * Number(numberMatch[0]) });
-          index += numberMatch[0].length;
-          expectNumber = false;
-          continue;
-        }
-
-        const operator = normalized[index];
-        if (operator === '%') {
-          tokens.push({ type: 'percent', value: '%' });
-          index += 1;
-          expectNumber = false;
-          continue;
-        }
-        if (operator === ')') {
-          tokens.push({ type: 'rightParen', value: ')' });
-          index += 1;
-          expectNumber = false;
-          continue;
-        }
-        if (!'+-*/'.includes(operator)) {
-          return { ok: false, message: 'Ifoda noto\'g\'ri. Operator xato yozilgan.' };
-        }
-        tokens.push({ type: 'operator', value: operator });
-        index += 1;
-        expectNumber = true;
-      }
-
-      if (expectNumber) {
-        return { ok: false, message: 'Ifoda noto\'g\'ri tugagan.' };
-      }
-
-      const precedence = { '+': 1, '-': 1, '*': 2, '/': 2 };
-      const values = [];
-      const operators = [];
-
-      function applyOperator() {
-        const operator = operators.pop();
-        const right = values.pop();
-        const left = values.pop();
-        if (!Number.isFinite(left) || !Number.isFinite(right)) {
-          throw new Error('Ifoda noto\'g\'ri.');
-        }
-        if (operator === '+') values.push(left + right);
-        if (operator === '-') values.push(left - right);
-        if (operator === '*') values.push(left * right);
-        if (operator === '/') {
-          if (right === 0) {
-            throw new Error('0 ga bo\'lish mumkin emas.');
-          }
-          values.push(left / right);
-        }
-      }
-
+      const clean = (expression || '').replace(/,/g, '.').replace(/\s+/g, '');
+      if (!clean) return { ok: false, message: 'Ifoda bo\'sh' };
       try {
-        for (const token of tokens) {
-          if (token.type === 'number') {
-            values.push(token.value);
-            continue;
-          }
-          if (token.type === 'percent') {
-            if (!values.length) {
-              throw new Error('Foizdan oldin son bo\'lishi kerak.');
+        const tokens = clean.split(/([+\-*/%()])/).filter(Boolean);
+        let result = 0;
+        let currentOp = '+';
+        let stack = [{ val: 0, op: '+' }];
+        for (let i = 0; i < tokens.length; i++) {
+          const t = tokens[i];
+          if (t === '(') {
+            stack.push({ val: 0, op: currentOp });
+            currentOp = '+';
+          } else if (t === ')') {
+            const inner = stack.pop();
+            const val = inner.val;
+            const outerOp = inner.op;
+            const top = stack[stack.length - 1];
+            if (outerOp === '+') top.val += val;
+            else if (outerOp === '-') top.val -= val;
+            else if (outerOp === '*') top.val *= val;
+            else if (outerOp === '/') top.val /= val;
+          } else if (['+', '-', '*', '/'].includes(t)) {
+            currentOp = t;
+          } else if (t === '%') {
+            // Handled in numeric part
+          } else {
+            let val = parseFloat(t);
+            if (isNaN(val)) throw new Error('Son xato');
+            if (tokens[i + 1] === '%') {
+              const top = stack[stack.length - 1];
+              val = (top.val * val) / 100;
+              i++;
             }
-            values.push(values.pop() / 100);
-            continue;
+            const top = stack[stack.length - 1];
+            if (currentOp === '+') top.val += val;
+            else if (currentOp === '-') top.val -= val;
+            else if (currentOp === '*') top.val *= val;
+            else if (currentOp === '/') top.val /= val;
           }
-          if (token.type === 'leftParen') {
-            operators.push(token.value);
-            continue;
-          }
-          if (token.type === 'rightParen') {
-            while (operators.length && operators[operators.length - 1] !== '(') {
-              applyOperator();
-            }
-            if (!operators.length || operators[operators.length - 1] !== '(') {
-              throw new Error('Qavslar noto\'g\'ri yopilgan.');
-            }
-            operators.pop();
-            continue;
-          }
-          while (operators.length && precedence[operators[operators.length - 1]] >= precedence[token.value]) {
-            if (operators[operators.length - 1] === '(') {
-              break;
-            }
-            applyOperator();
-          }
-          operators.push(token.value);
         }
-        while (operators.length) {
-          if (operators[operators.length - 1] === '(') {
-            throw new Error('Qavslar yopilmagan.');
-          }
-          applyOperator();
-        }
-      } catch (error) {
-        return { ok: false, message: error.message || 'Ifodani hisoblab bo\'lmadi.' };
+        const finalVal = stack[0].val;
+        const blockCount = Math.ceil(finalVal / 11);
+        return { ok: true, value: finalVal, blockCount };
+      } catch (e) {
+        return { ok: false, message: 'Ifoda xato' };
       }
-
-      const total = values[0];
-      if (!Number.isFinite(total) || total <= 0) {
-        return { ok: false, message: 'Natija 0 dan katta bo\'lishi kerak.' };
-      }
-
-      const blockCount = tokens.some((token) => token.type === 'number')
-        ? tokens.filter((token) => token.type === 'operator' && (token.value === '+' || token.value === '-')).length + 1
-        : 0;
-
-      return {
-        ok: true,
-        value: Math.round(total * 1000) / 1000,
-        blockCount,
-      };
-    }
-
-    function formatKg(value) {
-      return String(Math.round(Number(value || 0) * 1000) / 1000).replace('.', ',');
-    }
-
-    function activeCustomerPricing(customer) {
-      return {
-        cashPricePerKg: Number(customer?.cashPricePerKg || currentPricing.cashPricePerKg || 0),
-        transferPricePerKg: Number(customer?.transferPricePerKg || currentPricing.transferPricePerKg || 0),
-        customCashPricePerKg: Number(customer?.customCashPricePerKg || 0) || null,
-        customTransferPricePerKg: Number(customer?.customTransferPricePerKg || 0) || null,
-      };
-    }
-
-    function formatMoneyPreview(amountKg) {
-      const customer = customersState.find((entry) => Number(entry.id) === Number(saleCustomerEl.value));
-      const pricing = activeCustomerPricing(customer);
-      const cashTotal = Math.round(Number(amountKg || 0) * pricing.cashPricePerKg);
-      const transferTotal = Math.round(Number(amountKg || 0) * pricing.transferPricePerKg);
-      if (saleMode === 'transfer') {
-        return transferTotal > 0 ? `O'tkazma summa: ${numberFormat(transferTotal)} so'm\n12% NDS bilan` : '';
-      }
-      return cashTotal > 0 ? `Naqd summa: ${numberFormat(cashTotal)} so'm` : '';
-    }
-
-    function normalizedManualBlockCount() {
-      const rawValue = String((saleBlockCountEl && saleBlockCountEl.value) || '').trim();
-      if (!rawValue) {
-        return null;
-      }
-      const value = Number(rawValue);
-      if (!Number.isInteger(value) || value <= 0) {
-        throw new Error('Blok soni 1 yoki undan katta butun son bo\'lsin.');
-      }
-      return value;
-    }
-
-    function adjustManualBlockCount(delta) {
-      const step = Number(delta || 0);
-      if (!Number.isFinite(step) || step === 0) {
-        return;
-      }
-      const current = Number(saleBlockCountEl.value || 0);
-      const safeCurrent = Number.isInteger(current) && current > 0 ? current : 0;
-      const next = Math.max(1, safeCurrent + step);
-      saleBlockCountEl.value = String(next);
-      saleBlockCountEl.dataset.mode = 'manual';
-      updateCalculatorPreview();
-      writeSaleDraft();
-      saleBlockCountEl.focus({ preventScroll: true });
-    }
-
-    function syncBlockCountField(parsed) {
-      if (!saleBlockCountEl) {
-        return;
-      }
-      if (saleBlockCountEl.dataset.mode === 'manual') {
-        return;
-      }
-      const nextValue = parsed && parsed.ok && parsed.blockCount > 0 ? String(parsed.blockCount) : '';
-      saleBlockCountEl.value = nextValue;
-      saleBlockCountEl.dataset.mode = 'auto';
     }
 
     function updateCalculatorPreview() {
-      syncCalculatorVisibility();
-      calcMoneyPreviewEl.classList.toggle('transfer-mode', saleMode === 'transfer');
-      const parsed = parseKgExpression(saleKgExpressionEl.value);
-      if (!saleKgExpressionEl.value.trim()) {
-        syncBlockCountField(null);
+      const expression = saleKgExpressionEl.value.trim();
+      const parsed = parseKgExpression(expression);
+      const transferMode = saleMode === 'transfer';
+      if (!expression) {
         calcValueEl.textContent = '0';
         calcHintEl.textContent = 'Ifoda yozing yoki tugmalar bilan kiriting.';
         calcBlockPreviewEl.textContent = '';
         calcMoneyPreviewEl.textContent = '';
         calcExpressionPreviewEl.textContent = '';
-        calcResultEl.classList.add('warn');
-        calcResultEl.classList.remove('error');
+        calcResultEl.className = 'calc-result warn';
+        kgCalculatorEl.classList.remove('has-expression');
         return null;
       }
+      kgCalculatorEl.classList.add('has-expression');
       if (!parsed.ok) {
-        syncBlockCountField(null);
-        calcValueEl.textContent = '-';
-        calcHintEl.textContent = parsed.message;
+        calcValueEl.textContent = 'Xato';
+        calcHintEl.textContent = 'Ifodani tekshiring.';
         calcBlockPreviewEl.textContent = '';
         calcMoneyPreviewEl.textContent = '';
-        calcExpressionPreviewEl.textContent = '';
-        calcResultEl.classList.add('error');
-        calcResultEl.classList.remove('warn');
+        calcExpressionPreviewEl.textContent = expression;
+        calcResultEl.className = 'calc-result error';
         return null;
       }
-      syncBlockCountField(parsed);
-      const chosenBlockCount = normalizedManualBlockCount() || parsed.blockCount || 0;
-      const formattedValue = `${formatKg(parsed.value)} kg`;
-      calcValueEl.textContent = formattedValue;
-      calcHintEl.textContent = 'Savdo shu yakuniy kg bilan yoziladi.';
-      calcBlockPreviewEl.textContent = chosenBlockCount > 0
-        ? `${numberFormat(chosenBlockCount)} blok сыр olindi`
-        : '';
-      calcMoneyPreviewEl.textContent = formatMoneyPreview(parsed.value);
-      calcExpressionPreviewEl.textContent = `${saleKgExpressionEl.value.trim()} = ${formattedValue}`;
-      calcResultEl.classList.remove('error', 'warn');
+      calcValueEl.textContent = numberFormat(parsed.value);
+      calcHintEl.textContent = 'Tayyor.';
+      const blockCount = normalizedManualBlockCount() || parsed.blockCount;
+      calcBlockPreviewEl.textContent = blockCount ? `${numberFormat(blockCount)} blok` : '';
+      const customerId = Number(saleCustomerEl.value);
+      const customer = customersState.find((c) => c.id === customerId);
+      const priceValue = transferMode ? (customer ? (customer.transferPricePerKg || currentPricing.transferPricePerKg) : currentPricing.transferPricePerKg) : (customer ? (customer.cashPricePerKg || currentPricing.cashPricePerKg) : currentPricing.cashPricePerKg);
+      const moneyValue = parsed.value * priceValue;
+      calcMoneyPreviewEl.textContent = `${numberFormat(moneyValue)} so'm`;
+      calcMoneyPreviewEl.classList.toggle('transfer-mode', transferMode);
+      calcExpressionPreviewEl.textContent = expression.replace(/\*/g, '×').replace(/\//g, '÷');
+      calcResultEl.className = 'calc-result';
+      if (saleBlockCountEl.dataset.mode === 'auto') {
+        saleBlockCountEl.value = blockCount || '';
+      }
       return parsed.value;
+    }
+
+    function normalizedManualBlockCount() {
+      const val = parseInt(saleBlockCountEl.value);
+      return isNaN(val) || val <= 0 ? 0 : val;
+    }
+
+    function adjustManualBlockCount(delta) {
+      const current = normalizedManualBlockCount() || parseKgExpression(saleKgExpressionEl.value).blockCount || 0;
+      const next = Math.max(1, current + delta);
+      saleBlockCountEl.value = next;
+      saleBlockCountEl.dataset.mode = 'manual';
+      updateCalculatorPreview();
+      writeSaleDraft();
     }
 
     function openCalculator() {
       kgCalculatorEl.classList.add('open');
-      syncCalculatorVisibility();
-      setCalculatorOverlayState(true);
-      updateCalculatorPreview();
+      calcBackdropEl.classList.add('open');
+      calcBackdropEl.hidden = false;
     }
 
     function closeCalculator() {
       kgCalculatorEl.classList.remove('open');
-      setCalculatorOverlayState(false);
-      syncCalculatorVisibility();
+      calcBackdropEl.classList.remove('open');
+      calcBackdropEl.hidden = true;
     }
 
-    function isDigitToken(char) {
-      return /\d/.test(String(char || ''));
-    }
-
-    function isBinaryOperator(char) {
-      return ['+', '-', '*', '/'].includes(String(char || ''));
-    }
-
-    function isValueToken(char) {
-      const token = String(char || '');
-      return isDigitToken(token) || token === ')' || token === '%';
-    }
-
-    function hasOpenParenBeforeCursor(text, cursor) {
-      const before = text.slice(0, cursor);
-      const opened = (before.match(/\(/g) || []).length;
-      const closed = (before.match(/\)/g) || []).length;
-      return opened > closed;
-    }
-
-    function insertCalculatorKey(value) {
-      let insertValue = String(value || '');
-      if (!insertValue) {
-        return;
-      }
-
+    function insertCalculatorKey(key) {
       const start = saleKgExpressionEl.selectionStart;
       const end = saleKgExpressionEl.selectionEnd;
-      const fullText = saleKgExpressionEl.value;
-      const before = fullText.slice(0, start);
-      const after = fullText.slice(end);
-      const prevChar = before.slice(-1);
-
-      if (insertValue === ',') {
-        const leftPart = before.match(/[\d.,]+$/)?.[0] || '';
-        const rightPart = after.match(/^[\d.,]+/)?.[0] || '';
-        const selectedPart = fullText.slice(start, end);
-        const currentToken = `${leftPart}${selectedPart}${rightPart}`;
-        if (currentToken.includes(',') || currentToken.includes('.')) {
-          return;
-        }
-        if (!leftPart) {
-          insertValue = isValueToken(prevChar) ? ',' : '0,';
-        }
-      }
-
-      if (insertValue === '%') {
-        if (!isValueToken(prevChar) || prevChar === '%') {
-          return;
-        }
-      }
-
-      if (isBinaryOperator(insertValue)) {
-        if (!before && insertValue !== '-') {
-          return;
-        }
-        if (prevChar === '(' && insertValue !== '-') {
-          return;
-        }
-        if (prevChar === ',' || prevChar === '.') {
-          return;
-        }
-        if (isBinaryOperator(prevChar)) {
-          saleKgExpressionEl.setRangeText(insertValue, Math.max(0, start - 1), start, 'end');
-          syncExpressionHeight();
-          saleKgExpressionEl.focus({ preventScroll: true });
-          openCalculator();
-          updateCalculatorPreview();
-          writeSaleDraft();
-          return;
-        }
-      }
-
-      if (insertValue === '(' && isValueToken(prevChar)) {
-        insertValue = '*(';
-      }
-
-      if (insertValue === ')') {
-        if (!hasOpenParenBeforeCursor(fullText, start) || !isValueToken(prevChar)) {
-          return;
-        }
-      }
-
-      if (isDigitToken(insertValue) && prevChar === ')') {
-        insertValue = `*${insertValue}`;
-      }
-
-      saleKgExpressionEl.setRangeText(insertValue, start, end, 'end');
+      const text = saleKgExpressionEl.value;
+      saleKgExpressionEl.value = text.slice(0, start) + key + text.slice(end);
+      saleKgExpressionEl.selectionStart = saleKgExpressionEl.selectionEnd = start + key.length;
       syncExpressionHeight();
-      saleKgExpressionEl.focus({ preventScroll: true });
-      openCalculator();
       updateCalculatorPreview();
       writeSaleDraft();
+      saleKgExpressionEl.focus({ preventScroll: true });
     }
 
     function backspaceCalculatorKey() {
       const start = saleKgExpressionEl.selectionStart;
       const end = saleKgExpressionEl.selectionEnd;
-      if (start !== end) {
-        saleKgExpressionEl.setRangeText('', start, end, 'end');
-      } else if (start > 0) {
-        saleKgExpressionEl.setRangeText('', start - 1, start, 'end');
+      const text = saleKgExpressionEl.value;
+      if (start === end) {
+        if (start === 0) return;
+        saleKgExpressionEl.value = text.slice(0, start - 1) + text.slice(end);
+        saleKgExpressionEl.selectionStart = saleKgExpressionEl.selectionEnd = start - 1;
+      } else {
+        saleKgExpressionEl.value = text.slice(0, start) + text.slice(end);
+        saleKgExpressionEl.selectionStart = saleKgExpressionEl.selectionEnd = start;
       }
       syncExpressionHeight();
-      saleKgExpressionEl.focus({ preventScroll: true });
       updateCalculatorPreview();
       writeSaleDraft();
+      saleKgExpressionEl.focus({ preventScroll: true });
+    }
+
+    async function handleSelectedPhotos(input) {
+      const files = Array.from(input.files);
+      if (!files.length) return;
+      setStatus('Rasmlar tayyorlanmoqda...');
+      for (const file of files) {
+        const entry = await preparePhotoEntry(file);
+        salePhotoState.push(entry);
+      }
+      renderPhotoPreviews();
+      writeSaleDraft();
+      setStatus('');
+    }
+
+    function preparePhotoEntry(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const max = 1200;
+            if (width > max || height > max) {
+              if (width > height) {
+                height *= max / width;
+                width = max;
+              } else {
+                width *= max / height;
+                height = max;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve({
+              dataUrl: canvas.toDataURL('image/jpeg', 0.8),
+              mimeType: 'image/jpeg',
+              originalName: file.name,
+              id: Math.random().toString(36).slice(2, 9),
+            });
+          };
+          img.onerror = reject;
+          img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function renderPhotoPreviews() {
+      if (!salePhotoState.length) {
+        salePhotoPreviewWrapEl.classList.add('hidden');
+        clearSalePhotoButtonEl.classList.add('hidden');
+        return;
+      }
+      salePhotoPreviewWrapEl.classList.remove('hidden');
+      clearSalePhotoButtonEl.classList.remove('hidden');
+      salePhotoPreviewGridEl.innerHTML = salePhotoState.map((entry) => `
+        <div class="photo-preview-item">
+          <img src="${entry.dataUrl}" alt="${entry.originalName}">
+          <button type="button" class="secondary" data-remove-sale-photo="${entry.id}">O'chirish</button>
+        </div>
+      `).join('');
+      salePhotoMetaEl.textContent = `${salePhotoState.length} ta rasm tanlandi.`;
+    }
+
+    function removeSalePhoto(id) {
+      salePhotoState = salePhotoState.filter((p) => p.id !== id);
+      renderPhotoPreviews();
+      writeSaleDraft();
+    }
+
+    function clearSalePhoto() {
+      salePhotoState = [];
+      renderPhotoPreviews();
+      writeSaleDraft();
+    }
+
+    function writeSaleDraft() {
+      if (saleDraftRestorePending) return;
+      const draft = {
+        customerId: saleCustomerEl.value,
+        date: saleDateEl.value,
+        dateMode: saleDateEl.dataset.dateMode,
+        kgExpression: saleKgExpressionEl.value,
+        blockCount: saleBlockCountEl.value,
+        blockMode: saleBlockCountEl.dataset.mode,
+        cash: saleCashEl.value,
+        transfer: saleTransferEl.value,
+        note: saleNoteEl.value,
+        photos: salePhotoState,
+      };
+      localStorage.setItem(SALE_DRAFT_KEY, JSON.stringify(draft));
+    }
+
+    function restoreSaleDraft() {
+      const raw = localStorage.getItem(SALE_DRAFT_KEY);
+      if (!raw) {
+        saleDraftRestorePending = false;
+        return;
+      }
+      try {
+        const draft = JSON.parse(raw);
+        if (draft.customerId) saleCustomerEl.value = draft.customerId;
+        if (draft.date) saleDateEl.value = draft.date;
+        if (draft.dateMode) saleDateEl.dataset.dateMode = draft.dateMode;
+        saleKgExpressionEl.value = draft.kgExpression || '';
+        saleBlockCountEl.value = draft.blockCount || '';
+        saleBlockCountEl.dataset.mode = draft.blockMode || 'auto';
+        saleCashEl.value = draft.cash || '';
+        saleTransferEl.value = draft.transfer || '';
+        saleNoteEl.value = draft.note || '';
+        salePhotoState = draft.photos || [];
+        syncExpressionHeight();
+        renderPhotoPreviews();
+        updateSelectedCustomerCard();
+        updateCalculatorPreview();
+      } catch (e) {
+        console.error('Draft restore failed', e);
+      }
+      saleDraftRestorePending = false;
+    }
+
+    function clearSaleDraft() {
+      localStorage.removeItem(SALE_DRAFT_KEY);
+    }
+
+    function isCoarsePointer() {
+      return window.matchMedia('(pointer: coarse)').matches;
     }
 
     async function loadCustomers() {
@@ -1764,13 +1489,22 @@
     syncExpressionHeight();
     updateCalculatorPreview();
 
-    if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
-      loadCustomers().catch((error) => setStatus(error.message, true));
-    } else if (pinAuth.hasPin()) {
-      setStatus('PIN saqlangan. PIN bilan kiring, keyin savdo sahifasi yuklanadi.');
-    } else {
-      setStatus('Sotuvchi, admin yoki link orqali kiring, keyin sahifa ishga tushadi.');
+    async function initPage() {
+      if (accessToken) {
+        const isWaitingForPin = await checkStaffLinkAuth();
+        if (isWaitingForPin) return;
+      }
+
+      if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
+        loadCustomers().catch((error) => setStatus(error.message, true));
+      } else if (pinAuth.hasPin()) {
+        setStatus('PIN saqlangan. PIN bilan kiring, keyin savdo sahifasi yuklanadi.');
+      } else {
+        setStatus('Sotuvchi, admin yoki link orqali kiring, keyin sahifa ishga tushadi.');
+      }
     }
+
+    initPage();
   </script>
   <script src="/warehouse-top-nav.js"></script>
   <script src="/warehouse/assets/warehouse-offline.js"></script>

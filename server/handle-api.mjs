@@ -55,6 +55,8 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     updateWarehouseOrder,
     deleteWarehouseOrder,
     upsertCustomer,
+    verifyStaffPin,
+    authenticateStaffAccessToken,
   } = deps;
 
   const readWarehouse =
@@ -727,6 +729,14 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (apiPath === "/api/warehouse/staff-directory" && req.method === "GET") {
+    const operator = assertWarehouseOperator(req, res, {
+      allowAdmin: true,
+      realm: "warehouse-staff",
+      message: "Xodimlar ro'yxatini ko'rish uchun ruxsat kerak",
+    });
+    if (!operator) {
+      return true;
+    }
     const staff = readWarehouse((state) =>
       listStaffAccounts(state)
         .filter((entry) => entry && entry.active !== false)
@@ -742,6 +752,48 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       ok: true,
       staff,
     });
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/auth-status" && req.method === "GET") {
+    const token = (new URL(req.url || "/", "http://x").searchParams.get("access") || "").trim() || (req.headers["x-warehouse-access"] || "").trim();
+    if (!token) {
+      sendApiJson(res, 401, { error: "Token topilmadi" });
+      return true;
+    }
+    const operator = readWarehouse((state) => authenticateStaffAccessToken(state, token));
+    if (!operator) {
+      sendApiJson(res, 401, { error: "Token noto'g'ri" });
+      return true;
+    }
+    sendApiJson(res, 200, {
+      ok: true,
+      username: operator.username,
+      fullName: operator.fullName,
+      role: operator.role,
+      hasPin: operator.hasPin,
+      isWaitingForPin: operator.hasPin && !operator.isUnlocked,
+    });
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/verify-pin" && req.method === "POST") {
+    const token = (new URL(req.url || "/", "http://x").searchParams.get("access") || "").trim() || (req.headers["x-warehouse-access"] || "").trim();
+    if (!token) {
+      sendApiJson(res, 401, { error: "Token topilmadi" });
+      return true;
+    }
+    const body = await readPostJson(req);
+    if (!body || !body.pin) {
+      sendApiJson(res, 400, { error: "PIN киритинг" });
+      return true;
+    }
+    try {
+      await writeWarehouse((state) => verifyStaffPin(state, token, body.pin));
+      sendApiJson(res, 200, { ok: true });
+    } catch (e) {
+      sendApiJson(res, 401, { error: e.message || "PIN noto'g'ri" });
+    }
     return true;
   }
 

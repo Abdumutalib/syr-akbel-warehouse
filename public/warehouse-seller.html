@@ -533,6 +533,70 @@
 
     const apiFetch = (url, options = {}) => window.warehouseApi.fetch(url, options, typeof authHeader === 'function' ? authHeader() : '', typeof accessToken !== 'undefined' ? accessToken : '');
 
+    async function checkStaffLinkAuth() {
+      if (!accessToken) return false;
+      try {
+        const data = await apiFetch('/api/warehouse/auth-status');
+        if (data.ok) {
+          if (data.isWaitingForPin) {
+            showPinOnlyUi(data);
+            return true;
+          }
+        }
+      } catch (e) {
+        console.error('Auth status check failed', e);
+      }
+      return false;
+    }
+
+    function showPinOnlyUi(data) {
+      authPanelEl.classList.remove('hidden');
+      authTitleEl.textContent = 'PIN кодни киритинг';
+      authHintEl.textContent = `${data.fullName} (${data.username}), илтимос ПИН-кодингизни киритинг.`;
+      
+      usernameGroupEl.classList.add('hidden');
+      passwordGroupEl.classList.add('hidden');
+      pinEl.closest('#pinGroup').classList.remove('hidden');
+      
+      saveAuthButtonEl.classList.add('hidden');
+      clearPinButtonEl.classList.add('hidden');
+      showLoginButtonEl.classList.add('hidden');
+      unlockPinButtonEl.classList.remove('hidden');
+      unlockPinButtonEl.textContent = 'Кириш';
+      
+      unlockPinButtonEl.onclick = async () => {
+        const pin = pinEl.value.trim();
+        if (!pin) {
+          setStatus('PIN киритинг', true);
+          return;
+        }
+        try {
+          const res = await apiFetch('/api/warehouse/verify-pin', {
+            method: 'POST',
+            body: JSON.stringify({ pin })
+          });
+          if (res.ok) {
+            if (window.setWarehouseOperatorProfile) {
+              window.setWarehouseOperatorProfile({
+                kind: 'staff',
+                role: data.role || 'seller',
+                username: data.username,
+                fullName: data.fullName,
+                permissions: data.permissions || [],
+              });
+            }
+            await loadCustomers();
+            authPanelEl.hidden = true;
+            activeSessionNoticeEl.hidden = false;
+            activeSessionNoticeEl.textContent = `${data.fullName} — кириш тасдиқланди.`;
+            setStatus('Тайёр.');
+          }
+        } catch (err) {
+          setStatus(err.message, true);
+        }
+      };
+    }
+
     const numberFormat = (val) => window.warehouseApi.numberFormat(val);
 
     function formatDisplayDate(value) {
@@ -870,13 +934,22 @@
     applyOperatorPermissions();
     staffPicker.load().catch(() => {});
 
-    if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
-      loadCustomers().catch((error) => setStatus(error.message, true));
-    } else if (pinAuth.hasPin()) {
-      setStatus('PIN saqlangan. PIN bilan kiring, keyin sotuvchi sahifasi yuklanadi.');
-    } else {
-      setStatus('Sotuvchi, admin yoki link orqali kiring, keyin sahifa ishga tushadi.');
+    async function initPage() {
+      if (accessToken) {
+        const isWaitingForPin = await checkStaffLinkAuth();
+        if (isWaitingForPin) return; // UI is showing PIN prompt
+      }
+
+      if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
+        loadCustomers().catch((error) => setStatus(error.message, true));
+      } else if (pinAuth.hasPin()) {
+        setStatus('PIN saqlangan. PIN bilan kiring, keyin sotuvchi sahifasi yuklanadi.');
+      } else {
+        setStatus('Sotuvchi, admin yoki link orqali kiring, keyin sahifa ishga tushadi.');
+      }
     }
+
+    initPage();
 
     setInterval(() => {
       if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
