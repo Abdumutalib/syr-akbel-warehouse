@@ -240,7 +240,6 @@
 
     .calc-backdrop {
       position: fixed;
-      inset: 0;
       background: rgba(0, 0, 0, 0.28);
       z-index: 59;
       opacity: 0;
@@ -395,13 +394,6 @@
       gap: 8px;
     }
 
-    .selected-customer-link {
-      justify-self: start;
-      margin-top: 4px;
-    }
-
-    .selected-customer strong {
-      font-size: 26px;
     }
 
     .selected-customer-price {
@@ -428,6 +420,7 @@
 
     .photo-preview-grid {
       display: grid;
+<<<<<<< HEAD
       grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
       gap: 10px;
     }
@@ -582,6 +575,13 @@
               <div id="calcHint" class="muted">Ifoda yozing yoki tugmalar bilan kiriting.</div>
               <div id="calcBlockPreview" class="calc-block-preview"></div>
               <div id="calcMoneyPreview" class="calc-money-preview muted"></div>
+=======
+      // parseKgExpression tashqi modul sifatida import qilinadi
+      // <script type="module"> orqali import qilish uchun:
+      // import { parseKgExpression } from './calc-logic.js';
+      // Oddiy script uchun:
+      // <script src="calc-logic.js"></script> va window.parseKgExpression
+>>>>>>> 2ae9b9e (Kalkulyator logikasi va testlar tuzatildi)
               <div id="calcExpressionPreview" class="calc-expression muted"></div>
             </div>
             <div class="calc-grid">
@@ -1017,6 +1017,93 @@
       } catch (e) {
         return { ok: false, message: 'Ifoda xato' };
       }
+<<<<<<< HEAD
+=======
+
+
+      const total = values[0];
+      if (!Number.isFinite(total) || total <= 0) {
+        return { ok: false, message: 'Natija 0 dan katta bo\'lishi kerak.' };
+      }
+
+      const blockCount = tokens.some((token) => token.type === 'number')
+        ? tokens.filter((token) => token.type === 'operator' && (token.value === '+' || token.value === '-')).length + 1
+        : 0;
+
+      return {
+        ok: true,
+        value: Math.round(total * 1000) / 1000,
+        blockCount,
+      };
+    }
+
+    // Node.js uchun экспорт
+    if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
+      module.exports = { parseKgExpression };
+    }
+
+    function formatKg(value) {
+      return String(Math.round(Number(value || 0) * 1000) / 1000).replace('.', ',');
+    }
+
+    function activeCustomerPricing(customer) {
+      return {
+        cashPricePerKg: Number(customer?.cashPricePerKg || currentPricing.cashPricePerKg || 0),
+        transferPricePerKg: Number(customer?.transferPricePerKg || currentPricing.transferPricePerKg || 0),
+        customCashPricePerKg: Number(customer?.customCashPricePerKg || 0) || null,
+        customTransferPricePerKg: Number(customer?.customTransferPricePerKg || 0) || null,
+      };
+    }
+
+    function formatMoneyPreview(amountKg) {
+      const customer = customersState.find((entry) => Number(entry.id) === Number(saleCustomerEl.value));
+      const pricing = activeCustomerPricing(customer);
+      const cashTotal = Math.round(Number(amountKg || 0) * pricing.cashPricePerKg);
+      const transferTotal = Math.round(Number(amountKg || 0) * pricing.transferPricePerKg);
+      if (saleMode === 'transfer') {
+        return transferTotal > 0 ? `O'tkazma summa: ${numberFormat(transferTotal)} so'm\n12% NDS bilan` : '';
+      }
+      return cashTotal > 0 ? `Naqd summa: ${numberFormat(cashTotal)} so'm` : '';
+    }
+
+    function normalizedManualBlockCount() {
+      const rawValue = String((saleBlockCountEl && saleBlockCountEl.value) || '').trim();
+      if (!rawValue) {
+        return null;
+      }
+      const value = Number(rawValue);
+      if (!Number.isInteger(value) || value <= 0) {
+        throw new Error('Blok soni 1 yoki undan katta butun son bo\'lsin.');
+      }
+      return value;
+    }
+
+    function adjustManualBlockCount(delta) {
+      const step = Number(delta || 0);
+      if (!Number.isFinite(step) || step === 0) {
+        return;
+      }
+      const current = Number(saleBlockCountEl.value || 0);
+      const safeCurrent = Number.isInteger(current) && current > 0 ? current : 0;
+      const next = Math.max(1, safeCurrent + step);
+      saleBlockCountEl.value = String(next);
+      saleBlockCountEl.dataset.mode = 'manual';
+      updateCalculatorPreview();
+      writeSaleDraft();
+      saleBlockCountEl.focus({ preventScroll: true });
+    }
+
+    function syncBlockCountField(parsed) {
+      if (!saleBlockCountEl) {
+        return;
+      }
+      if (saleBlockCountEl.dataset.mode === 'manual') {
+        return;
+      }
+      const nextValue = parsed && parsed.ok && parsed.blockCount > 0 ? String(parsed.blockCount) : '';
+      saleBlockCountEl.value = nextValue;
+      saleBlockCountEl.dataset.mode = 'auto';
+>>>>>>> 2ae9b9e (Kalkulyator logikasi va testlar tuzatildi)
     }
 
     function updateCalculatorPreview() {
