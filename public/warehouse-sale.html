@@ -1171,7 +1171,7 @@
       writeSaleDraft();
     }
 
-    function writeSaleDraft() {
+    async function writeSaleDraft() {
       if (saleDraftRestorePending) return;
       const draft = {
         customerId: saleCustomerEl.value,
@@ -1185,17 +1185,27 @@
         note: saleNoteEl.value,
         photos: salePhotoState,
       };
-      localStorage.setItem(SALE_DRAFT_KEY, JSON.stringify(draft));
+      if (window.warehouseOfflineQueue && window.warehouseOfflineQueue.setDraft) {
+        await window.warehouseOfflineQueue.setDraft(SALE_DRAFT_KEY, draft);
+      } else {
+        localStorage.setItem(SALE_DRAFT_KEY, JSON.stringify(draft));
+      }
     }
 
-    function restoreSaleDraft() {
-      const raw = localStorage.getItem(SALE_DRAFT_KEY);
-      if (!raw) {
+    async function restoreSaleDraft() {
+      let draft;
+      if (window.warehouseOfflineQueue && window.warehouseOfflineQueue.getDraft) {
+        draft = await window.warehouseOfflineQueue.getDraft(SALE_DRAFT_KEY);
+      } else {
+        const raw = localStorage.getItem(SALE_DRAFT_KEY);
+        if (raw) draft = JSON.parse(raw);
+      }
+      
+      if (!draft) {
         saleDraftRestorePending = false;
         return;
       }
       try {
-        const draft = JSON.parse(raw);
         if (draft.customerId) saleCustomerEl.value = draft.customerId;
         if (draft.date) saleDateEl.value = draft.date;
         if (draft.dateMode) saleDateEl.dataset.dateMode = draft.dateMode;
@@ -1216,7 +1226,10 @@
       saleDraftRestorePending = false;
     }
 
-    function clearSaleDraft() {
+    async function clearSaleDraft() {
+      if (window.warehouseOfflineQueue && window.warehouseOfflineQueue.clearDraft) {
+        await window.warehouseOfflineQueue.clearDraft(SALE_DRAFT_KEY);
+      }
       localStorage.removeItem(SALE_DRAFT_KEY);
     }
 

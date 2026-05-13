@@ -9,6 +9,9 @@ function openOfflineDb() {
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
       }
+      if (!db.objectStoreNames.contains('drafts')) {
+        db.createObjectStore('drafts', { keyPath: 'key' });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -106,40 +109,77 @@ window.warehouseOfflineQueue = {
       req.onerror = () => reject(req.error);
     });
   },
+
+  async setDraft(key, data) {
+    const db = await openOfflineDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('drafts', 'readwrite');
+      const store = tx.objectStore('drafts');
+      const req = store.put({ key, data, updatedAt: Date.now() });
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async getDraft(key) {
+    const db = await openOfflineDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('drafts', 'readonly');
+      const store = tx.objectStore('drafts');
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result ? req.result.data : null);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async clearDraft(key) {
+    const db = await openOfflineDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('drafts', 'readwrite');
+      const store = tx.objectStore('drafts');
+      const req = store.delete(key);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  },
   
+  isSyncing: false,
   async syncPendingRequests() {
-    if (!navigator.onLine) return;
+    if (!navigator.onLine || this.isSyncing) return;
     
     const pending = await this.getPendingRequests();
     if (pending.length === 0) return;
 
+    this.isSyncing = true;
     window.dispatchEvent(new CustomEvent('warehouse-sync-start', { detail: { count: pending.length } }));
 
     let successCount = 0;
-    for (const req of pending) {
-      try {
-        const body = deserializeBody(req.bodyData);
-        const fetchOptions = {
-          method: req.method,
-          headers: req.headers,
-          body: body
-        };
-        const response = await fetch(req.url, fetchOptions);
-        if (response.ok || response.status === 400 || response.status === 403 || response.status === 404) {
-          // If successful or client error (won't fix by retrying), remove it.
-          await this.removeRequest(req.id);
-          successCount++;
-        } else if (response.status === 401) {
-          // Auth error, stop sync to avoid spamming errors, wait for login
-          break;
+    try {
+      for (const req of pending) {
+        try {
+          const body = deserializeBody(req.bodyData);
+          const fetchOptions = {
+            method: req.method,
+            headers: req.headers,
+            body: body
+          };
+          const response = await fetch(req.url, fetchOptions);
+          // If successful or client error or idempotency conflict, remove it.
+          if (response.ok || response.status === 400 || response.status === 403 || response.status === 404 || response.status === 409) {
+            await this.removeRequest(req.id);
+            successCount++;
+          } else if (response.status === 401) {
+            break;
+          }
+        } catch (err) {
+          console.error('Oflayn sinxronizatsiya xatosi:', err);
+          break; 
         }
-      } catch (err) {
-        console.error('Oflayn sinxronizatsiya xatosi:', err);
-        break; // Network error again, stop sync
       }
+    } finally {
+      this.isSyncing = false;
+      window.dispatchEvent(new CustomEvent('warehouse-sync-end', { detail: { successCount, totalCount: pending.length } }));
     }
-    
-    window.dispatchEvent(new CustomEvent('warehouse-sync-end', { detail: { successCount, totalCount: pending.length } }));
   }
 };
 

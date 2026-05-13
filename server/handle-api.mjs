@@ -428,7 +428,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: "customers",
+      permission: ["customers", "seller"],
       message: "Mijozlar sahifasi uchun ruxsat kerak",
     });
     if (!operator) {
@@ -455,7 +455,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: "customers",
+      permission: ["customers", "seller"],
       message: "Zakaz sahifasi uchun ruxsat kerak",
     });
     if (!operator) {
@@ -477,7 +477,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: "customers",
+      permission: ["customers", "seller"],
       message: "Zakazlar sahifasi uchun ruxsat kerak",
     });
     if (!operator) {
@@ -517,9 +517,25 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
       return true;
     }
+    const idempotencyKey = extractIdempotencyKey(req);
+    const idempotencyFingerprint = buildIdempotencyFingerprint(apiPath, body, operator);
     try {
-      const order = await writeWarehouse((state) => createWarehouseOrder(state, body, operator));
-      sendApiJson(res, 201, { ok: true, order });
+      const outcome = await writeWarehouse((state) => {
+        const hit = getIdempotencyHit(state, idempotencyKey, idempotencyFingerprint);
+        if (hit.type === "conflict") {
+          const err = new Error("Idempotency key boshqa so'rov bilan ishlatilgan");
+          err.statusCode = 409;
+          throw err;
+        }
+        if (hit.type === "replay") {
+          return { replay: true, statusCode: hit.statusCode, responseBody: hit.responseBody };
+        }
+        const order = createWarehouseOrder(state, body, operator);
+        const responseBody = { ok: true, order };
+        saveIdempotencyResult(state, idempotencyKey, idempotencyFingerprint, 201, responseBody);
+        return { replay: false, statusCode: 201, responseBody };
+      });
+      sendApiJson(res, outcome.statusCode, outcome.responseBody);
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Zakazni saqlab bo'lmadi" });
     }
@@ -704,7 +720,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: "customers",
+      permission: ["customers", "seller"],
       message: "Mijoz sahifasi uchun ruxsat kerak",
     });
     if (!operator) {

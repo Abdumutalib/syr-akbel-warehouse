@@ -19,6 +19,12 @@ window.warehouseApi = {
     if (accessToken && !requestHeaders.has('X-Warehouse-Access')) {
       requestHeaders.set('X-Warehouse-Access', accessToken);
     }
+    if (options.method && options.method !== 'GET' && !requestHeaders.has('Idempotency-Key')) {
+      const key = options.idempotencyKey || `ik-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      requestHeaders.set('Idempotency-Key', key);
+      options.idempotencyKey = key; // Keep it for retries if needed
+    }
+
     if (options.body && typeof options.body === 'string' && !requestHeaders.has('Content-Type')) {
       requestHeaders.set('Content-Type', 'application/json');
     }
