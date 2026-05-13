@@ -521,6 +521,7 @@
         <a class="button-link secondary" id="customersLink" href="/warehouse/customers">Mijozlar mundarijasi</a>
         <a class="button-link secondary" id="cashLink" href="/warehouse/admin/cash">Naqd hisoboti</a>
         <a class="button-link secondary" id="transferLink" href="/warehouse/admin/transfer">O'tkazma ҳисоботи</a>
+        <a class="button-link secondary" id="adminLink" href="/warehouse/admin">Admin sahifasi</a>
       </div>
     </section>
 
@@ -645,6 +646,12 @@
           <div id="selectedCustomerDebt" class="muted"></div>
           <a id="selectedCustomerHistoryLink" class="button-link secondary selected-customer-link hidden" href="/warehouse/customers">Savdo tarixini ochish</a>
         </div>
+
+        <div class="card">
+          <div class="muted">Ombor захираси</div>
+          <strong id="warehouseStockDisplay">-</strong>
+          <div id="stockAlert" class="status hidden"></div>
+        </div>
       </main>
     </section>
   </div>
@@ -670,6 +677,8 @@
     const salePageShortcutsEl = document.getElementById('salePageShortcuts');
     const salePageTitleEl = document.getElementById('salePageTitle');
     const saleCardTitleEl = document.getElementById('saleCardTitle');
+    const warehouseStockDisplayEl = document.getElementById('warehouseStockDisplay');
+    const stockAlertEl = document.getElementById('stockAlert');
     const saleModeBannerEl = document.getElementById('saleModeBanner');
     const saleCustomerEl = document.getElementById('saleCustomer');
     const saleDateEl = document.getElementById('saleDate');
@@ -704,6 +713,7 @@
     let accessToken = (window.getWarehouseSearchParam ? window.getWarehouseSearchParam('access', location.search) : '') || localStorage.getItem('warehouse-access-token') || '';
     const customersState = [];
     let currentPricing = { cashPricePerKg: 0, transferPricePerKg: 0 };
+    let currentStockKg = 0;
     let salePhotoState = [];
     const SALE_DRAFT_KEY = `warehouse-sale-draft-${saleMode}`;
     let saleDraftRestorePending = true;
@@ -944,7 +954,23 @@
       saleKgExpressionEl.style.height = `${saleKgExpressionEl.scrollHeight}px`;
     }
 
-    function parseKgExpression(expression) {
+    function updateStockUi() {
+      if (!warehouseStockDisplayEl) return;
+      warehouseStockDisplayEl.textContent = `${window.warehouseApi.numberFormat(currentStockKg)} kg`;
+      if (currentStockKg <= 0) {
+        stockAlertEl.textContent = 'Омборда маҳсулот қолмади!';
+        stockAlertEl.className = 'status error';
+        stockAlertEl.classList.remove('hidden');
+      } else if (currentStockKg < 200) {
+        stockAlertEl.textContent = 'Диққат: Захира камайиб қолди.';
+        stockAlertEl.style.color = 'var(--warn)';
+        stockAlertEl.classList.remove('hidden');
+      } else {
+        stockAlertEl.classList.add('hidden');
+      }
+    }
+
+    const parseKgExpression = (expression) => {
       const clean = (expression || '').replace(/,/g, '.').replace(/\s+/g, '');
       if (!clean) return { ok: false, message: 'Ifoda bo\'sh' };
       try {
@@ -1245,6 +1271,8 @@
       }
       applyOperatorPermissions(data.operator || null);
       currentPricing = data.pricing || currentPricing;
+      currentStockKg = data.stockKg ?? 0;
+      updateStockUi();
       syncCustomerState(data.customers || []);
       applyAutoSaleDate();
       updateCalculatorPreview();

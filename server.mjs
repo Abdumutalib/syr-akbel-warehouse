@@ -443,11 +443,37 @@ async function uploadCsvToYandex(state) {
   }
 }
 
+let warehouseSaveTimer = null;
+let warehouseSavePending = false;
+
+function flushWarehouseSave() {
+  if (warehouseSaveTimer) {
+    clearTimeout(warehouseSaveTimer);
+    warehouseSaveTimer = null;
+  }
+  if (warehouseSavePending) {
+    warehouseSavePending = false;
+    try {
+      saveWarehouseState(WAREHOUSE_STATE_PATH, warehouseStateCache);
+    } catch (e) {
+      console.error("[I/O] Failed to save warehouse state:", e);
+    }
+  }
+}
+
 function saveWarehouse(state) {
   warehouseStateCache = state;
-  saveWarehouseState(WAREHOUSE_STATE_PATH, state);
+  warehouseSavePending = true;
   scheduleYandexCsvUpload();
+  
+  if (!warehouseSaveTimer) {
+    warehouseSaveTimer = setTimeout(flushWarehouseSave, 300);
+  }
 }
+
+// Graceful shutdown flush
+process.on('SIGINT', () => { flushWarehouseSave(); process.exit(0); });
+process.on('SIGTERM', () => { flushWarehouseSave(); process.exit(0); });
 
 function withWarehouseRead(handler) {
   return handler(warehouseStateCache);

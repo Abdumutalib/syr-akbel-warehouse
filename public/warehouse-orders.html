@@ -183,6 +183,11 @@
         </div>
 
         <div id="status" class="status"></div>
+        <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line);">
+          <div class="muted">Ombor захираси</div>
+          <strong id="warehouseStockDisplay" style="font-size: 24px;">-</strong>
+          <div id="stockAlert" class="status hidden"></div>
+        </div>
       </aside>
 
       <main class="card">
@@ -222,6 +227,8 @@
     const orderLargeKgEl = document.getElementById('orderLargeKg');
     const orderTotalKgEl = document.getElementById('orderTotalKg');
     const orderNoteEl = document.getElementById('orderNote');
+    const warehouseStockDisplayEl = document.getElementById('warehouseStockDisplay');
+    const stockAlertEl = document.getElementById('stockAlert');
     let accessToken = (window.getWarehouseSearchParam ? window.getWarehouseSearchParam('access', location.search) : '') || localStorage.getItem('warehouse-access-token') || '';
     let orderCustomerDirectoryState = [];
     if (accessToken) {
@@ -427,8 +434,27 @@
 
     async function loadOrderCustomerDirectory() {
       const data = await apiFetch('/api/warehouse/order-customer-directory');
+      if (data.stockKg != null) {
+        updateStockUi(data.stockKg);
+      }
       orderCustomerDirectoryState = Array.isArray(data.customers) ? data.customers : [];
       renderOrderCustomerDirectory(orderCustomerDirectoryState);
+    }
+
+    function updateStockUi(stockKg) {
+      if (!warehouseStockDisplayEl) return;
+      warehouseStockDisplayEl.textContent = `${window.warehouseApi.numberFormat(stockKg)} kg`;
+      if (stockKg <= 0) {
+        stockAlertEl.textContent = 'Омборда маҳсулот қолмади!';
+        stockAlertEl.className = 'status error';
+        stockAlertEl.classList.remove('hidden');
+      } else if (stockKg < 200) {
+        stockAlertEl.textContent = 'Захира камайиб қолди.';
+        stockAlertEl.style.color = 'var(--warn)';
+        stockAlertEl.classList.remove('hidden');
+      } else {
+        stockAlertEl.classList.add('hidden');
+      }
     }
 
     function renderOrders(orders) {
