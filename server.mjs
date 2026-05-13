@@ -1083,12 +1083,9 @@ function assertWarehouseAdmin(req, res) {
   if (!auth || auth.username !== expectedUser || auth.password !== expectedPassword) {
     const ip = getClientIp(req);
     recordFailedAuth(ip);
-    res.writeHead(401, {
-      ...baseApiJsonHeaders(),
-      "WWW-Authenticate": 'Basic realm="warehouse-admin"',
-    });
+    res.writeHead(401, baseApiJsonHeaders());
     res.end(JSON.stringify({ error: "Admin so'rovi uchun ruxsat yo'q" }));
-    return false;
+    return null;
   }
   return true;
 }
@@ -1171,10 +1168,7 @@ function assertWarehouseOperator(req, res, options = {}) {
     allowAdmin,
   });
   if (!operator) {
-    res.writeHead(401, {
-      ...baseApiJsonHeaders(),
-      "WWW-Authenticate": `Basic realm="${realm}"`,
-    });
+    res.writeHead(401, baseApiJsonHeaders());
     res.end(JSON.stringify({ error: message }));
     return null;
   }
