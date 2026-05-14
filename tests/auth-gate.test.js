@@ -11,6 +11,8 @@ import {
   createStaffAccount,
   loadWarehouseState,
   saveWarehouseState,
+  seedWarehouseStock,
+  upsertCustomer,
 } from "../lib/warehouse-bot.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -119,14 +121,22 @@ async function startServer(options = {}) {
 describe("warehouse auth gate", () => {
   test("renders admin login form and guidance text", async () => {
     const server = await startServer();
-    const response = await fetch(`http://127.0.0.1:${server.port}/warehouse-register`, {
+    const firstResponse = await fetch(`http://127.0.0.1:${server.port}/warehouse-register`, {
+      redirect: "manual",
+    });
+
+    assert.equal(firstResponse.status, 302);
+    const location = firstResponse.headers.get("location");
+    assert.match(location || "", /^\/warehouse-register\?__v=/);
+
+    const response = await fetch(`http://127.0.0.1:${server.port}${location}`, {
       redirect: "manual",
     });
     const body = await response.text();
 
     assert.equal(response.status, 200);
-    assert.match(body, /Admin login va parol bilan kiring/);
-    assert.match(body, /Xodimlar admin bergan ruxsat havolasi bilan telefon yoki planshetda ilovani o'rnatib, keyin PIN bilan kirib ishlayveradi\./);
+    assert.match(body, /Admin login va parolni kiriting/);
+    assert.match(body, /Xodimlar admin bergan maxsus havola orqali PIN bilan kiradi/);
     assert.equal(server.getStderr(), "");
   });
 
@@ -161,6 +171,100 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 
+  test("allows transfer access links to write transfer sales", async () => {
+    let token = "";
+    let customerId = 0;
+    const server = await startServer({
+      seedState(state) {
+        seedWarehouseStock(state, 100);
+        const customer = upsertCustomer(state, {
+          fullName: "Transfer mijoz",
+          paymentCategories: ["transfer"],
+        });
+        customerId = customer.id;
+        const account = createStaffAccount(state, {
+          username: "transfer1",
+          password: "secret1",
+          fullName: "Transfer One",
+          role: "seller",
+          permissions: ["seller", "transfer"],
+        });
+        const link = createStaffAccessLink(state, account.id, "transfer");
+        token = link.token;
+      },
+    });
+
+    const pageResponse = await fetch(`http://127.0.0.1:${server.port}/warehouse/seller/sale/transfer?access=${token}`, {
+      redirect: "manual",
+    });
+    assert.equal(pageResponse.status, 200);
+    const response = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/seller-sale`, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": "transfer-sale-test",
+        "X-Warehouse-Access": token,
+      },
+      body: JSON.stringify({
+        userId: customerId,
+        amountKg: 1,
+        blockCount: 1,
+        priceType: "transfer",
+        transferPaidAmount: 0,
+      }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(body.transaction.priceType, "transfer");
+    assert.equal(server.getStderr(), "");
+  });
+
+  test("rejects seller-only access links for transfer sales", async () => {
+    let token = "";
+    let customerId = 0;
+    const server = await startServer({
+      seedState(state) {
+        seedWarehouseStock(state, 100);
+        const customer = upsertCustomer(state, { fullName: "Naqd xodim mijozi" });
+        customerId = customer.id;
+        const account = createStaffAccount(state, {
+          username: "seller-only",
+          password: "secret1",
+          fullName: "Seller Only",
+          role: "seller",
+          permissions: ["seller"],
+        });
+        const link = createStaffAccessLink(state, account.id, "seller");
+        token = link.token;
+      },
+    });
+
+    const pageResponse = await fetch(`http://127.0.0.1:${server.port}/warehouse/seller/sale/transfer?access=${token}`, {
+      redirect: "manual",
+    });
+    assert.equal(pageResponse.status, 302);
+    assert.equal(pageResponse.headers.get("location"), "/warehouse-register?error=link_revoked");
+    const response = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/seller-sale`, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": "seller-transfer-denied-test",
+        "X-Warehouse-Access": token,
+      },
+      body: JSON.stringify({
+        userId: customerId,
+        amountKg: 1,
+        blockCount: 1,
+        priceType: "transfer",
+      }),
+    });
+
+    assert.equal(response.status, 401);
+    assert.equal(server.getStderr(), "");
+  });
   test("allows staff access links and sets the staff cookie", async () => {
     let token = "";
     const server = await startServer({
@@ -189,3 +293,4 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 });
+

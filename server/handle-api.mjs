@@ -1,3 +1,27 @@
+// Admin password change endpoint
+export async function handleAdminPasswordChange(apiPath, req, res, deps, writeWarehouse, readPostJson, sendApiJson) {
+  if (apiPath === "/api/admin/change-password" && req.method === "POST") {
+    const { oldPassword, newPassword } = await readPostJson(req);
+    if (!oldPassword || !newPassword) {
+      sendApiJson(res, 400, { error: "Ma'lumotлар тўлиқ эмас" });
+      return true;
+    }
+    return await writeWarehouse((state) => {
+      if (!state.admin) {
+        sendApiJson(res, 400, { error: "Admin account topилмади" });
+        return true;
+      }
+      try {
+        deps.changeAdminPassword(state, oldPassword, newPassword);
+        sendApiJson(res, 200, { ok: true });
+      } catch (e) {
+        sendApiJson(res, 400, { error: e.message });
+      }
+      return true;
+    });
+  }
+  return false;
+}
 import crypto from "node:crypto";
 
 export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
@@ -172,7 +196,18 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       state.idempotencyRequests = state.idempotencyRequests.slice(0, IDEMPOTENCY_MAX_ENTRIES);
     }
   };
+  const usesTransferFlow = (body = {}) => {
+    const priceType = String(body.priceType || '').trim().toLocaleLowerCase('en-US');
+    const transferPaidAmount = Number(body.transferPaidAmount || 0);
+    return priceType === 'transfer' || (Number.isFinite(transferPaidAmount) && transferPaidAmount > 0);
+  };
 
+  const assertSellerWriteOperator = (body, message) => assertWarehouseOperator(req, res, {
+    allowAdmin: true,
+    realm: usesTransferFlow(body) ? 'warehouse-accountant' : 'warehouse-seller',
+    permission: usesTransferFlow(body) ? 'transfer' : 'seller',
+    message,
+  });
   if (apiPath === "/api/telegram/webhook" && req.method === "POST") {
     const body = await readPostJson(req);
     if (body === null) {
@@ -984,18 +1019,13 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (apiPath === "/api/warehouse/seller-sale" && req.method === "POST") {
-    const operator = assertWarehouseOperator(req, res, {
-      allowAdmin: true,
-      realm: "warehouse-seller",
-      permission: "seller",
-      message: "Savdo yozish uchun sotuvchi ruxsati kerak",
-    });
-    if (!operator) {
-      return true;
-    }
     const body = await readPostJson(req);
     if (body === null) {
       sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
+      return true;
+    }
+    const operator = assertSellerWriteOperator(body, "Savdo yozish uchun mos ruxsat kerak");
+    if (!operator) {
       return true;
     }
     const idempotencyKey = extractIdempotencyKey(req);
@@ -1073,18 +1103,13 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (apiPath === "/api/warehouse/customer-payment" && req.method === "POST") {
-    const operator = assertWarehouseOperator(req, res, {
-      allowAdmin: true,
-      realm: "warehouse-seller",
-      permission: "seller",
-      message: "To'lov yozish uchun sotuvchi ruxsati kerak",
-    });
-    if (!operator) {
-      return true;
-    }
     const body = await readPostJson(req);
     if (body === null) {
       sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
+      return true;
+    }
+    const operator = assertSellerWriteOperator(body, "To'lov yozish uchun mos ruxsat kerak");
+    if (!operator) {
       return true;
     }
     const idempotencyKey = extractIdempotencyKey(req);

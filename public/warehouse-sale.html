@@ -420,7 +420,6 @@
 
     .photo-preview-grid {
       display: grid;
-<<<<<<< HEAD
       grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
       gap: 10px;
     }
@@ -575,13 +574,6 @@
               <div id="calcHint" class="muted">Ifoda yozing yoki tugmalar bilan kiriting.</div>
               <div id="calcBlockPreview" class="calc-block-preview"></div>
               <div id="calcMoneyPreview" class="calc-money-preview muted"></div>
-=======
-      // parseKgExpression tashqi modul sifatida import qilinadi
-      // <script type="module"> orqali import qilish uchun:
-      // import { parseKgExpression } from './calc-logic.js';
-      // Oddiy script uchun:
-      // <script src="calc-logic.js"></script> va window.parseKgExpression
->>>>>>> 2ae9b9e (Kalkulyator logikasi va testlar tuzatildi)
               <div id="calcExpressionPreview" class="calc-expression muted"></div>
             </div>
             <div class="calc-grid">
@@ -971,140 +963,134 @@
     }
 
     const parseKgExpression = (expression) => {
-      const clean = (expression || '').replace(/,/g, '.').replace(/\s+/g, '');
-      if (!clean) return { ok: false, message: 'Ifoda bo\'sh' };
-      try {
-        const tokens = clean.split(/([+\-*/%()])/).filter(Boolean);
-        let result = 0;
-        let currentOp = '+';
-        let stack = [{ val: 0, op: '+' }];
-        for (let i = 0; i < tokens.length; i++) {
-          const t = tokens[i];
-          if (t === '(') {
-            stack.push({ val: 0, op: currentOp });
-            currentOp = '+';
-          } else if (t === ')') {
-            const inner = stack.pop();
-            const val = inner.val;
-            const outerOp = inner.op;
-            const top = stack[stack.length - 1];
-            if (outerOp === '+') top.val += val;
-            else if (outerOp === '-') top.val -= val;
-            else if (outerOp === '*') top.val *= val;
-            else if (outerOp === '/') top.val /= val;
-          } else if (['+', '-', '*', '/'].includes(t)) {
-            currentOp = t;
-          } else if (t === '%') {
-            // Handled in numeric part
-          } else {
-            let val = parseFloat(t);
-            if (isNaN(val)) throw new Error('Son xato');
-            if (tokens[i + 1] === '%') {
-              const top = stack[stack.length - 1];
-              val = (top.val * val) / 100;
-              i++;
+      if (typeof window.parseKgExpression === 'function' && window.parseKgExpression !== parseKgExpression) {
+        return window.parseKgExpression(expression);
+      }
+
+      const evaluate = () => {
+        const source = String(expression || '').replace(/,/g, '.').replace(/\s+/g, '');
+        if (!source) throw new Error('Kg miqdorini kiriting.');
+
+        const tokens = [];
+        let index = 0;
+
+        while (index < source.length) {
+          const char = source[index];
+          if (/\d|\./.test(char)) {
+            let next = index + 1;
+            while (next < source.length && /\d|\./.test(source[next])) next += 1;
+            const raw = source.slice(index, next);
+            if ((raw.match(/\./g) || []).length > 1) throw new Error("Noto'g'ri son");
+            const value = Number(raw);
+            if (!Number.isFinite(value)) throw new Error("Noto'g'ri son");
+            tokens.push({ type: 'number', value });
+            index = next;
+            continue;
+          }
+          if ('+-*/()%'.includes(char)) {
+            tokens.push({ type: 'op', value: char });
+            index += 1;
+            continue;
+          }
+          throw new Error("Noto'g'ri belgi");
+        }
+
+        const precedence = { '+': 1, '-': 1, '*': 2, '/': 2 };
+        const output = [];
+        const ops = [];
+        let previous = null;
+
+        for (let i = 0; i < tokens.length; i += 1) {
+          const token = tokens[i];
+          if (token.type === 'number') {
+            output.push(token);
+            previous = token;
+            continue;
+          }
+
+          const op = token.value;
+          if (op === '%') {
+            output.push({ type: 'op', value: '%' });
+            previous = token;
+            continue;
+          }
+
+          if (op === '(') {
+            ops.push(op);
+            previous = token;
+            continue;
+          }
+
+          if (op === ')') {
+            while (ops.length && ops[ops.length - 1] !== '(') {
+              output.push({ type: 'op', value: ops.pop() });
             }
-            const top = stack[stack.length - 1];
-            if (currentOp === '+') top.val += val;
-            else if (currentOp === '-') top.val -= val;
-            else if (currentOp === '*') top.val *= val;
-            else if (currentOp === '/') top.val /= val;
+            if (!ops.length) throw new Error('Qavslar mos emas');
+            ops.pop();
+            previous = token;
+            continue;
+          }
+
+          const unaryMinus = op === '-' && (!previous || (previous.type === 'op' && previous.value !== '%' && previous.value !== ')'));
+          if (unaryMinus) output.push({ type: 'number', value: 0 });
+
+          if (!precedence[op]) throw new Error('Operator xatosi');
+          while (ops.length && precedence[ops[ops.length - 1]] >= precedence[op]) {
+            output.push({ type: 'op', value: ops.pop() });
+          }
+          ops.push(op);
+          previous = token;
+        }
+
+        while (ops.length) {
+          const op = ops.pop();
+          if (op === '(' || op === ')') throw new Error('Qavslar mos emas');
+          output.push({ type: 'op', value: op });
+        }
+
+        const stack = [];
+        for (const token of output) {
+          if (token.type === 'number') {
+            stack.push(token.value);
+            continue;
+          }
+
+          if (token.value === '%') {
+            if (!stack.length) throw new Error('Foiz xatosi');
+            stack.push(stack.pop() / 100);
+            continue;
+          }
+
+          const right = stack.pop();
+          const left = stack.pop();
+          if (!Number.isFinite(left) || !Number.isFinite(right)) throw new Error('Ifoda xatosi');
+          if (token.value === '+') stack.push(left + right);
+          if (token.value === '-') stack.push(left - right);
+          if (token.value === '*') stack.push(left * right);
+          if (token.value === '/') {
+            if (right === 0) throw new Error("Nolga bo'lib bo'lmaydi");
+            stack.push(left / right);
           }
         }
-        const finalVal = stack[0].val;
-        const blockCount = Math.ceil(finalVal / 11);
-        return { ok: true, value: finalVal, blockCount };
-      } catch (e) {
-        return { ok: false, message: 'Ifoda xato' };
-      }
-<<<<<<< HEAD
-=======
 
-
-      const total = values[0];
-      if (!Number.isFinite(total) || total <= 0) {
-        return { ok: false, message: 'Natija 0 dan katta bo\'lishi kerak.' };
-      }
-
-      const blockCount = tokens.some((token) => token.type === 'number')
-        ? tokens.filter((token) => token.type === 'operator' && (token.value === '+' || token.value === '-')).length + 1
-        : 0;
-
-      return {
-        ok: true,
-        value: Math.round(total * 1000) / 1000,
-        blockCount,
+        if (stack.length !== 1 || !Number.isFinite(stack[0])) throw new Error('Ifoda xatosi');
+        const value = Math.round(stack[0] * 1000) / 1000;
+        if (value <= 0) throw new Error("Natija 0 dan katta bo'lishi kerak.");
+        return { ok: true, value, blockCount: Math.max(1, Math.ceil(value / 11)) };
       };
-    }
 
-    // Node.js uchun экспорт
-    if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
-      module.exports = { parseKgExpression };
-    }
-
-    function formatKg(value) {
-      return String(Math.round(Number(value || 0) * 1000) / 1000).replace('.', ',');
-    }
-
-    function activeCustomerPricing(customer) {
-      return {
-        cashPricePerKg: Number(customer?.cashPricePerKg || currentPricing.cashPricePerKg || 0),
-        transferPricePerKg: Number(customer?.transferPricePerKg || currentPricing.transferPricePerKg || 0),
-        customCashPricePerKg: Number(customer?.customCashPricePerKg || 0) || null,
-        customTransferPricePerKg: Number(customer?.customTransferPricePerKg || 0) || null,
-      };
-    }
-
-    function formatMoneyPreview(amountKg) {
-      const customer = customersState.find((entry) => Number(entry.id) === Number(saleCustomerEl.value));
-      const pricing = activeCustomerPricing(customer);
-      const cashTotal = Math.round(Number(amountKg || 0) * pricing.cashPricePerKg);
-      const transferTotal = Math.round(Number(amountKg || 0) * pricing.transferPricePerKg);
-      if (saleMode === 'transfer') {
-        return transferTotal > 0 ? `O'tkazma summa: ${numberFormat(transferTotal)} so'm\n12% NDS bilan` : '';
+      try {
+        return evaluate();
+      } catch (error) {
+        return {
+          ok: false,
+          value: null,
+          blockCount: 0,
+          message: error?.message || "Ifodani hisoblab bo'lmadi.",
+        };
       }
-      return cashTotal > 0 ? `Naqd summa: ${numberFormat(cashTotal)} so'm` : '';
-    }
+    };
 
-    function normalizedManualBlockCount() {
-      const rawValue = String((saleBlockCountEl && saleBlockCountEl.value) || '').trim();
-      if (!rawValue) {
-        return null;
-      }
-      const value = Number(rawValue);
-      if (!Number.isInteger(value) || value <= 0) {
-        throw new Error('Blok soni 1 yoki undan katta butun son bo\'lsin.');
-      }
-      return value;
-    }
-
-    function adjustManualBlockCount(delta) {
-      const step = Number(delta || 0);
-      if (!Number.isFinite(step) || step === 0) {
-        return;
-      }
-      const current = Number(saleBlockCountEl.value || 0);
-      const safeCurrent = Number.isInteger(current) && current > 0 ? current : 0;
-      const next = Math.max(1, safeCurrent + step);
-      saleBlockCountEl.value = String(next);
-      saleBlockCountEl.dataset.mode = 'manual';
-      updateCalculatorPreview();
-      writeSaleDraft();
-      saleBlockCountEl.focus({ preventScroll: true });
-    }
-
-    function syncBlockCountField(parsed) {
-      if (!saleBlockCountEl) {
-        return;
-      }
-      if (saleBlockCountEl.dataset.mode === 'manual') {
-        return;
-      }
-      const nextValue = parsed && parsed.ok && parsed.blockCount > 0 ? String(parsed.blockCount) : '';
-      saleBlockCountEl.value = nextValue;
-      saleBlockCountEl.dataset.mode = 'auto';
->>>>>>> 2ae9b9e (Kalkulyator logikasi va testlar tuzatildi)
-    }
 
     function updateCalculatorPreview() {
       const expression = saleKgExpressionEl.value.trim();

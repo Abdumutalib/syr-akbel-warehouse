@@ -156,6 +156,37 @@ describe("warehouse bot helpers", () => {
     );
   });
 
+  test("includes unpaid sales in their price-type ledger only", () => {
+    const state = loadWarehouseState(makeStatePath());
+    seedWarehouseStock(state, 100);
+
+    const cashUser = upsertCustomer(state, { fullName: "Qarz naqd", paymentCategories: ["cash"] });
+    const transferUser = upsertCustomer(state, { fullName: "Qarz o'tkazma", paymentCategories: ["transfer"] });
+
+    recordApprovedSale(state, { userId: cashUser.id, amountKg: 2, priceType: "cash" });
+    recordApprovedSale(state, { userId: transferUser.id, amountKg: 3, priceType: "transfer" });
+
+    assert.deepEqual(
+      listApprovedTransactions(state, "cash").map((entry) => entry.user?.fullName),
+      ["Qarz naqd"]
+    );
+    assert.deepEqual(
+      listApprovedTransactions(state, "transfer").map((entry) => entry.user?.fullName),
+      ["Qarz o'tkazma"]
+    );
+  });
+
+  test("does not mutate transactions when payment amount is missing", () => {
+    const state = loadWarehouseState(makeStatePath());
+    const user = upsertCustomer(state, { fullName: "To'lovsiz mijoz" });
+    const beforeCount = state.transactions.length;
+
+    assert.throws(
+      () => recordCustomerPayment(state, { userId: user.id, cashPaidAmount: 0, transferPaidAmount: 0 }),
+      /To'lov summasini kiriting/
+    );
+    assert.equal(state.transactions.length, beforeCount);
+  });
   test("updates cash and transfer prices globally", () => {
     const state = loadWarehouseState(makeStatePath());
     seedWarehouseStock(state, 100);

@@ -1,84 +1,14 @@
-#!/usr/bin/env node
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
-import { handleWarehouseApiRoute } from "./server/handle-api.mjs";
-import { rateLimiter, securityHeaders, recordFailedAuth, getClientIp } from "./lib/rate-limiter.mjs";
-import { handleAnalyticsRoute } from "./lib/analytics.mjs";
-import {
-  authenticateStaffAccessToken,
-  authenticateStaffAccount,
-  approveTransaction,
-  createStaffAccessLink,
-  createStaffAccount,
-  createWarehouseOrder,
-  updateWarehouseOrder,
-  deleteWarehouseOrder,
-  createPendingTransaction,
-  deleteCustomer,
-  deleteStaffAccount,
-  getCustomerDetail,
-  getWarehousePricing,
-  groupCustomersByPaymentType,
-  listApprovedTransactions,
-  listCustomerSummaries,
-  listDeletedCustomers,
-  listPendingTransactions,
-  listSellerCashHandoffs,
-  listWarehouseOrders,
-  listWarehouseReceipts,
-  listStaffAccounts,
-  loadWarehouseState,
-  recordWarehouseReceipt,
-  recordApprovedSale,
-  recordCustomerPayment,
-  recordSellerCashHandoff,
-  restoreDeletedCustomer,
-  revokeStaffAccessLink,
-  saveWarehouseState,
-  setCustomerSellerBalanceVisibility,
-  seedWarehouseStock,
-  summarizeOperatorDailyActivity,
-  summarizeWarehouseReceipts,
-  updateStaffAccountPermissions,
-  updateStaffAccountPin,
-  updateWarehousePricing,
-  upsertCustomer,
-  verifyStaffPin,
-  recordTelegramMessage,
-  listTelegramMessages,
-} from "./lib/warehouse-bot.mjs";
+import { loadWarehouseState, saveWarehouseState } from "./lib/warehouse-bot.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = __dirname;
+// Faylнинг абсолют йўлини аниқлаш учун
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
-function loadDotEnv() {
-  const envPath = path.join(ROOT, ".env");
-  if (!fs.existsSync(envPath)) return;
-  const text = fs.readFileSync(envPath, "utf8");
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eqIndex = trimmed.indexOf("=");
-    if (eqIndex <= 0) continue;
-    const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (key && process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
-}
-
-loadDotEnv();
 
 const PORT = Number(process.env.PORT) || 8787;
 const APP_VERSION = resolveAppVersion();
@@ -571,7 +501,7 @@ function requiredWarehouseRoutePermissions(pathname) {
     return ["seller"];
   }
   if (pathname === "/warehouse/seller/sale/transfer") {
-    return ["seller", "transfer"];
+    return ["transfer"];
   }
   if (pathname === "/warehouse/customers" || pathname === "/warehouse/orders") {
     return ["customers", "seller", "cash", "transfer"];
@@ -1349,7 +1279,7 @@ function buildChannelPaymentMsg(userName, cashPaid, transferPaid, debt) {
   if (debt > 0) {
     lines.push(`🔴 Qolgan qarz: ${formatMoney(debt)} so'm`);
   } else {
-    lines.push(`✅ Qarz to'liq yopildi`);
+    lines.push(`✅ Qarz to'liq yopildi. Rahmat!`);
   }
   return lines.join("\n");
 }
