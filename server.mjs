@@ -4,7 +4,48 @@ import path from "node:path";
 import crypto from "node:crypto";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
-import { loadWarehouseState, saveWarehouseState } from "./lib/warehouse-bot.mjs";
+import {
+  approveTransaction,
+  authenticateStaffAccessToken,
+  authenticateStaffAccount,
+  createStaffAccessLink,
+  createStaffAccount,
+  createWarehouseOrder,
+  deleteCustomer,
+  deleteStaffAccount,
+  deleteWarehouseOrder,
+  getCustomerDetail,
+  groupCustomersByPaymentType,
+  listApprovedTransactions,
+  listCustomerSummaries,
+  listDeletedCustomers,
+  listPendingTransactions,
+  listSellerCashHandoffs,
+  listStaffAccounts,
+  listWarehouseOrders,
+  listWarehouseReceipts,
+  loadWarehouseState,
+  recordApprovedSale,
+  recordCustomerPayment,
+  recordSellerCashHandoff,
+  recordWarehouseReceipt,
+  restoreDeletedCustomer,
+  revokeStaffAccessLink,
+  saveWarehouseState,
+  seedWarehouseStock,
+  setCustomerSellerBalanceVisibility,
+  summarizeOperatorDailyActivity,
+  summarizeWarehouseReceipts,
+  updateStaffAccountPermissions,
+  updateStaffAccountPin,
+  updateWarehouseOrder,
+  updateWarehousePricing,
+  upsertCustomer,
+  verifyStaffPin,
+} from "./lib/warehouse-bot.mjs";
+import { handleAnalyticsRoute } from "./lib/analytics.mjs";
+import { handleWarehouseApiRoute } from "./server/handle-api.mjs";
+import { getClientIp, rateLimiter, recordFailedAuth, securityHeaders } from "./lib/rate-limiter.mjs";
 
 // Faylнинг абсолют йўлини аниқлаш учун
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
