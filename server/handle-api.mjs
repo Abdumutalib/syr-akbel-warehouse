@@ -1,27 +1,3 @@
-// Admin password change endpoint
-export async function handleAdminPasswordChange(apiPath, req, res, deps, writeWarehouse, readPostJson, sendApiJson) {
-  if (apiPath === "/api/admin/change-password" && req.method === "POST") {
-    const { oldPassword, newPassword } = await readPostJson(req);
-    if (!oldPassword || !newPassword) {
-      sendApiJson(res, 400, { error: "Ma'lumotлар тўлиқ эмас" });
-      return true;
-    }
-    return await writeWarehouse((state) => {
-      if (!state.admin) {
-        sendApiJson(res, 400, { error: "Admin account topилмади" });
-        return true;
-      }
-      try {
-        deps.changeAdminPassword(state, oldPassword, newPassword);
-        sendApiJson(res, 200, { ok: true });
-      } catch (e) {
-        sendApiJson(res, 400, { error: e.message });
-      }
-      return true;
-    });
-  }
-  return false;
-}
 import crypto from "node:crypto";
 
 export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
