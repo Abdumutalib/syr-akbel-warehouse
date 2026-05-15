@@ -15,6 +15,7 @@ import {
   deleteStaffAccount,
   deleteWarehouseOrder,
   getCustomerDetail,
+  getWarehousePricing,
   groupCustomersByPaymentType,
   listApprovedTransactions,
   listCustomerSummaries,
