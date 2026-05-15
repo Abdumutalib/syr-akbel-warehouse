@@ -31,7 +31,6 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     recordApprovedSale,
     recordCustomerPayment,
     recordSellerCashHandoff,
-    recordWarehouseReceipt,
     restoreDeletedCustomer,
     revokeStaffAccessLink,
     saveWarehouse,
