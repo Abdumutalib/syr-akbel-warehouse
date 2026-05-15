@@ -871,12 +871,16 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     return true;
   }
 
-  if (deletedCustomerMatch && req.method === "DELETE") {
+    return true;
+  }
+
+  const deletedCustomerPermanentMatch = apiPath.match(/^\/api\/warehouse\/deleted-customers\/(\d+)$/);
+  if (deletedCustomerPermanentMatch && req.method === "DELETE") {
     if (!assertWarehouseAdmin(req, res)) {
       return true;
     }
     try {
-      const result = await writeWarehouse((state) => permanentlyDeleteCustomer(state, Number(deletedCustomerMatch[1])));
+      const result = await writeWarehouse((state) => permanentlyDeleteCustomer(state, Number(deletedCustomerPermanentMatch[1])));
       const customers = readWarehouse((state) => listDeletedCustomers(state));
       sendApiJson(res, 200, {
         ok: true,
