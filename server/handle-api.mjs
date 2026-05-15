@@ -21,6 +21,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     listPendingTransactions,
     listWarehouseOrders,
     listWarehouseReceipts,
+    permanentlyDeleteCustomer,
     recordWarehouseReceipt,
     listStaffAccounts,
     loadWarehouse,
@@ -866,6 +867,24 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       });
     } catch (e) {
       sendApiJson(res, 404, { error: e.message || "Mijozni tiklab bo'lmadi" });
+    }
+    return true;
+  }
+
+  if (deletedCustomerMatch && req.method === "DELETE") {
+    if (!assertWarehouseAdmin(req, res)) {
+      return true;
+    }
+    try {
+      const result = await writeWarehouse((state) => permanentlyDeleteCustomer(state, Number(deletedCustomerMatch[1])));
+      const customers = readWarehouse((state) => listDeletedCustomers(state));
+      sendApiJson(res, 200, {
+        ok: true,
+        ...result,
+        customers,
+      });
+    } catch (e) {
+      sendApiJson(res, 404, { error: e.message || "Mijozni butunlay ўчириб бўлмади" });
     }
     return true;
   }

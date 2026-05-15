@@ -855,6 +855,7 @@
           <div>O'chirilgan vaqti: ${entry.deletedAt ? new Intl.DateTimeFormat('ru-RU').format(new Date(entry.deletedAt)) : '-'}</div>
           <div class="tx-actions">
             <button data-restore-customer="${entry.id}" class="secondary">Mijozni tiklash</button>
+            <button data-permanent-delete-customer="${entry.id}" style="background: #9f1239;">Butunlay o'chirish</button>
           </div>
         </article>
       `).join("");
@@ -1242,7 +1243,27 @@
         await apiFetch(`/api/warehouse/deleted-customers/${customerId}/restore`, {
           method: "POST",
         });
-        setStatus("O'chirilgan mijoz tiklandi.");
+        setStatus("O'chirilgan mijoz тикланди.");
+        await loadPending();
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    deletedCustomerListEl.addEventListener("click", async (event) => {
+      const deleteButton = event.target.closest("[data-permanent-delete-customer]");
+      if (!deleteButton) {
+        return;
+      }
+      if (!confirm("Диққат! Мижоз ва унинг барча архивланган маълумотлари бутунлай ўчирилади. Бу ишни орқага қайтариб бўлмайди. Давом этасизми?")) {
+        return;
+      }
+      try {
+        const customerId = deleteButton.getAttribute("data-permanent-delete-customer");
+        await apiFetch(`/api/warehouse/deleted-customers/${customerId}`, {
+          method: "DELETE",
+        });
+        setStatus("Mijoz тизимдан бутунлай ўчирилди.");
         await loadPending();
       } catch (error) {
         setStatus(error.message, true);
