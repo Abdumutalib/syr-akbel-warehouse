@@ -450,7 +450,8 @@
             <input id="pinCode" inputmode="numeric" maxlength="6" placeholder="4-6 raqam">
           </div>
           <div class="tx-actions">
-            <button id="save-auth">Kirishni saqlash</button>
+            <button id="login-only">Kirish</button>
+            <button id="save-auth" style="display: none;">Kirishni saqlash</button>
             <button id="unlock-pin" class="secondary">PIN bilan kirish</button>
             <button id="clear-pin" class="secondary">PINni o'chirish</button>
             <button id="show-login" class="secondary hidden">Login bilan kirish</button>
@@ -554,10 +555,10 @@
           <h3 style="margin-top: 0;">Xodim qo'shish</h3>
           <label for="staffName">F.I.Sh.</label>
           <input id="staffName" placeholder="Dilshod aka">
-          <label for="staffUsername">Login</label>
-          <input id="staffUsername" placeholder="seller01">
-          <label for="staffPassword">Parol</label>
-          <input id="staffPassword" type="password" placeholder="4321">
+          <input id="staffUsername" type="hidden">
+
+          <input id="staffPassword" type="hidden">
+
           <label for="staffRole">Lavozim</label>
           <select id="staffRole" style="width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; margin: 8px 0 14px; font: inherit;">
             <option value="seller">Sotuvchi</option>
@@ -834,7 +835,7 @@
       staffListEl.innerHTML = staff.map((entry) => `
         <article class="staff-item" data-staff-id="${entry.id}">
           <strong>${entry.fullName}</strong>
-          <div>Login: ${entry.username}</div>
+
           <div>Lavozim: ${entry.role === "seller" ? "Sotuvchi" : "Buxgalter"}</div>
           <div style="margin-top: 6px;">Ko'ra oladigan sahifalar: ${permissionSummary(entry.permissions)}</div>
           <div class="tx-actions">
@@ -1007,6 +1008,19 @@
       await loadPending();
     }
 
+    document.getElementById("login-only").addEventListener("click", async () => {
+      try {
+        if (!usernameEl.value.trim() || !passwordEl.value) {
+          throw new Error("Admin username va password kiriting.");
+        }
+        pinAuth.markSessionActive({ username: usernameEl.value.trim(), password: passwordEl.value });
+        await loadPending();
+        authUi.markAuthenticated({ username: usernameEl.value.trim(), password: passwordEl.value });
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
     document.getElementById("save-auth").addEventListener("click", async () => {
       try {
         await pinAuth.rememberFromCredentials();
@@ -1084,12 +1098,16 @@
 
     document.getElementById("createStaff").addEventListener("click", async () => {
       try {
+        const staffName = document.getElementById("staffName").value.trim();
+        if (!staffName) throw new Error("Xodim ismini kiriting");
+        const username = "staff_" + Date.now().toString().slice(-4) + Math.floor(Math.random() * 100);
+        const password = Math.random().toString(36).slice(-8);
         const data = await apiFetch("/api/warehouse/staff", {
           method: "POST",
           body: JSON.stringify({
-            fullName: document.getElementById("staffName").value.trim(),
-            username: document.getElementById("staffUsername").value.trim(),
-            password: document.getElementById("staffPassword").value,
+            fullName: staffName,
+            username: username,
+            password: password,
             role: staffRoleEl.value.trim().toLowerCase(),
             permissions: readPermissions(createPermissionsEl, "staff-create-permission"),
           }),
@@ -1097,8 +1115,8 @@
         renderStaff(data.allStaff || []);
         setStatus("Xodim saqlandi. Qaysi sahifalarni ko'rishini admin belgiladi.");
         document.getElementById("staffName").value = "";
-        document.getElementById("staffUsername").value = "";
-        document.getElementById("staffPassword").value = "";
+
+
         staffRoleEl.value = "seller";
         applyRoleDefaults();
       } catch (error) {
