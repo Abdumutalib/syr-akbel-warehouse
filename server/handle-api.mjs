@@ -870,10 +870,6 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     }
     return true;
   }
-
-    return true;
-  }
-
   const deletedCustomerPermanentMatch = apiPath.match(/^\/api\/warehouse\/deleted-customers\/(\d+)$/);
   if (deletedCustomerPermanentMatch && req.method === "DELETE") {
     if (!assertWarehouseAdmin(req, res)) {
