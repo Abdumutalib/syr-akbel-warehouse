@@ -20,6 +20,8 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     listDeletedCustomers,
     listPendingTransactions,
     listWarehouseOrders,
+    listWarehouseReceipts,
+    recordWarehouseReceipt,
     listStaffAccounts,
     loadWarehouse,
     withWarehouseRead,
@@ -29,6 +31,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     recordApprovedSale,
     recordCustomerPayment,
     recordSellerCashHandoff,
+    recordWarehouseReceipt,
     restoreDeletedCustomer,
     revokeStaffAccessLink,
     saveWarehouse,
@@ -49,6 +52,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     buildCustomerPaymentMsg,
     summarizeApprovedTransactions,
     summarizeCustomers,
+    summarizeWarehouseReceipts,
     approveTransaction,
     updateStaffAccountPermissions,
     updateWarehousePricing,
@@ -991,6 +995,68 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       summary: summarizeApprovedTransactions(approved),
       pricing,
     });
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/receipts" && req.method === "GET") {
+    if (!assertWarehouseAdmin(req, res)) {
+      return true;
+    }
+    const { receipts, summary } = readWarehouse((state) => {
+      const receipts = listWarehouseReceipts(state);
+      return {
+        receipts,
+        summary: summarizeWarehouseReceipts(receipts),
+      };
+    });
+    sendApiJson(res, 200, { ok: true, receipts, summary });
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/receipts" && req.method === "POST") {
+    if (!assertWarehouseAdmin(req, res)) {
+      return true;
+    }
+    const body = await readPostJson(req);
+    if (body === null) {
+      sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
+      return true;
+    }
+    const idempotencyKey = extractIdempotencyKey(req);
+    const idempotencyFingerprint = buildIdempotencyFingerprint(apiPath, body, {
+      kind: "admin",
+      role: "admin",
+      id: 0,
+      username: "admin",
+    });
+    try {
+      const { replay, statusCode, responseBody } = await writeWarehouse((state) => {
+        const hit = getIdempotencyHit(state, idempotencyKey, idempotencyFingerprint);
+        if (hit.type === "conflict") {
+          const err = new Error("Idempotency key boshqa so'rov bilan ishlatilgan");
+          err.statusCode = 409;
+          throw err;
+        }
+        if (hit.type === "replay") {
+          return {
+            replay: true,
+            statusCode: hit.statusCode,
+            responseBody: hit.responseBody,
+          };
+        }
+        const receipt = recordWarehouseReceipt(state, body);
+        const responseBody = {
+          ok: true,
+          receipt,
+          stockKg: state.warehouse.currentStockKg,
+        };
+        saveIdempotencyResult(state, idempotencyKey, idempotencyFingerprint, 201, responseBody);
+        return { replay: false, statusCode: 201, responseBody };
+      });
+      sendApiJson(res, statusCode, responseBody);
+    } catch (e) {
+      sendApiJson(res, 400, { error: e.message || "Kirimni yozib bo'lmadi" });
+    }
     return true;
   }
 

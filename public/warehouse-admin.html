@@ -497,6 +497,32 @@
         </div>
 
         <div class="card" style="margin-top: 20px; padding: 0; border: 0; box-shadow: none; background: transparent;">
+          <h3 style="margin-top: 0;">Pishloq қабул қилиш (Kirim)</h3>
+          <div style="display: grid; gap: 10px;">
+            <div>
+              <label for="receiptKg">Hajm (kg) <span style="color:#9f1239">*</span></label>
+              <input id="receiptKg" type="number" step="0.001" min="0.001" placeholder="100.5">
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div>
+                <label for="receiptBlocks">Blok soni</label>
+                <input id="receiptBlocks" type="number" step="1" min="0" placeholder="0">
+              </div>
+              <div>
+                <label for="receiptPrice">Narxi (1 kg)</label>
+                <input id="receiptPrice" type="number" step="1" min="0" placeholder="0">
+              </div>
+            </div>
+            <div>
+              <label for="receiptNote">Izoh</label>
+              <input id="receiptNote" placeholder="Masalan: 1-partiya">
+            </div>
+            <button id="createReceipt">Qabul qilish</button>
+          </div>
+          <div id="receiptList" class="staff-list" style="margin-top: 16px;"></div>
+        </div>
+
+        <div class="card" style="margin-top: 20px; padding: 0; border: 0; box-shadow: none; background: transparent;">
           <h3 style="margin-top: 0;">Xodim qo'shish</h3>
           <label for="staffName">F.I.Sh.</label>
           <input id="staffName" placeholder="Dilshod aka">
@@ -902,6 +928,7 @@
       await loadDeletedCustomers();
       await loadCustomerQuickSelect();
       await loadTelegramInbox();
+      await loadReceipts();
       setStatus("");
     }
 
@@ -999,6 +1026,77 @@
     showLoginButtonEl.addEventListener('click', () => {
       authUi.showFullLogin();
       setStatus('Boshqa login bilan kirish ochildi.');
+    });
+
+    const receiptListEl = document.getElementById("receiptList");
+    const receiptKgEl = document.getElementById("receiptKg");
+    const receiptBlocksEl = document.getElementById("receiptBlocks");
+    const receiptPriceEl = document.getElementById("receiptPrice");
+    const receiptNoteEl = document.getElementById("receiptNote");
+    const createReceiptBtn = document.getElementById("createReceipt");
+
+    function renderReceipts(items) {
+      if (!items || !items.length) {
+        receiptListEl.innerHTML = "<p>Yaqinda pishloq qabul қилинмаган.</p>";
+        return;
+      }
+      receiptListEl.innerHTML = items.slice(0, 5).map(item => `
+        <article class="staff-item">
+          <div style="display: flex; justify-content: space-between;">
+            <strong>${item.amountKg} kg</strong>
+            <span style="font-size: 12px; color: var(--muted);">${new Date(item.receivedAt).toLocaleDateString()}</span>
+          </div>
+          <div style="font-size: 14px;">
+            ${item.blockCount ? `<span>Blok: ${item.blockCount} ta</span>` : ''}
+            ${item.pricePerKg ? `<span> · Narx: ${numberFormat(item.pricePerKg)}</span>` : ''}
+          </div>
+          ${item.note ? `<div style="font-size: 13px; color: var(--muted); margin-top: 4px;">${item.note}</div>` : ''}
+        </article>
+      `).join("");
+    }
+
+    async function loadReceipts() {
+      try {
+        const data = await apiFetch("/api/warehouse/receipts");
+        if (data.ok) {
+          renderReceipts(data.receipts);
+        }
+      } catch (err) {
+        console.error("Kirimларни юклашда хатолик:", err);
+      }
+    }
+
+    createReceiptBtn.addEventListener("click", async () => {
+      const kg = Number(receiptKgEl.value);
+      if (!kg || kg <= 0) {
+        setStatus("Hajm kiritilishi shart", true);
+        return;
+      }
+      const payload = {
+        amountKg: kg,
+        blockCount: Number(receiptBlocksEl.value) || 0,
+        pricePerKg: Number(receiptPriceEl.value) || 0,
+        note: receiptNoteEl.value.trim()
+      };
+      setStatus("Saqlanmoqda...");
+      try {
+        const data = await apiFetch("/api/warehouse/receipts", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        if (data.ok) {
+          setStatus("Pishloq qabul qilindi.");
+          receiptKgEl.value = "";
+          receiptBlocksEl.value = "";
+          receiptPriceEl.value = "";
+          receiptNoteEl.value = "";
+          await loadPending();
+        } else {
+          setStatus(data.error || "Xatolik", true);
+        }
+      } catch (err) {
+        setStatus(err.message, true);
+      }
     });
 
     document.getElementById("reload").addEventListener("click", async () => {
