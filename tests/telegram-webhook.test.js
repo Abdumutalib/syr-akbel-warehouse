@@ -47,8 +47,8 @@ function makeDeps(state, dbPath, overrides = {}) {
     assertWarehouseOperator: () => true,
     buildDebtReply: (name, debt) => `QARZI: ${name} ${debt}`,
     buildPendingReply: (r) => `KUTMOQDA: ${r.user.fullName} ${r.transaction.amountKg}kg`,
-    buildAdminNewOrderMsg: (name, kg) => `ADMIN: ${name} ${kg}kg`,
-    buildChannelNewOrderMsg: (name, kg) => `KANAL: ${name} ${kg}kg`,
+    buildAdminNewOrderMsg: (name, kg, price, username) => `ADMIN: ${name}${username ? ` (@${username})` : ""} ${kg}kg`,
+    buildChannelNewOrderMsg: (name, kg, price, username) => `KANAL: ${name}${username ? ` (@${username})` : ""} ${kg}kg`,
     buildChannelSaleMsg: () => "",
     buildChannelPaymentMsg: () => "",
     buildChannelApprovalMsg: () => "",
@@ -116,16 +116,24 @@ function makeDeps(state, dbPath, overrides = {}) {
       }
       const message = body?.business_message || body?.message;
       if (!message) return null;
+      const from = message.from || {};
       return {
         text: typeof message.text === "string" ? message.text.trim() : "",
-        telegramId: message.chat?.id ?? message.from?.id ?? null,
+        telegramId: message.chat?.id ?? from.id ?? null,
+        telegramUsername: from.username ?? null,
+        telegramFirstName: from.first_name ?? null,
         type: "message",
       };
     },
     createWarehouseTransaction: async (payload) => {
       const s = loadWarehouseState(dbPath);
       seedWarehouseStock(s, 1000);
-      const result = createPendingTransaction(s, { text: payload.text, telegramId: payload.telegramId });
+      const result = createPendingTransaction(s, {
+        text: payload.text,
+        telegramId: payload.telegramId,
+        telegramUsername: payload.telegramUsername,
+        telegramFirstName: payload.telegramFirstName,
+      });
       saveWarehouseState(dbPath, s);
       return result;
     },
@@ -271,6 +279,36 @@ describe("Telegram webhook handleri", () => {
       deps._sentToUser[0].text.includes("Зулфия"),
       `Javobda ism yo'q: ${deps._sentToUser[0].text}`
     );
+  });
+
+  test("9. Telegram enrichment: Buyurtma berganda username va ism saqlanadi", async () => {
+    const { dbPath, state } = makeTempState();
+    const deps = makeDeps(state, dbPath);
+    deps._postBody = {
+      message: {
+        text: "Vali 10 kg",
+        chat: { id: 12345 },
+        from: { id: 12345, username: "valijon", first_name: "Vali" },
+      },
+    };
+
+    const req = makeReq("POST", deps._postBody);
+    const res = makeRes();
+
+    await handleWarehouseApiRoute(req, res, null, "/api/telegram/webhook", deps);
+
+    assert.equal(res.statusCode, 200);
+
+    // Bazada foydalanuvchi ma'lumotlari to'g'ri saqlanganini tekshirish
+    const s = loadWarehouseState(dbPath);
+    const user = s.users.find(u => u.telegramId === 12345);
+    assert.ok(user, "Foydalanuvchi topilmadi");
+    assert.equal(user.telegramUsername, "valijon");
+    assert.equal(user.telegramFirstName, "Vali");
+
+    // Xabarda username borligini tekshirish
+    assert.ok(deps._sentToAdmin[0].includes("@valijon"), `Admin DM da username yo'q: ${deps._sentToAdmin[0]}`);
+    assert.ok(deps._sentToChannel[0].includes("@valijon"), `Kanal xabarida username yo'q: ${deps._sentToChannel[0]}`);
   });
 });
 

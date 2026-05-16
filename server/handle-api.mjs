@@ -330,14 +330,16 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         buildAdminNewOrderMsg(
           result.user?.fullName || "Noma'lum",
           result.transaction.amountKg,
-          result.transaction.totalPrice
+          result.transaction.totalPrice,
+          result.user?.telegramUsername || null
         )
       );
       await sendTelegramChannelMessage(
         buildChannelNewOrderMsg(
           result.user?.fullName || "Noma'lum",
           result.transaction.amountKg,
-          result.transaction.totalPrice
+          result.transaction.totalPrice,
+          result.user?.telegramUsername || null
         )
       );
       sendApiJson(res, 200, { ok: true, transactionId: result.transaction.id });

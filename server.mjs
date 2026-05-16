@@ -1181,6 +1181,8 @@ function extractTelegramMessage(update) {
     return {
       text: null,
       telegramId: bc.user?.id ?? null,
+      telegramUsername: bc.user?.username ?? null,
+      telegramFirstName: bc.user?.first_name ?? null,
       type: "business_connection",
       isConnected: bc.is_enabled !== false,
       businessConnectionId: bc.id ?? null,
@@ -1193,9 +1195,12 @@ function extractTelegramMessage(update) {
     update?.message;
   if (!message) return null;
   const text = typeof message.text === "string" ? message.text.trim() : "";
+  const from = message?.from || {};
   return {
     text,
-    telegramId: message.chat?.id ?? message.from?.id ?? null,
+    telegramId: message.chat?.id ?? from.id ?? null,
+    telegramUsername: from.username ?? null,
+    telegramFirstName: from.first_name ?? null,
     businessConnectionId: message.business_connection_id ?? null,
     type: "message",
   };
@@ -1346,23 +1351,25 @@ function buildChannelApprovalMsg(userName, amountKg, totalPrice, cashPaid, trans
   return lines.join("\n");
 }
 
-function buildChannelNewOrderMsg(userName, amountKg, totalPrice) {
+function buildChannelNewOrderMsg(userName, amountKg, totalPrice, telegramUsername = null) {
+  const displayUser = telegramUsername ? `${userName} (@${telegramUsername})` : userName;
   return [
     `🧀 ${WAREHOUSE_COMPANY_NAME}`,
     `🆕 Yangi buyurtma (kutmoqda)`,
     ``,
-    `👤 Mijoz: ${userName}`,
+    `👤 Mijoz: ${displayUser}`,
     `⚖️ Hajm: ${amountKg} kg`,
     `💰 Narx: ${formatMoney(totalPrice)} so'm`,
   ].join("\n");
 }
 
-function buildAdminNewOrderMsg(userName, amountKg, totalPrice) {
+function buildAdminNewOrderMsg(userName, amountKg, totalPrice, telegramUsername = null) {
+  const displayUser = telegramUsername ? `${userName} (@${telegramUsername})` : userName;
   return [
     `🧀 ${WAREHOUSE_COMPANY_NAME}`,
     `🔔 Yangi buyurtma!`,
     ``,
-    `👤 Mijoz: ${userName}`,
+    `👤 Mijoz: ${displayUser}`,
     `⚖️ Hajm: ${amountKg} kg`,
     `💰 Narx: ${formatMoney(totalPrice)} so'm`,
     ``,
@@ -1530,6 +1537,8 @@ async function createWarehouseTransaction(payload) {
       {
         text: payload.text,
         telegramId: payload.telegramId ?? null,
+        telegramUsername: payload.telegramUsername ?? null,
+        telegramFirstName: payload.telegramFirstName ?? null,
       },
       { pricing: currentWarehousePricing(state) }
     )
