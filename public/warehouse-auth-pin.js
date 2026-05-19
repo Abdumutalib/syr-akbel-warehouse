@@ -825,11 +825,10 @@
 
   function setupWarehouseInstallButton() {
     const ua = String(window.navigator && window.navigator.userAgent ? window.navigator.userAgent : '').toLowerCase();
-    const isIos = /iphone|ipad|ipod/.test(ua);
+    const isIos = /iphone|ipad|ipod/.test(ua) || (window.navigator && window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
     const isSafari = isIos && /safari/.test(ua) && !/crios|fxios|edgios/.test(ua);
     const isAndroid = /android/.test(ua);
     const isWebView = /(fbav|fb_iab|instagram|line|micromessenger|wv\)|; wv\b)/.test(ua);
-    const isLikelyMobile = isIos || isAndroid || window.innerWidth <= 900;
 
     function isStandalone() {
       return Boolean(
@@ -839,10 +838,6 @@
     }
 
     if (isStandalone()) {
-      return;
-    }
-
-    if (!isLikelyMobile) {
       return;
     }
 
