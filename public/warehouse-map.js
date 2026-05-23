@@ -67,7 +67,9 @@
       L.control.zoom({ position: 'bottomleft' }).addTo(map);
     } else {
       map.setView([lat, lng], 15);
-      map.invalidateSize();
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 10);
     }
   }
 
