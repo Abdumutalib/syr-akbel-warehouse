@@ -2039,6 +2039,11 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
 
+  if (u.pathname === "/warehouse/assets/warehouse-map.js" && req.method === "GET") {
+    serveWarehouseAsset("warehouse-map.js", req, res);
+    return;
+  }
+
   if (u.pathname === "/warehouse-top-nav.js" && req.method === "GET") {
     serveWarehouseAsset("warehouse-top-nav.js", req, res);
     return;
