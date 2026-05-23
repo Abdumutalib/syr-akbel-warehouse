@@ -111,7 +111,7 @@
   confirmBtn.addEventListener('click', () => {
     if (!map || !targetInputId) return;
     const center = map.getCenter();
-    const link = \`https://maps.google.com/?q=\${center.lat.toFixed(6)},\${center.lng.toFixed(6)}\`;
+    const link = `https://maps.google.com/?q=${center.lat.toFixed(6)},${center.lng.toFixed(6)}`;
     
     const inputEl = document.getElementById(targetInputId);
     if (inputEl) {
