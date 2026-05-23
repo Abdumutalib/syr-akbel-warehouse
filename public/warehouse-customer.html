@@ -603,7 +603,20 @@
       document.getElementById('organizationValue').textContent = data.customer.organizationName || '-';
       document.getElementById('taxIdValue').textContent = data.customer.taxId || '-';
       document.getElementById('phoneValue').textContent = (data.customer.phones || []).join(', ') || '-';
-      document.getElementById('locationValue').textContent = data.customer.location || '-';
+      const locStr = data.customer.location || '';
+      const locMatch = locStr.match(/q=([\d.-]+),([\d.-]+)/) || locStr.match(/^([\d.-]+),\s*([\d.-]+)$/);
+      if (locMatch) {
+        document.getElementById('locationValue').innerHTML = `
+          <div style="display:inline-flex; gap:8px; margin-left: 8px;">
+            <a href="https://maps.google.com/?q=${locMatch[1]},${locMatch[2]}" target="_blank" style="padding: 4px 8px; background: #e8f0fe; color: #1a73e8; border-radius: 4px; text-decoration: none; font-size: 13px;">🗺 Google</a>
+            <a href="https://yandex.com/maps/?pt=${locMatch[2]},${locMatch[1]}&z=16&l=map" target="_blank" style="padding: 4px 8px; background: #fff0d1; color: #b00; border-radius: 4px; text-decoration: none; font-size: 13px;">📍 Yandex</a>
+          </div>
+        `;
+      } else if (locStr.startsWith('http')) {
+        document.getElementById('locationValue').innerHTML = `<a href="${locStr}" target="_blank" style="margin-left: 8px;">Havola</a>`;
+      } else {
+        document.getElementById('locationValue').textContent = locStr || '-';
+      }
       document.getElementById('telegramValue').textContent = (data.customer.telegramIds || []).join(', ') || '-';
       document.getElementById('kgValue').textContent = String(data.summary.totalTakenKg || 0);
       document.getElementById('salesValue').textContent = amountText(data.summary.totalSales);
