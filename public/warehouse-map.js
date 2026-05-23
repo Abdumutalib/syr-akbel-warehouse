@@ -14,8 +14,8 @@
   // HTML Modal yaratish
   const modalHtml = `
   <div id="locationMapModal" class="modal-backdrop" style="z-index: 9999;">
-    <div class="modal-content" style="width: 100%; max-width: 600px; padding: 0; display: flex; flex-direction: column; height: 80vh;">
-      <div class="modal-header" style="padding: 16px;">
+    <div class="modal-content" style="width: 100%; max-width: 600px; padding: 0; display: flex; flex-direction: column; height: 85dvh; max-height: 85vh; border-radius: 16px; overflow: hidden;">
+      <div class="modal-header" style="padding: 16px; flex-shrink: 0;">
         <h2 style="margin: 0; font-size: 18px;">Lokatsiyani tanlang</h2>
         <button class="modal-close" id="closeLocationMapModal" type="button">&times;</button>
       </div>
@@ -31,7 +31,7 @@
           <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
         </button>
       </div>
-      <div style="padding: 16px;">
+      <div style="padding: 16px; flex-shrink: 0; background: white; z-index: 1001;">
         <button id="confirmLocationMap" style="width: 100%;">Shu manzilni tasdiqlash</button>
       </div>
     </div>

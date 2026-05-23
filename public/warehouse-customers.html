@@ -637,13 +637,15 @@
         return;
       }
       host.innerHTML = customers.map((customer) => `
-        <div class="customer-card">
-          <a class="customer-link" href="${withAccess(`/warehouse/customers/${customer.id}`)}">
+        <div class="customer-card" style="display: flex; flex-direction: column;">
+          <a class="customer-link" href="${withAccess(`/warehouse/customers/${customer.id}`)}" style="width: 100%;">
             <strong>${customer.fullName}</strong>
             <span class="muted">Tashkilot: ${customer.organizationName || '-'} · Telefonlar: ${(customer.phones || []).join(', ') || '-'} · Lokatsiya: ${customer.location ? (customer.location.length > 20 ? 'Kiritilgan' : customer.location) : '-'}</span>
           </a>
-          ${renderMapLinksList(customer.location)}
-          <button class="edit-customer-btn customer-edit-control" data-cid="${customer.id}" type="button">Tahrirlash</button>
+          <div style="display: flex; gap: 8px; width: 100%; justify-content: flex-end; margin-top: 10px;">
+            ${renderMapLinksList(customer.location)}
+            <button class="edit-customer-btn customer-edit-control" data-cid="${customer.id}" type="button" style="align-self: center;">Tahrirlash</button>
+          </div>
         </div>
       `).join('');
       host.querySelectorAll('.edit-customer-btn').forEach((btn) => {
