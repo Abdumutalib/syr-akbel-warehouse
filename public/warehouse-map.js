@@ -89,22 +89,33 @@
 
     // Harakatlanib turgan input qiymatini tahlil qilish
     const inputEl = document.getElementById(inputId);
+    let hasExisting = false;
     if (inputEl && inputEl.value) {
       const val = inputEl.value;
       const match = val.match(/q=([\d.]+),([\d.]+)/); // Google Maps link format
       if (match) {
         lat = parseFloat(match[1]);
         lng = parseFloat(match[2]);
+        hasExisting = true;
       } else {
         const latLngMatch = val.match(/^([\d.]+),\s*([\d.]+)$/); // "41.2995, 69.2401" format
         if (latLngMatch) {
           lat = parseFloat(latLngMatch[1]);
           lng = parseFloat(latLngMatch[2]);
+          hasExisting = true;
         }
       }
     }
 
     loadLeafletAndInitMap(lat, lng);
+
+    if (!hasExisting && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        if (map) {
+          map.setView([pos.coords.latitude, pos.coords.longitude], 17);
+        }
+      }, () => {});
+    }
   };
 
   function closeModal() {
