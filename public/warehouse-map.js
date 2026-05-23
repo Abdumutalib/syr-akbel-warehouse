@@ -7,7 +7,7 @@
     const link = document.createElement('link');
     link.id = 'leaflet-css';
     link.rel = 'stylesheet';
-    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    link.href = '/warehouse/leaflet.css';
     document.head.appendChild(link);
   }
 
@@ -20,6 +20,7 @@
         <button class="modal-close" id="closeLocationMapModal" type="button">&times;</button>
       </div>
       <div style="flex: 1; position: relative; background: #eee;">
+        <div id="locationMapLoader" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 500; color: #666; background: #eee; font-weight: bold;">Xarita yuklanmoqda...</div>
         <div id="locationMapContainer" style="width: 100%; height: 100%;"></div>
         <!-- Markaziy pin (Telegram uslubida) -->
         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -100%); z-index: 1000; pointer-events: none;">
@@ -47,17 +48,22 @@
   let targetInputId = null;
 
   function loadLeafletAndInitMap(lat, lng) {
+    const loader = document.getElementById('locationMapLoader');
+    if (loader) loader.style.display = 'flex';
     if (window.L) {
       initMap(lat, lng);
       return;
     }
     const script = document.createElement('script');
-    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.src = '/warehouse/leaflet.js';
     script.onload = () => initMap(lat, lng);
+    script.onerror = () => { if(loader) loader.innerText = 'Xarita yuklashda xatolik yuz berdi. Internetni tekshiring.'; };
     document.head.appendChild(script);
   }
 
   function initMap(lat, lng) {
+    const loader = document.getElementById('locationMapLoader');
+    if (loader) loader.style.display = 'none';
     if (!map) {
       map = L.map('locationMapContainer', { zoomControl: false }).setView([lat, lng], 15);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {

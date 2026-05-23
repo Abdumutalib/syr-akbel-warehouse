@@ -642,7 +642,7 @@ function authenticateStaffLinkForRoute(req, u) {
 
 function checkSiteGate(req, res, u) {
   // API, healthz, SW, manifest, rasm — tekshirilmaydi
-  const skipPrefixes = ["/warehouse/api/", "/api/", "/warehouse/sw.js", "/warehouse/manifest.json", "/warehouse/assets/", "/warehouse/uploads/", "/warehouse-top-nav.js", "/favicon", "/icon-"];
+  const skipPrefixes = ["/warehouse/api/", "/api/", "/warehouse/sw.js", "/warehouse/manifest.json", "/warehouse/assets/", "/warehouse/uploads/", "/warehouse/leaflet.js", "/warehouse/leaflet.css", "/warehouse-top-nav.js", "/favicon", "/icon-"];
   if (skipPrefixes.some((p) => u.pathname.startsWith(p))) return { allowed: true };
   // Login endpointi POST bo'lsa — gate dan exempt
   if (
@@ -2041,6 +2041,16 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
 
   if (u.pathname === "/warehouse/assets/warehouse-map.js" && req.method === "GET") {
     serveWarehouseAsset("warehouse-map.js", req, res);
+    return;
+  }
+
+  if (u.pathname === "/warehouse/leaflet.js" && req.method === "GET") {
+    serveWarehouseAsset("leaflet.js", req, res);
+    return;
+  }
+
+  if (u.pathname === "/warehouse/leaflet.css" && req.method === "GET") {
+    serveWarehouseAsset("leaflet.css", req, res);
     return;
   }
 
