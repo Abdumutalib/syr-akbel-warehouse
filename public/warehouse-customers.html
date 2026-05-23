@@ -216,6 +216,8 @@
           <div id="customerPhoneList" class="multi-input-list"></div>
           <label for="customerTaxId">Tashkilot INN</label>
           <input id="customerTaxId" placeholder="123456789">
+          <label for="customerLocation">Lokatsiya</label>
+          <input id="customerLocation" placeholder="Masalan: Chilonzor, 19-mavze">
           <div class="field-label-row">
             <label>Telegram ID</label>
             <button id="addCustomerTelegram" class="secondary add-mini" type="button">+</button>
@@ -479,6 +481,7 @@
       setMultiInputValues('modalCustomerNameList', [], { placeholder: 'Али ака' });
       setMultiInputValues('modalCustomerPhoneList', [], { placeholder: '+99890...' });
       document.getElementById('modalCustomerTaxId').value = '';
+      document.getElementById('modalCustomerLocation').value = '';
       setMultiInputValues('modalCustomerTelegramList', [], { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
       document.getElementById('modalCustomerCategoryCash').checked = true;
       document.getElementById('modalCustomerCategoryTransfer').checked = false;
@@ -506,6 +509,7 @@
         setMultiInputValues('editCustomerNameList', Array.isArray(c.fullNames) && c.fullNames.length ? c.fullNames : [c.fullName || ''], { placeholder: 'Али ака' });
         setMultiInputValues('editCustomerPhoneList', c.phones || [], { placeholder: '+99890...' });
         document.getElementById('editCustomerTaxId').value = c.taxId || '';
+        document.getElementById('editCustomerLocation').value = c.location || '';
         setMultiInputValues('editCustomerTelegramList', (c.telegramIds || []).map(String), { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
         const cats = c.paymentCategories || [];
         document.getElementById('editCustomerCategoryCash').checked = cats.includes('cash');
@@ -573,6 +577,7 @@
                 phones: collectMultiInputValues('editCustomerPhoneList'),
                 taxId: document.getElementById('editCustomerTaxId').value.trim(),
                 telegramIds: collectMultiInputValues('editCustomerTelegramList'),
+                location: document.getElementById('editCustomerLocation').value.trim(),
                 paymentCategories,
               }),
             });
@@ -621,7 +626,7 @@
         <div class="customer-card">
           <a class="customer-link" href="${withAccess(`/warehouse/customers/${customer.id}`)}">
             <strong>${customer.fullName}</strong>
-            <span class="muted">Tashkilot: ${customer.organizationName || '-'} · Telefonlar: ${(customer.phones || []).join(', ') || '-'}</span>
+            <span class="muted">Tashkilot: ${customer.organizationName || '-'} · Telefonlar: ${(customer.phones || []).join(', ') || '-'} · Lokatsiya: ${customer.location || '-'}</span>
           </a>
           <button class="edit-customer-btn customer-edit-control" data-cid="${customer.id}" type="button">Tahrirlash</button>
         </div>
@@ -729,6 +734,7 @@
             phones: collectMultiInputValues('customerPhoneList'),
             taxId: document.getElementById('customerTaxId').value.trim(),
             telegramIds: collectMultiInputValues('customerTelegramList'),
+            location: document.getElementById('customerLocation').value.trim(),
             paymentCategories,
           }),
         });
@@ -736,6 +742,7 @@
         setMultiInputValues('customerNameList', [], { placeholder: 'Али ака' });
         setMultiInputValues('customerPhoneList', [], { placeholder: '+99890...' });
         document.getElementById('customerTaxId').value = '';
+        document.getElementById('customerLocation').value = '';
         setMultiInputValues('customerTelegramList', [], { type: 'number', step: '1', inputMode: 'numeric', placeholder: '123456789' });
         document.getElementById('customerCategoryCash').checked = true;
         document.getElementById('customerCategoryTransfer').checked = false;
@@ -855,6 +862,7 @@
                 phones: collectMultiInputValues('modalCustomerPhoneList'),
                 taxId: document.getElementById('modalCustomerTaxId').value.trim(),
                 telegramIds: collectMultiInputValues('modalCustomerTelegramList'),
+                location: document.getElementById('modalCustomerLocation').value.trim(),
                 paymentCategories,
               }),
             });
@@ -928,6 +936,8 @@
         <div id="modalCustomerPhoneList" class="multi-input-list"></div>
         <label for="modalCustomerTaxId">Tashkilot INN</label>
         <input id="modalCustomerTaxId" placeholder="123456789">
+        <label for="modalCustomerLocation">Lokatsiya</label>
+        <input id="modalCustomerLocation" placeholder="Masalan: Chilonzor, 19-mavze">
         <div class="field-label-row">
           <label>Telegram ID</label>
           <button id="modalAddCustomerTelegram" class="secondary add-mini" type="button">+</button>
@@ -970,6 +980,8 @@
         <div id="editCustomerPhoneList" class="multi-input-list"></div>
         <label for="editCustomerTaxId">Tashkilot INN</label>
         <input id="editCustomerTaxId" placeholder="123456789">
+        <label for="editCustomerLocation">Lokatsiya</label>
+        <input id="editCustomerLocation" placeholder="Masalan: Chilonzor, 19-mavze">
         <div class="field-label-row">
           <label>Telegram ID</label>
           <button id="editCustomerAddTelegram" class="secondary add-mini" type="button">+</button>
