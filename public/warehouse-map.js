@@ -7,7 +7,7 @@
     const link = document.createElement('link');
     link.id = 'maplibre-css';
     link.rel = 'stylesheet';
-    link.href = 'https://unpkg.com/maplibre-gl@4.x/dist/maplibre-gl.css';
+    link.href = '/warehouse/maplibre-gl.css';
     document.head.appendChild(link);
   }
 
@@ -72,7 +72,7 @@
       return;
     }
     const script = document.createElement('script');
-    script.src = 'https://unpkg.com/maplibre-gl@4.x/dist/maplibre-gl.js';
+    script.src = '/warehouse/maplibre-gl.js';
     script.onload = () => initMap(lat, lng);
     script.onerror = () => { if(loader) loader.innerText = 'Xarita yuklashda xatolik yuz berdi. Internetni tekshiring.'; };
     document.head.appendChild(script);

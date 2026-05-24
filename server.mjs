@@ -642,8 +642,12 @@ function authenticateStaffLinkForRoute(req, u) {
 
 function checkSiteGate(req, res, u) {
   // API, healthz, SW, manifest, rasm — tekshirilmaydi
-  const skipPrefixes = ["/warehouse/api/", "/api/", "/warehouse/sw.js", "/warehouse/manifest.json", "/warehouse/assets/", "/warehouse/uploads/", "/warehouse/leaflet.js", "/warehouse/leaflet.css", "/warehouse-top-nav.js", "/favicon", "/icon-"];
+  const skipPrefixes = ["/warehouse/api/", "/api/", "/warehouse/sw.js", "/warehouse/manifest.json", "/warehouse/assets/", "/warehouse/uploads/", "/warehouse/leaflet.js", "/warehouse/leaflet.css", "/warehouse/maplibre-gl.js", "/warehouse/maplibre-gl.css", "/warehouse-top-nav.js", "/favicon", "/icon-"];
+  
   if (skipPrefixes.some((p) => u.pathname.startsWith(p))) return { allowed: true };
+  
+
+
   // Login endpointi POST bo'lsa — gate dan exempt
   if (
     req.method === "POST" &&
@@ -2044,13 +2048,13 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
 
-  if (u.pathname === "/warehouse/leaflet.js" && req.method === "GET") {
-    serveWarehouseAsset("leaflet.js", req, res);
+  if (u.pathname === "/warehouse/maplibre-gl.js" && req.method === "GET") {
+    serveWarehouseAsset("maplibre-gl.js", req, res);
     return;
   }
 
-  if (u.pathname === "/warehouse/leaflet.css" && req.method === "GET") {
-    serveWarehouseAsset("leaflet.css", req, res);
+  if (u.pathname === "/warehouse/maplibre-gl.css" && req.method === "GET") {
+    serveWarehouseAsset("maplibre-gl.css", req, res);
     return;
   }
 
