@@ -161,6 +161,14 @@
       display: block;
     }
     @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+    @media (max-width: 620px) {
+      .history-table, .history-table tbody, .history-table tr, .history-table td { display: block; width: 100%; }
+      .history-table thead { display: none; }
+      .history-table tr { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 16px; background: #fff; padding: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+      .history-table td { border: none !important; padding: 8px 8px 8px 45% !important; text-align: right; position: relative; min-height: 36px; display: flex; justify-content: flex-end; align-items: flex-start; gap: 8px; }
+      .history-table td::before { content: attr(data-label); position: absolute; left: 12px; top: 8px; font-weight: bold; color: var(--muted); text-align: left; width: 40%; }
+      .history-table tr:last-child { margin-bottom: 0; }
+    }
   </style>
 </head>
 <body>
@@ -671,17 +679,17 @@
                 const photos = transactionPhotos(entry);
                 return `
                 <tr>
-                  <td>${dateLabel(entry.approvedAt || entry.createdAt)}</td>
-                  <td>${kindLabel(entry)}</td>
-                  <td>${entry.amountKg}</td>
-                  <td>${entry.blockCount ? `${numberFormat(entry.blockCount)} blok` : '-'}</td>
-                  <td>${entry.pricePerKg ? `${numberFormat(entry.pricePerKg)} so'm` : '-'}</td>
-                  <td>${numberFormat(entry.totalPrice)} so'm</td>
-                  <td>${paymentTypeLabel(entry)}</td>
-                  <td>${numberFormat(entry.paidAmount)} so'm</td>
-                  <td><span class="${debtClass(remainingDebt)}">${numberFormat(remainingDebt)} so'm</span></td>
-                  <td>${photos.length ? `<button type="button" class="photo-link-button" data-history-photo-entry="${entry.id}">${photos.length === 1 ? 'Rasmni ko\'rish' : `${photos.length} ta rasmni ko\'rish`}</button>` : '-'}</td>
-                  <td class="muted">${entry.note || 'Izoh yo\'q'}</td>
+                  <td data-label="Sana">${dateLabel(entry.approvedAt || entry.createdAt)}</td>
+                  <td data-label="Turi">${kindLabel(entry)}</td>
+                  <td data-label="Kg">${entry.amountKg}</td>
+                  <td data-label="Blok">${entry.blockCount ? `${numberFormat(entry.blockCount)} blok` : '-'}</td>
+                  <td data-label="1 kg narx">${entry.pricePerKg ? `${numberFormat(entry.pricePerKg)} so'm` : '-'}</td>
+                  <td data-label="Jami summa">${numberFormat(entry.totalPrice)} so'm</td>
+                  <td data-label="Naqd yoki O'tkazma">${paymentTypeLabel(entry)}</td>
+                  <td data-label="Jami to'lov">${numberFormat(entry.paidAmount)} so'm</td>
+                  <td data-label="Qarz"><span class="${debtClass(remainingDebt)}">${numberFormat(remainingDebt)} so'm</span></td>
+                  <td data-label="Rasm">${photos.length ? `<button type="button" class="photo-link-button" data-history-photo-entry="${entry.id}">${photos.length === 1 ? 'Rasmni ko\'rish' : `${photos.length} ta rasmni ko\'rish`}</button>` : '-'}</td>
+                  <td data-label="Izoh" class="muted">${entry.note || 'Izoh yo\'q'}</td>
                 </tr>
               `;
               }).join('')}
