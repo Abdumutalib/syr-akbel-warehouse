@@ -87,24 +87,23 @@
         style: {
           'version': 8,
           'sources': {
-            'raster-tiles': {
+            'osm-tiles': {
               'type': 'raster',
               'tiles': [
-                'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-                'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-                'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-                'https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
+                'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
               ],
               'tileSize': 256,
-              'attribution': '© OpenStreetMap contributors © CARTO'
+              'attribution': '© OpenStreetMap contributors'
             }
           },
           'layers': [{
-            'id': 'simple-tiles',
+            'id': 'osm-layer',
             'type': 'raster',
-            'source': 'raster-tiles',
+            'source': 'osm-tiles',
             'minzoom': 0,
-            'maxzoom': 22
+            'maxzoom': 19
           }]
         },
         center: [lng, lat],
