@@ -91,10 +91,11 @@
       L.control.zoom({ position: 'bottomleft' }).addTo(map);
     } else {
       map.setView([lat, lng], 15);
-      setTimeout(() => {
-        map.invalidateSize();
-      }, 10);
     }
+    // Asynchronous call required because the modal display:flex might not have been painted yet
+    setTimeout(() => {
+      if (map) map.invalidateSize();
+    }, 150);
   }
 
   window.openLocationMap = function(inputId) {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'akbel-cache-v4';
+const CACHE_NAME = 'akbel-cache-v5';
 
 self.addEventListener('install', event => {
   self.skipWaiting();
