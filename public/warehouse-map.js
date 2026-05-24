@@ -84,31 +84,10 @@
     if (!map) {
       map = new maplibregl.Map({
         container: 'locationMapContainer',
-        style: {
-          'version': 8,
-          'sources': {
-            'raster-tiles': {
-              'type': 'raster',
-              'tiles': [
-                'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-                'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-                'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-                'https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
-              ],
-              'tileSize': 256,
-              'attribution': '© OpenStreetMap contributors © CARTO'
-            }
-          },
-          'layers': [{
-            'id': 'simple-tiles',
-            'type': 'raster',
-            'source': 'raster-tiles',
-            'minzoom': 0,
-            'maxzoom': 22
-          }]
-        },
+        style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         center: [lng, lat],
-        zoom: 15
+        zoom: 13,
+        fadeDuration: 0
       });
       map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
     } else {
@@ -167,8 +146,11 @@
         localStorage.setItem('last_akbel_lat', currentLat);
         localStorage.setItem('last_akbel_lng', currentLng);
         if (map) {
-          map.setCenter([currentLng, currentLat]);
-          map.setZoom(17);
+          map.flyTo({
+            center: [currentLng, currentLat],
+            speed: 1.2,
+            essential: true
+          });
         }
       }, (error) => {
         console.warn("GPS aniqlashda xatolik, keshdagi ma'lumot qoldirildi:", error.message);
@@ -206,8 +188,11 @@
         localStorage.setItem('last_akbel_lat', currentLat);
         localStorage.setItem('last_akbel_lng', currentLng);
         if (map) {
-          map.setCenter([currentLng, currentLat]);
-          map.setZoom(17);
+          map.flyTo({
+            center: [currentLng, currentLat],
+            speed: 1.2,
+            essential: true
+          });
         }
         findMyLocBtn.style.opacity = '1';
       }, (err) => {
