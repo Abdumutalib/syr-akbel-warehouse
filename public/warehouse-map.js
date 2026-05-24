@@ -13,11 +13,28 @@
 
   // HTML Modal yaratish
   const modalHtml = `
-  <div id="locationMapModal" class="modal-backdrop" style="z-index: 9999;">
-    <div class="modal-content" style="width: 100%; max-width: 600px; padding: 0; display: flex; flex-direction: column; height: 85dvh; max-height: 85vh; border-radius: 16px; overflow: hidden;">
-      <div class="modal-header" style="padding: 16px; flex-shrink: 0;">
+  <style>
+    #locationMapModal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      align-items: center; justify-content: center;
+    }
+    #locationMapModal.active {
+      display: flex;
+    }
+    #locationMapModal .modal-content {
+      background: #fff;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+  </style>
+  <div id="locationMapModal" style="z-index: 9999;">
+    <div class="modal-content" style="width: 100%; max-width: 600px; padding: 0; display: flex; flex-direction: column; height: 85dvh; max-height: 85vh; border-radius: 16px; overflow: hidden; background: #fff;">
+      <div class="modal-header" style="padding: 16px; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee;">
         <h2 style="margin: 0; font-size: 18px;">Lokatsiyani tanlang</h2>
-        <button class="modal-close" id="closeLocationMapModal" type="button">&times;</button>
+        <button class="modal-close" id="closeLocationMapModal" type="button" style="background: transparent; border: 0; font-size: 24px; cursor: pointer; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">&times;</button>
       </div>
       <div style="flex: 1; position: relative; background: #eee;">
         <div id="locationMapLoader" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; z-index: 500; color: #666; background: #eee; font-weight: bold;">Xarita yuklanmoqda...</div>
@@ -32,7 +49,7 @@
         </button>
       </div>
       <div style="padding: 16px; flex-shrink: 0; background: white; z-index: 1001;">
-        <button id="confirmLocationMap" style="width: 100%;">Shu manzilni tasdiqlash</button>
+        <button id="confirmLocationMap" style="width: 100%; padding: 12px; border-radius: 12px; background: #224847; color: white; border: none; font-size: 16px; cursor: pointer;">Shu manzilni tasdiqlash</button>
       </div>
     </div>
   </div>
