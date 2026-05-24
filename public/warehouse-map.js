@@ -2,12 +2,12 @@
   if (window.warehouseMapInitialized) return;
   window.warehouseMapInitialized = true;
 
-  // Leaflet kiritish (agar yo'q bo'lsa)
-  if (!document.getElementById('leaflet-css')) {
+  // MapLibre CSS kiritish
+  if (!document.getElementById('maplibre-css')) {
     const link = document.createElement('link');
-    link.id = 'leaflet-css';
+    link.id = 'maplibre-css';
     link.rel = 'stylesheet';
-    link.href = '/warehouse/leaflet.css';
+    link.href = 'https://unpkg.com/maplibre-gl@4.x/dist/maplibre-gl.css';
     document.head.appendChild(link);
   }
 
@@ -64,15 +64,15 @@
   let map = null;
   let targetInputId = null;
 
-  function loadLeafletAndInitMap(lat, lng) {
+  function loadMapLibreAndInitMap(lat, lng) {
     const loader = document.getElementById('locationMapLoader');
     if (loader) loader.style.display = 'flex';
-    if (window.L) {
+    if (window.maplibregl) {
       initMap(lat, lng);
       return;
     }
     const script = document.createElement('script');
-    script.src = '/warehouse/leaflet.js';
+    script.src = 'https://unpkg.com/maplibre-gl@4.x/dist/maplibre-gl.js';
     script.onload = () => initMap(lat, lng);
     script.onerror = () => { if(loader) loader.innerText = 'Xarita yuklashda xatolik yuz berdi. Internetni tekshiring.'; };
     document.head.appendChild(script);
@@ -82,19 +82,42 @@
     const loader = document.getElementById('locationMapLoader');
     if (loader) loader.style.display = 'none';
     if (!map) {
-      map = L.map('locationMapContainer', { zoomControl: false }).setView([lat, lng], 15);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap contributors © CARTO',
-        subdomains: 'abcd',
-        maxZoom: 20
-      }).addTo(map);
-      L.control.zoom({ position: 'bottomleft' }).addTo(map);
+      map = new maplibregl.Map({
+        container: 'locationMapContainer',
+        style: {
+          'version': 8,
+          'sources': {
+            'raster-tiles': {
+              'type': 'raster',
+              'tiles': [
+                'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+                'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+                'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+                'https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
+              ],
+              'tileSize': 256,
+              'attribution': '© OpenStreetMap contributors © CARTO'
+            }
+          },
+          'layers': [{
+            'id': 'simple-tiles',
+            'type': 'raster',
+            'source': 'raster-tiles',
+            'minzoom': 0,
+            'maxzoom': 22
+          }]
+        },
+        center: [lng, lat],
+        zoom: 15
+      });
+      map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
     } else {
-      map.setView([lat, lng], 15);
+      map.setCenter([lng, lat]);
+      map.setZoom(15);
     }
     // Asynchronous call required because the modal display:flex might not have been painted yet
     setTimeout(() => {
-      if (map) map.invalidateSize();
+      if (map) map.resize();
     }, 150);
   }
 
@@ -135,7 +158,7 @@
       }
     }
 
-    loadLeafletAndInitMap(lat, lng);
+    loadMapLibreAndInitMap(lat, lng);
 
     if (!hasExisting && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
@@ -144,7 +167,8 @@
         localStorage.setItem('last_akbel_lat', currentLat);
         localStorage.setItem('last_akbel_lng', currentLng);
         if (map) {
-          map.setView([currentLat, currentLng], 17);
+          map.setCenter([currentLng, currentLat]);
+          map.setZoom(17);
         }
       }, (error) => {
         console.warn("GPS aniqlashda xatolik, keshdagi ma'lumot qoldirildi:", error.message);
@@ -182,7 +206,8 @@
         localStorage.setItem('last_akbel_lat', currentLat);
         localStorage.setItem('last_akbel_lng', currentLng);
         if (map) {
-          map.setView([currentLat, currentLng], 17);
+          map.setCenter([currentLng, currentLat]);
+          map.setZoom(17);
         }
         findMyLocBtn.style.opacity = '1';
       }, (err) => {
