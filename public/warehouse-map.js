@@ -83,9 +83,10 @@
     if (loader) loader.style.display = 'none';
     if (!map) {
       map = L.map('locationMapContainer', { zoomControl: false }).setView([lat, lng], 15);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap'
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap contributors © CARTO',
+        subdomains: 'abcd',
+        maxZoom: 20
       }).addTo(map);
       L.control.zoom({ position: 'bottomleft' }).addTo(map);
     } else {
@@ -101,8 +102,8 @@
     modalEl.classList.add('active');
     
     // Default location: Toshkent
-    let lat = 41.2995;
-    let lng = 69.2401;
+    let lat = 41.311081;
+    let lng = 69.240562;
 
     // Harakatlanib turgan input qiymatini tahlil qilish
     const inputEl = document.getElementById(inputId);
@@ -124,14 +125,29 @@
       }
     }
 
+    if (!hasExisting) {
+      const cachedLat = localStorage.getItem('last_akbel_lat');
+      const cachedLng = localStorage.getItem('last_akbel_lng');
+      if (cachedLat && cachedLng) {
+        lat = parseFloat(cachedLat);
+        lng = parseFloat(cachedLng);
+      }
+    }
+
     loadLeafletAndInitMap(lat, lng);
 
     if (!hasExisting && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
+        const currentLat = pos.coords.latitude;
+        const currentLng = pos.coords.longitude;
+        localStorage.setItem('last_akbel_lat', currentLat);
+        localStorage.setItem('last_akbel_lng', currentLng);
         if (map) {
-          map.setView([pos.coords.latitude, pos.coords.longitude], 17);
+          map.setView([currentLat, currentLng], 17);
         }
-      }, () => {});
+      }, (error) => {
+        console.warn("GPS aniqlashda xatolik, keshdagi ma'lumot qoldirildi:", error.message);
+      }, { enableHighAccuracy: true, timeout: 5000 });
     }
   };
 
@@ -160,14 +176,18 @@
     if (navigator.geolocation) {
       findMyLocBtn.style.opacity = '0.5';
       navigator.geolocation.getCurrentPosition((pos) => {
+        const currentLat = pos.coords.latitude;
+        const currentLng = pos.coords.longitude;
+        localStorage.setItem('last_akbel_lat', currentLat);
+        localStorage.setItem('last_akbel_lng', currentLng);
         if (map) {
-          map.setView([pos.coords.latitude, pos.coords.longitude], 17);
+          map.setView([currentLat, currentLng], 17);
         }
         findMyLocBtn.style.opacity = '1';
       }, (err) => {
         alert("Geolokatsiyani aniqlash imkonsiz.");
         findMyLocBtn.style.opacity = '1';
-      });
+      }, { enableHighAccuracy: true, timeout: 5000 });
     }
   });
 
