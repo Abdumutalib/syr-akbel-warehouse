@@ -84,7 +84,7 @@
     if (!map) {
       map = new maplibregl.Map({
         container: 'locationMapContainer',
-        style: 'https://demotiles.maplibre.org/style.json',
+        style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         center: [lng, lat],
         zoom: 13,
         fadeDuration: 0
