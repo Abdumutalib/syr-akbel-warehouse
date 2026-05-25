@@ -1210,7 +1210,8 @@ function extractTelegramMessage(update) {
     update?.edited_business_message ||
     update?.message;
   if (!message) return null;
-  const text = typeof message.text === "string" ? message.text.trim() : "";
+  const textRaw = message.text || message.caption || "";
+  const text = typeof textRaw === "string" ? textRaw.trim() : "";
   const from = message?.from || {};
   return {
     text,
