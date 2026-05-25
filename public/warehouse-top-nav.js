@@ -87,8 +87,8 @@
     {
       label: "Buyurtmalar",
       href: "/warehouse/orders",
-      isVisible() {
-        return true;
+      isVisible(profile) {
+        return hasPermission(profile, "orders");
       },
       isActive(pathname) {
         return pathname === "/warehouse/orders";
@@ -98,7 +98,7 @@
       label: "Naqd savdo yozish",
       href: "/warehouse/seller/sale/cash",
       isVisible(profile) {
-        return hasPermission(profile, "seller");
+        return hasPermission(profile, "write_cash_sale");
       },
       isActive(pathname) {
         return pathname === "/warehouse/seller/sale/cash";
@@ -108,7 +108,7 @@
       label: "O'tkazma savdo yozish",
       href: "/warehouse/seller/sale/transfer",
       isVisible(profile) {
-        return hasPermission(profile, ["seller", "transfer"]);
+        return hasPermission(profile, "write_transfer_sale");
       },
       isActive(pathname) {
         return pathname === "/warehouse/seller/sale/transfer";

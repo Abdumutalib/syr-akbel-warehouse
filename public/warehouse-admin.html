@@ -676,11 +676,14 @@
     const staffRoleEl = document.getElementById("staffRole");
     const createPermissionsEl = document.getElementById("staffPermissionsCreate");
     const STAFF_PERMISSION_LABELS = {
-      seller: "Sotuvchi sahifasi",
-      customers: "Mijozlar sahifalari",
-      cash: "Naqd hisobot (Admin naqd)",
-      transfer: "O'tkazma hisobot (Admin o'tkazma)",
-      admin_panel: "Admin panel kirishi",
+      seller: "Sotuvchi",
+      customers: "Mijozlar",
+      orders: "Buyurtmalar",
+      write_cash_sale: "Naqd savdo yozish",
+      write_transfer_sale: "O'tkazma savdo yozish",
+      cash: "Admin naqd",
+      transfer: "Admin o'tkazma",
+      admin_panel: "Admin panel",
     };
 
     function setStatus(message, isError = false) {
@@ -740,7 +743,7 @@
     }
 
     function defaultPermissionsForRole(role) {
-      return role === "accountant" ? ["cash", "transfer", "customers"] : ["seller", "customers"];
+      return role === "accountant" ? ["cash", "transfer", "customers", "orders"] : ["seller", "customers", "orders", "write_cash_sale", "write_transfer_sale"];
     }
 
     function renderPermissionInputs(host, selected = [], prefix = "perm") {
@@ -766,6 +769,9 @@
       const pathMap = {
         seller: '/warehouse/seller',
         customers: '/warehouse/customers',
+        orders: '/warehouse/orders',
+        write_cash_sale: '/warehouse/seller/sale/cash',
+        write_transfer_sale: '/warehouse/seller/sale/transfer',
         cash: '/warehouse/admin/cash',
         transfer: '/warehouse/admin/transfer',
         admin_panel: '/warehouse/admin',
