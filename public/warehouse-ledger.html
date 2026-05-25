@@ -397,10 +397,11 @@
     function applyOperatorPermissions(profile) {
       const currentProfile = profile || (window.getWarehouseOperatorProfile ? window.getWarehouseOperatorProfile() : null);
       const isAdmin = Boolean(currentProfile && currentProfile.role === 'admin');
+      const canSeeAdmin = isAdmin || (window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'admin_panel') : false);
       const canSeeSwitch = window.warehouseOperatorHasPermission
         ? window.warehouseOperatorHasPermission(currentProfile, isCash ? 'transfer' : 'cash')
         : true;
-      document.getElementById('pendingLink').classList.toggle('hidden', !isAdmin);
+      document.getElementById('pendingLink').classList.toggle('hidden', !canSeeAdmin);
       switchLinkEl.classList.toggle('hidden', !canSeeSwitch);
     }
 
