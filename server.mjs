@@ -531,6 +531,10 @@ function baseApiJsonHeaders() {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
+    "X-Robots-Tag": "noindex, nofollow"
   };
 }
 
@@ -892,6 +896,10 @@ function checkSiteGate(req, res, u) {
   res.writeHead(200, {
     "Content-Type": "text/html; charset=utf-8",
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
+    "X-Robots-Tag": "noindex, nofollow"
     Pragma: "no-cache",
     Expires: "0",
   });
@@ -947,6 +955,10 @@ function staticResponseHeaders(contentType, filePath, etag = null) {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
+    "X-Robots-Tag": "noindex, nofollow"
   };
   if (etag) headers["ETag"] = etag;
   if (isHtml) {
