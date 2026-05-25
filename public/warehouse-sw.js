@@ -1,4 +1,5 @@
-const CACHE_NAME = 'akbel-cache-v9999';
+const CACHE_NAME = 'akbel-cache-v10000';
+const MAX_CACHE_ITEMS = 50;
 
 self.addEventListener('install', event => {
   self.skipWaiting();
@@ -16,6 +17,19 @@ self.addEventListener('activate', event => {
   );
   self.clients.claim();
 });
+
+async function trimCache(cacheName, maxItems) {
+  try {
+    const cache = await caches.open(cacheName);
+    const keys = await cache.keys();
+    if (keys.length > maxItems) {
+      await cache.delete(keys[0]);
+      await trimCache(cacheName, maxItems);
+    }
+  } catch (e) {
+    // xato bo'lsa indamaymiz
+  }
+}
 
 self.addEventListener('fetch', event => {
   const req = event.request;
@@ -38,7 +52,9 @@ self.addEventListener('fetch', event => {
       const resClone = res.clone();
       caches.open(CACHE_NAME).then(cache => {
         if (req.url.startsWith('http')) {
-          cache.put(req, resClone);
+          cache.put(req, resClone).then(() => {
+            trimCache(CACHE_NAME, MAX_CACHE_ITEMS);
+          });
         }
       });
       return res;
