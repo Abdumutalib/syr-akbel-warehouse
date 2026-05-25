@@ -899,7 +899,7 @@ function checkSiteGate(req, res, u) {
     "X-Frame-Options": "SAMEORIGIN",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
-    "X-Robots-Tag": "noindex, nofollow"
+    "X-Robots-Tag": "noindex, nofollow",
     Pragma: "no-cache",
     Expires: "0",
   });
