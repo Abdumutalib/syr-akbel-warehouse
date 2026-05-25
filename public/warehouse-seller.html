@@ -333,10 +333,7 @@
           <label for="customerTaxId">Tashkilot INN</label>
           <input id="customerTaxId" placeholder="123456789">
           <label for="customerLocation">Lokatsiya</label>
-          <div style="display: flex; gap: 8px;">
-            <input id="customerLocation" placeholder="Masalan: Chilonzor, 19-mavze" style="flex: 1;">
-            <button type="button" class="secondary" onclick="openLocationMap('customerLocation')" style="padding: 0 12px; font-size: 18px;" title="Xaritadan tanlash">📍</button>
-          </div>
+          <input id="customerLocation" placeholder="Masalan: Chilonzor, 19-mavze">
           <div class="field-label-row">
             <label>Telegram ID</label>
             <button id="addCustomerTelegram" class="secondary add-mini" type="button">+</button>
@@ -966,7 +963,7 @@
     }, 60000);
   </script>
   <script src="/warehouse-top-nav.js"></script>
-  <script src="/warehouse/assets/warehouse-map.js"></script>
+
   <script src="/warehouse/assets/warehouse-offline.js"></script>
 </body>
 </html>
