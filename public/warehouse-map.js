@@ -2,15 +2,6 @@
   if (window.warehouseMapInitialized) return;
   window.warehouseMapInitialized = true;
 
-  // MapLibre CSS kiritish
-  if (!document.getElementById('maplibre-css')) {
-    const link = document.createElement('link');
-    link.id = 'maplibre-css';
-    link.rel = 'stylesheet';
-    link.href = '/warehouse/maplibre-gl.css';
-    document.head.appendChild(link);
-  }
-
   // HTML Modal yaratish
   const modalHtml = `
   <style>
@@ -64,16 +55,18 @@
   let map = null;
   let targetInputId = null;
 
-  function loadMapLibreAndInitMap(lat, lng) {
+  function loadYandexMapAndInit(lat, lng) {
     const loader = document.getElementById('locationMapLoader');
     if (loader) loader.style.display = 'flex';
-    if (window.maplibregl) {
-      initMap(lat, lng);
+    if (window.ymaps) {
+      ymaps.ready(() => initMap(lat, lng));
       return;
     }
     const script = document.createElement('script');
-    script.src = '/warehouse/maplibre-gl.js';
-    script.onload = () => initMap(lat, lng);
+    script.src = 'https://api-maps.yandex.ru/2.1/?lang=uz_UZ&coordorder=latlong&apikey=0ba09024-95c4-4e81-9ca8-8df52c612de0';
+    script.onload = () => {
+      ymaps.ready(() => initMap(lat, lng));
+    };
     script.onerror = () => { if(loader) loader.innerText = 'Xarita yuklashda xatolik yuz berdi. Internetni tekshiring.'; };
     document.head.appendChild(script);
   }
@@ -81,44 +74,17 @@
   function initMap(lat, lng) {
     const loader = document.getElementById('locationMapLoader');
     if (loader) loader.style.display = 'none';
+    
     if (!map) {
-      map = new maplibregl.Map({
-        container: 'locationMapContainer',
-        style: {
-          'version': 8,
-          'sources': {
-            'osm-tiles': {
-              'type': 'raster',
-              'tiles': [
-                'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
-              ],
-              'tileSize': 256,
-              'attribution': '© OpenStreetMap contributors'
-            }
-          },
-          'layers': [{
-            'id': 'osm-layer',
-            'type': 'raster',
-            'source': 'osm-tiles',
-            'minzoom': 0,
-            'maxzoom': 19
-          }]
-        },
-        center: [lng, lat],
+      document.getElementById('locationMapContainer').innerHTML = ''; // clear
+      map = new ymaps.Map('locationMapContainer', {
+        center: [lat, lng],
         zoom: 13,
-        fadeDuration: 0
+        controls: ['zoomControl']
       });
-      map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
     } else {
-      map.setCenter([lng, lat]);
-      map.setZoom(15);
+      map.setCenter([lat, lng], 15);
     }
-    // Asynchronous call required because the modal display:flex might not have been painted yet
-    setTimeout(() => {
-      if (map) map.resize();
-    }, 150);
   }
 
   window.openLocationMap = function(inputId) {
@@ -158,7 +124,7 @@
       }
     }
 
-    loadMapLibreAndInitMap(lat, lng);
+    loadYandexMapAndInit(lat, lng);
 
     if (!hasExisting && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
@@ -167,11 +133,7 @@
         localStorage.setItem('last_akbel_lat', currentLat);
         localStorage.setItem('last_akbel_lng', currentLng);
         if (map) {
-          map.flyTo({
-            center: [currentLng, currentLat],
-            speed: 1.2,
-            essential: true
-          });
+          map.setCenter([currentLat, currentLng], 15, { duration: 1000 });
         }
       }, (error) => {
         console.warn("GPS aniqlashda xatolik, keshdagi ma'lumot qoldirildi:", error.message);
@@ -191,7 +153,7 @@
   confirmBtn.addEventListener('click', () => {
     if (!map || !targetInputId) return;
     const center = map.getCenter();
-    const link = `https://maps.google.com/?q=${center.lat.toFixed(6)},${center.lng.toFixed(6)}`;
+    const link = `https://maps.google.com/?q=${center[0].toFixed(6)},${center[1].toFixed(6)}`;
     
     const inputEl = document.getElementById(targetInputId);
     if (inputEl) {
@@ -209,11 +171,7 @@
         localStorage.setItem('last_akbel_lat', currentLat);
         localStorage.setItem('last_akbel_lng', currentLng);
         if (map) {
-          map.flyTo({
-            center: [currentLng, currentLat],
-            speed: 1.2,
-            essential: true
-          });
+          map.setCenter([currentLat, currentLng], 15, { duration: 1000 });
         }
         findMyLocBtn.style.opacity = '1';
       }, (err) => {
