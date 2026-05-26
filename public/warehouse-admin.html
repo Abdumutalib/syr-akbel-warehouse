@@ -5,12 +5,12 @@
   <meta name="robots" content="noindex, nofollow">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>РЎС‹СЂ РђРљР‘Р•Р›</title>
+  <title>Сыр АКБЕЛ</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="РђРљР‘Р•Р› Admin">
+  <meta name="apple-mobile-web-app-title" content="АКБЕЛ Admin">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <meta name="theme-color" content="#9f6b2f">
   <script>(function(){var l=document.createElement('link');l.rel='manifest';l.href='/warehouse/manifest.json?page=admin';document.head.appendChild(l);if('serviceWorker' in navigator)navigator.serviceWorker.register('/warehouse/sw.js',{scope:'/warehouse/',updateViaCache:'none'});})()</script>
@@ -340,29 +340,29 @@
   <div class="shell">
     <section class="hero">
       <div>
-        <h1>РЎС‹СЂ РђРљР‘Р•Р›</h1>
+        <h1>Сыр АКБЕЛ</h1>
         <div class="hero-links">
-          <a class="button-link secondary" href="/warehouse/admin/cash">РќР°Т›Рґ С…РёСЃРѕР±РѕС‚</a>
-          <a class="button-link secondary" href="/warehouse/admin/transfer">Рћ'С‚РєР°Р·РјР° С…РёСЃРѕР±РѕС‚</a>
-          <a class="button-link secondary" href="/warehouse/customers">РњРёР¶РѕР·Р»Р°СЂ</a>
-          <a class="button-link secondary" href="/warehouse/orders">Р‘СѓСЋСЂС‚РјР°Р»Р°СЂ</a>
-          <a class="button-link" href="/warehouse/ledger">Р‘СѓС…РіР°Р»С‚РµСЂ</a>
+          <a class="button-link secondary" href="/warehouse/admin/cash">Нақд хисобот</a>
+          <a class="button-link secondary" href="/warehouse/admin/transfer">О'тказма хисобот</a>
+          <a class="button-link secondary" href="/warehouse/customers">Мижозлар</a>
+          <a class="button-link secondary" href="/warehouse/orders">Буюртмалар</a>
+          <a class="button-link" href="/warehouse/ledger">Бухгалтер</a>
         </div>
       </div>
       <div id="status" class="status"></div>
     </section>
 
-    <!-- РЇРЅРіРё РјРёР¶РѕР· Т›СћС€РёС€ -->
+    <!-- Янги мижоз қўшиш -->
     <section class="card" style="margin-bottom: 20px; padding: 20px;">
       <details id="addCustomerDetails">
         <summary style="cursor: pointer; font-size: 18px; font-weight: bold; list-style: none; display: flex; align-items: center; gap: 10px; user-select: none;">
-          <span id="addCustomerToggleIcon" style="font-size: 22px; transition: transform 0.2s;">пј‹</span>
-          РЇРЅРіРё РјРёР¶РѕР· Т›СћС€РёС€
+          <span id="addCustomerToggleIcon" style="font-size: 22px; transition: transform 0.2s;">＋</span>
+          Янги мижоз қўшиш
         </summary>
         <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 20px; align-items: end;">
           <div>
             <label for="newCustomerName">F.I.Sh. <span style="color:#9f1239">*</span></label>
-            <input id="newCustomerName" placeholder="РђР»РёС€РµСЂ РљР°СЂРёРјРѕРІ" autocomplete="off">
+            <input id="newCustomerName" placeholder="Алишер Каримов" autocomplete="off">
           </div>
           <div>
             <label for="newCustomerPhone">Telefon</label>
@@ -386,7 +386,7 @@
             </div>
           </div>
           <div style="align-self:end;">
-            <button id="addCustomerBtn" style="width:100%; padding:12px 18px;">РњРёР¶РѕР·РЅРё СЃР°Т›Р»Р°С€</button>
+            <button id="addCustomerBtn" style="width:100%; padding:12px 18px;">Мижозни сақлаш</button>
           </div>
         </div>
         <div id="addCustomerStatus" style="margin-top:10px; min-height:20px; font-size:14px;"></div>
@@ -417,7 +417,7 @@
             <button id="show-login" class="secondary hidden">Login bilan kirish</button>
             <button id="reload" class="secondary">Qayta yuklash</button>
           </div>
-          <div id="authHint" style="color: #6d6255; font-size: 14px; margin-top: 8px;">Birinchi marta login/password bilan kiring. PIN yozib saqlasangiz, keyingi safar С€Сѓ PIN Р±РёР»Р°РЅ РєРёСЂРёС€ РјСѓРјРєРёРЅ.</div>
+          <div id="authHint" style="color: #6d6255; font-size: 14px; margin-top: 8px;">Birinchi marta login/password bilan kiring. PIN yozib saqlasangiz, keyingi safar шу PIN билан кириш мумкин.</div>
         </div>
         <div id="activeSessionNotice" style="color: #6d6255; font-size: 14px; margin-bottom: 12px;" class="hidden"></div>
 
@@ -455,7 +455,7 @@
         <div class="nav-links">
           <a class="nav-link" href="/warehouse/customers">
             <strong>Mijozlar mundarijasi</strong>
-            Naqd РІР° o'tkazma mijozlar ro'yxati, nomiga bosilganda shaxsiy sahifa ochiladi
+            Naqd ва o'tkazma mijozlar ro'yxati, nomiga bosilganda shaxsiy sahifa ochiladi
           </a>
           <a class="nav-link" href="/warehouse/seller">
             <strong>Sotuvchi sahifasi</strong>
@@ -478,7 +478,7 @@
           <h3 style="margin-top: 0;">Mijozni tez tahrirlash</h3>
           <div class="search-row">
             <input id="customerSearchInput" type="search" placeholder="Ism yoki telefon bilan qidiring..." autocomplete="off" style="width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; margin: 0; font: inherit; box-sizing: border-box;">
-            <button id="customerSearchClear" class="secondary search-clear-btn hidden" type="button" aria-label="Qidiruvni tozalash">Г—</button>
+            <button id="customerSearchClear" class="secondary search-clear-btn hidden" type="button" aria-label="Qidiruvni tozalash">×</button>
           </div>
           <label for="customerQuickSelect">Mijozni tanlang</label>
           <select id="customerQuickSelect" style="width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; margin: 8px 0 14px; font: inherit;">
@@ -486,7 +486,7 @@
           </select>
           <div id="customerInlineEdit" class="hidden" style="margin-top: 8px;">
             <label for="inlineCustomerName">F.I.Sh.</label>
-            <input id="inlineCustomerName" placeholder="РђР»Рё Р°РєР°">
+            <input id="inlineCustomerName" placeholder="Али ака">
             <label for="inlineCustomerPhone">Telefon</label>
             <input id="inlineCustomerPhone" placeholder="+99890...">
             <label for="inlineCustomerTelegram">Telegram ID</label>
@@ -512,7 +512,7 @@
         </div>
 
         <div class="card" style="margin-top: 20px; padding: 0; border: 0; box-shadow: none; background: transparent;">
-          <h3 style="margin-top: 0;">Pishloq Т›Р°Р±СѓР» Т›РёР»РёС€ (Kirim)</h3>
+          <h3 style="margin-top: 0;">Pishloq қабул қилиш (Kirim)</h3>
           <div style="display: grid; gap: 10px;">
             <div>
               <label for="receiptKg">Hajm (kg) <span style="color:#9f1239">*</span></label>
@@ -580,11 +580,11 @@
   <script src="/warehouse/assets/warehouse-api.js"></script>
   <script src="/warehouse/assets/warehouse-auth-pin.js"></script>
   <script>
-    // РЇРЅРіРё РјРёР¶РѕР· Т›СћС€РёС€
+    // Янги мижоз қўшиш
     const addCustomerDetails = document.getElementById("addCustomerDetails");
     const addCustomerToggleIcon = document.getElementById("addCustomerToggleIcon");
     addCustomerDetails.addEventListener("toggle", () => {
-      addCustomerToggleIcon.textContent = addCustomerDetails.open ? "в€’" : "пј‹";
+      addCustomerToggleIcon.textContent = addCustomerDetails.open ? "−" : "＋";
     });
 
     document.getElementById("addCustomerBtn").addEventListener("click", async () => {
@@ -610,7 +610,7 @@
       if (cats.length) payload.paymentCategories = cats;
 
       statusDiv.style.color = "var(--muted)";
-      statusDiv.textContent = "РЎР°Т›Р»Р°РЅСЏРїС‚Рё...";
+      statusDiv.textContent = "Сақланяпти...";
 
       try {
         const base = location.pathname.startsWith("/warehouse") ? "" : "";
@@ -623,7 +623,7 @@
         const data = await resp.json();
         if (resp.ok && data.ok) {
           statusDiv.style.color = "var(--ok)";
-          statusDiv.textContent = `вњ“ ${nameVal} РјРёР¶РѕР· Т›СћС€РёР»РґРё (ID: ${data.customer?.id ?? "вЂ”"})`;
+          statusDiv.textContent = `✓ ${nameVal} мижоз қўшилди (ID: ${data.customer?.id ?? "—"})`;
           document.getElementById("newCustomerName").value = "";
           document.getElementById("newCustomerPhone").value = "";
           document.getElementById("newCustomerTelegram").value = "";
@@ -631,11 +631,11 @@
           document.getElementById("newCustomerTransfer").checked = false;
         } else {
           statusDiv.style.color = "#9f1239";
-          statusDiv.textContent = data.error || "РҐР°С‚Рѕ СЋР· Р±РµСЂРґРё";
+          statusDiv.textContent = data.error || "Хато юз берди";
         }
       } catch (err) {
         statusDiv.style.color = "#9f1239";
-        statusDiv.textContent = "РЎРµСЂРІРµСЂРіР° СѓР»Р°РЅРёР± Р±СћР»РјР°РґРё: " + err.message;
+        statusDiv.textContent = "Серверга уланиб бўлмади: " + err.message;
       }
     });
 
@@ -806,7 +806,7 @@
             <strong>${item.user?.fullName || "Noma'lum"}</strong>
             <span>#${item.id}</span>
           </div>
-          <p>${item.amountKg} kg В· ${numberFormat(item.totalPrice)} so'm</p>
+          <p>${item.amountKg} kg · ${numberFormat(item.totalPrice)} so'm</p>
           <p class="raw">${item.extractedText || ""}</p>
           <label for="cash-paid-${item.id}">Naqd pul</label>
           <input id="cash-paid-${item.id}" type="number" min="0" step="1" placeholder="0">
@@ -843,7 +843,7 @@
                   ${link.revokedAt ? '' : `<button data-revoke-link="${entry.id}" data-link-id="${link.id}">Linkni bekor qilish</button>`}
                 </div>
               </article>
-            `).join('') || '<p>Hozircha Р°РєС‚РёРІ link yo\'q.</p>'}
+            `).join('') || '<p>Hozircha актив link yo\'q.</p>'}
           </div>
           <div class="permission-grid">
             ${Object.entries(STAFF_PERMISSION_LABELS).map(([key, label]) => `
@@ -954,7 +954,7 @@
       setStatus("");
     }
 
-    const INBOX_TYPE_LABELS = { order: "рџ“¦ Buyurtma", debt: "рџ’° Qarz", help: "в„№пёЏ Yordam", admin: "рџ”§ Admin", unknown: "вќ“ Noma'lum" };
+    const INBOX_TYPE_LABELS = { order: "📦 Buyurtma", debt: "💰 Qarz", help: "ℹ️ Yordam", admin: "🔧 Admin", unknown: "❓ Noma'lum" };
 
     function renderTelegramInbox(messages) {
       const el = document.getElementById("telegramInbox");
@@ -971,7 +971,7 @@
           </div>
           <p class="raw" style="margin: 0; font-size: 15px; color: var(--ink);">${m.text.replace(/</g, "&lt;")}</p>
           <p style="margin: 6px 0 0; color: var(--muted); font-size: 12px;">
-            ${m.telegramId ? `ID: ${m.telegramId} В· ` : ""}${new Date(m.receivedAt).toLocaleString("uz-UZ")}
+            ${m.telegramId ? `ID: ${m.telegramId} · ` : ""}${new Date(m.receivedAt).toLocaleString("uz-UZ")}
           </p>
         </article>
       `).join("");
@@ -1059,7 +1059,7 @@
 
     function renderReceipts(items) {
       if (!items || !items.length) {
-        receiptListEl.innerHTML = "<p>Yaqinda pishloq qabul Т›РёР»РёРЅРјР°РіР°РЅ.</p>";
+        receiptListEl.innerHTML = "<p>Yaqinda pishloq qabul қилинмаган.</p>";
         return;
       }
       receiptListEl.innerHTML = items.slice(0, 5).map(item => `
@@ -1070,7 +1070,7 @@
           </div>
           <div style="font-size: 14px;">
             ${item.blockCount ? `<span>Blok: ${item.blockCount} ta</span>` : ''}
-            ${item.pricePerKg ? `<span> В· Narx: ${numberFormat(item.pricePerKg)}</span>` : ''}
+            ${item.pricePerKg ? `<span> · Narx: ${numberFormat(item.pricePerKg)}</span>` : ''}
           </div>
           ${item.note ? `<div style="font-size: 13px; color: var(--muted); margin-top: 4px;">${item.note}</div>` : ''}
         </article>
@@ -1084,7 +1084,7 @@
           renderReceipts(data.receipts);
         }
       } catch (err) {
-        console.error("KirimР»Р°СЂРЅРё СЋРєР»Р°С€РґР° С…Р°С‚РѕР»РёРє:", err);
+        console.error("Kirimларни юклашда хатолик:", err);
       }
     }
 
@@ -1248,7 +1248,7 @@
           body: JSON.stringify({ permissions }),
         });
         renderStaff(data.allStaff || []);
-        setStatus("XodimРЅРёРЅРі sahifa ruxsatlari yangilandi.");
+        setStatus("Xodimнинг sahifa ruxsatlari yangilandi.");
       } catch (error) {
         setStatus(error.message, true);
       }
@@ -1264,7 +1264,7 @@
         await apiFetch(`/api/warehouse/deleted-customers/${customerId}/restore`, {
           method: "POST",
         });
-        setStatus("O'chirilgan mijoz С‚РёРєР»Р°РЅРґРё.");
+        setStatus("O'chirilgan mijoz тикланди.");
         await loadPending();
       } catch (error) {
         setStatus(error.message, true);
@@ -1276,7 +1276,7 @@
       if (!deleteButton) {
         return;
       }
-      if (!confirm("Р”РёТ›Т›Р°С‚! РњРёР¶РѕР· РІР° СѓРЅРёРЅРі Р±Р°СЂС‡Р° Р°СЂС…РёРІР»Р°РЅРіР°РЅ РјР°СЉР»СѓРјРѕС‚Р»Р°СЂРё Р±СѓС‚СѓРЅР»Р°Р№ СћС‡РёСЂРёР»Р°РґРё. Р‘Сѓ РёС€РЅРё РѕСЂТ›Р°РіР° Т›Р°Р№С‚Р°СЂРёР± Р±СћР»РјР°Р№РґРё. Р”Р°РІРѕРј СЌС‚Р°СЃРёР·РјРё?")) {
+      if (!confirm("Диққат! Мижоз ва унинг барча архивланган маълумотлари бутунлай ўчирилади. Бу ишни орқага қайтариб бўлмайди. Давом этасизми?")) {
         return;
       }
       try {
@@ -1284,7 +1284,7 @@
         await apiFetch(`/api/warehouse/deleted-customers/${customerId}`, {
           method: "DELETE",
         });
-        setStatus("Mijoz С‚РёР·РёРјРґР°РЅ Р±СѓС‚СѓРЅР»Р°Р№ СћС‡РёСЂРёР»РґРё.");
+        setStatus("Mijoz тизимдан бутунлай ўчирилди.");
         await loadPending();
       } catch (error) {
         setStatus(error.message, true);
