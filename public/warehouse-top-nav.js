@@ -15,116 +15,56 @@
     {
       label: "Admin panel",
       href: "/warehouse/admin",
-      isVisible(profile) {
-        // Faqat admin yoki admin_panel ruxsati berilgan xodim
-        if (!profile) return false;
-        if (profile.role === "admin") return true;
-        return hasPermission(profile, "admin_panel");
-      },
-      isActive(pathname) {
-        return pathname === "/warehouse/admin";
-      },
+      isVisible(profile) { return true; },
+      isActive(pathname) { return pathname === "/warehouse/admin"; },
     },
     {
       label: "Admin naqd",
       href: "/warehouse/admin/cash",
-      isVisible(profile) {
-        // Faqat admin yoki cash ruxsati berilgan xodim
-        if (!profile) return false;
-        if (profile.role === "admin") return true;
-        return hasPermission(profile, "cash");
-      },
-      isActive(pathname) {
-        return pathname === "/warehouse/admin/cash";
-      },
+      isVisible(profile) { return true; },
+      isActive(pathname) { return pathname === "/warehouse/admin/cash"; },
     },
     {
       label: "Admin o'tkazma",
       href: "/warehouse/admin/transfer",
-      isVisible(profile) {
-        // Faqat admin yoki transfer ruxsati berilgan xodim
-        if (!profile) return false;
-        if (profile.role === "admin") return true;
-        return hasPermission(profile, "transfer");
-      },
-      isActive(pathname) {
-        return pathname === "/warehouse/admin/transfer";
-      },
+      isVisible(profile) { return true; },
+      isActive(pathname) { return pathname === "/warehouse/admin/transfer"; },
     },
     {
       label: "Umumiy hisobot",
       href: "/warehouse/ledger",
-      isVisible(profile) {
-        // Faqat admin yoki cash yoki transfer ruxsati berilgan xodim
-        if (!profile) return false;
-        if (profile.role === "admin") return true;
-        return hasPermission(profile, ["cash", "transfer"]);
-      },
-      isActive(pathname) {
-        return pathname === "/warehouse/ledger";
-      },
+      isVisible(profile) { return true; },
+      isActive(pathname) { return pathname === "/warehouse/ledger"; },
     },
     {
       label: "Sotuvchi",
       href: "/warehouse/seller",
-      isVisible(profile) {
-        if (!profile) return false;
-        if (profile.role === "admin") return true;
-        return hasPermission(profile, "seller");
-      },
-      isActive(pathname) {
-        return pathname === "/warehouse/seller";
-      },
+      isVisible(profile) { return true; },
+      isActive(pathname) { return pathname === "/warehouse/seller"; },
     },
     {
       label: "Mijozlar",
       href: "/warehouse/customers",
-      isVisible(profile) {
-        if (!profile) return false;
-        if (profile.role === "admin") return true;
-        // "customers" yoki "seller" ruxsati bo'lsa ko'rinadi
-        return hasPermission(profile, ["customers", "seller"]);
-      },
-      isActive(pathname) {
-        return pathname === "/warehouse/customers" || pathname.startsWith("/warehouse/customers/");
-      },
+      isVisible(profile) { return true; },
+      isActive(pathname) { return pathname === "/warehouse/customers" || pathname.startsWith("/warehouse/customers/"); },
     },
     {
       label: "Buyurtmalar",
       href: "/warehouse/orders",
-      isVisible(profile) {
-        // Barcha kirgan foydalanuvchilar ko'ra oladi
-        return Boolean(profile);
-      },
-      isActive(pathname) {
-        return pathname === "/warehouse/orders";
-      },
+      isVisible(profile) { return true; },
+      isActive(pathname) { return pathname === "/warehouse/orders"; },
     },
     {
       label: "Naqd savdo yozish",
       href: "/warehouse/seller/sale/cash",
-      isVisible(profile) {
-        if (!profile) return false;
-        if (profile.role === "admin") return true;
-        // "seller" ruxsati bo'lsa ko'rinadi
-        return hasPermission(profile, "seller");
-      },
-      isActive(pathname) {
-        return pathname === "/warehouse/seller/sale/cash";
-      },
+      isVisible(profile) { return true; },
+      isActive(pathname) { return pathname === "/warehouse/seller/sale/cash"; },
     },
     {
       label: "O'tkazma savdo yozish",
       href: "/warehouse/seller/sale/transfer",
-      isVisible(profile) {
-        if (!profile) return false;
-        if (profile.role === "admin") return true;
-        // "seller" yoki "transfer" ruxsati bo'lsa ko'rinadi
-        return hasPermission(profile, ["seller", "transfer"]);
-      },
-      isActive(pathname) {
-        return pathname === "/warehouse/seller/sale/transfer";
-      },
+      isVisible(profile) { return true; },
+      isActive(pathname) { return pathname === "/warehouse/seller/sale/transfer"; },
     },
   ];
 
