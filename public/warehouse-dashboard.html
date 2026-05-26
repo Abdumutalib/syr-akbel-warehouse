@@ -47,33 +47,33 @@
 <div class="container">
 
   <div class="card">
-    <h2>📊 Bugungi ko'rsatkichlar</h2>
+    <h2>рџ“Љ Bugungi ko'rsatkichlar</h2>
     <div class="stats-grid">
-      <div class="stat"><div class="stat-value" id="totalSales">—</div><div class="stat-label">Savdo (so'm)</div></div>
-      <div class="stat"><div class="stat-value" id="transactionCount">—</div><div class="stat-label">Operatsiyalar</div></div>
-      <div class="stat"><div class="stat-value" id="cashAmount">—</div><div class="stat-label">Naqd</div></div>
-      <div class="stat"><div class="stat-value" id="transferAmount">—</div><div class="stat-label">O'tkazma</div></div>
+      <div class="stat"><div class="stat-value" id="totalSales">вЂ”</div><div class="stat-label">Savdo (so'm)</div></div>
+      <div class="stat"><div class="stat-value" id="transactionCount">вЂ”</div><div class="stat-label">Operatsiyalar</div></div>
+      <div class="stat"><div class="stat-value" id="cashAmount">вЂ”</div><div class="stat-label">Naqd</div></div>
+      <div class="stat"><div class="stat-value" id="transferAmount">вЂ”</div><div class="stat-label">O'tkazma</div></div>
     </div>
     <div class="progress-bar"><div class="progress-fill" id="cashRatioFill"></div></div>
     <p style="font-size:13px;color:#64748b">Naqd / O'tkazma nisbati</p>
   </div>
 
   <div class="card">
-    <h2>📈 14 kunlik tendensiya</h2>
+    <h2>рџ“€ 14 kunlik tendensiya</h2>
     <svg id="trendChart" viewBox="0 0 600 200"></svg>
   </div>
 
   <div class="card">
-    <h2>💰 Top 5 qarzdor</h2>
+    <h2>рџ’° Top 5 qarzdor</h2>
     <ul class="debtor-list" id="debtorList"><li style="color:#94a3b8">Yuklanmoqda...</li></ul>
   </div>
 
   <div class="card">
-    <h2>🏭 Omborxona qoldig'i</h2>
-    <div class="stat-value" id="stockKg">—</div>
+    <h2>рџЏ­ Omborxona qoldig'i</h2>
+    <div class="stat-value" id="stockKg">вЂ”</div>
     <div class="stat-label">kilogramm</div>
     <div id="stockStatus"></div>
-    <button id="refreshBtn">🔄 Yangilash</button>
+    <button id="refreshBtn">рџ”„ Yangilash</button>
   </div>
 
   <div class="refresh-time" id="lastUpdate">Yuklanmoqda...</div>
@@ -124,8 +124,8 @@
       const statusEl = document.getElementById('stockStatus');
       statusEl.className = stock.isLow ? 'warning' : 'ok';
       statusEl.innerText = stock.isLow
-        ? '⚠️ Omborxonadagi mahsulot kamayib ketgan!'
-        : '✅ Zaxira yetarli';
+        ? 'вљ пёЏ Omborxonadagi mahsulot kamayib ketgan!'
+        : 'вњ… Zaxira yetarli';
 
       // Trend grafigi
       if (Array.isArray(trend) && trend.length > 1) drawTrendChart(trend);
@@ -180,5 +180,6 @@
 </script>
   <script src="/warehouse/assets/warehouse-offline.js"></script>
   <script src="/warehouse/assets/warehouse-api.js"></script>
+  <script src="/warehouse-top-nav.js"></script>
 </body>
 </html>

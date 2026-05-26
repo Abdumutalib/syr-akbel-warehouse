@@ -293,4 +293,3 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 });
-
