@@ -824,14 +824,22 @@
         staffListEl.innerHTML = "<p>Hozircha seller yoki buxgalter qo'shilmagan.</p>";
         return;
       }
-      staffListEl.innerHTML = staff.map((entry) => `
+      staffListEl.innerHTML = staff.map((entry) => {
+        // Für admin role - alle Berechtigungen anzeigen
+        const effectivePermissions = entry.role === "admin" 
+          ? Object.keys(STAFF_PERMISSION_LABELS) 
+          : (entry.permissions || []);
+        
+        const roleLabel = entry.role === "seller" ? "Sotuvchi" : entry.role === "admin" ? "Administrator" : "Buxgalter";
+        
+        return `
         <article class="staff-item" data-staff-id="${entry.id}">
           <strong>${entry.fullName}</strong>
 
-          <div>Lavozim: ${entry.role === "seller" ? "Sotuvchi" : "Buxgalter"}</div>
-          <div style="margin-top: 6px;">Ko'ra oladigan sahifalar: ${permissionSummary(entry.permissions)}</div>
+          <div>Lavozim: ${roleLabel}</div>
+          <div style="margin-top: 6px;">Ko'ra oladigan sahifalar: ${permissionSummary(effectivePermissions)}</div>
           <div class="tx-actions">
-            ${entry.permissions.map((permission) => `<button data-create-link="${entry.id}" data-link-permission="${permission}" class="secondary">${STAFF_PERMISSION_LABELS[permission]} linki</button>`).join('')}
+            ${effectivePermissions.map((permission) => `<button data-create-link="${entry.id}" data-link-permission="${permission}" class="secondary">${STAFF_PERMISSION_LABELS[permission]} linki</button>`).join('')}
           </div>
           <div class="link-list">
             ${(entry.accessLinks || []).map((link) => `
@@ -848,7 +856,7 @@
           <div class="permission-grid">
             ${Object.entries(STAFF_PERMISSION_LABELS).map(([key, label]) => `
               <label class="permission-option">
-                <input type="checkbox" name="staff-permissions-${entry.id}" value="${key}" ${entry.permissions?.includes(key) ? "checked" : ""}>
+                <input type="checkbox" name="staff-permissions-${entry.id}" value="${key}" ${effectivePermissions?.includes(key) ? "checked" : ""}>
                 <span>${label}</span>
               </label>
             `).join("")}
@@ -858,7 +866,7 @@
             <button data-delete-staff="${entry.id}">O'chirish</button>
           </div>
         </article>
-      `).join("");
+      `}).join("");
     }
 
     function renderDeletedCustomers(customers) {
