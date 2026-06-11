@@ -279,6 +279,12 @@
             <input id="editCustomerTransferPricePerKg" type="number" min="0" step="1" placeholder="Bo'sh qoldirilsa umumiy narx">
           </div>
           <button id="save-customer" type="button">O'zgarishni saqlash</button>
+          <div id="adminActionsPanel" class="hidden" style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line);">
+            <h3 style="margin: 0 0 10px; font-size: 18px; color: var(--error);">Admin amallari</h3>
+            <p class="muted">Diqqat: bu amallar qaytarib bo'lmaydi.</p>
+            <button id="clear-history" type="button" style="background: var(--error); margin-top: 8px;">Barcha tarixni tozalash</button>
+            <div class="muted" style="margin-top: 6px;">Mijozning barcha savdo va to'lov yozuvlarini o'chiradi. Mijoz profili saqlanadi. Omborga qaytariladigan kg miqdori hisoblanadi.</div>
+          </div>
         </div>
         <div id="status" class="status"></div>
       </aside>
@@ -402,6 +408,7 @@
       document.getElementById('customerSellerLink').classList.toggle('hidden', !canSeeSeller);
       document.getElementById('customerEditPanel').classList.toggle('hidden', !canEditCustomer);
       document.getElementById('customerPricingPanel').classList.toggle('hidden', !isAdminProfile(currentProfile));
+      document.getElementById('adminActionsPanel').classList.toggle('hidden', !isAdminProfile(currentProfile));
     }
 
     function authHeader() {
@@ -819,6 +826,30 @@
       } finally {
         saveCustomerBtn.disabled = false;
         saveCustomerBtn.textContent = 'Saqlash';
+      }
+    });
+    document.getElementById('clear-history').addEventListener('click', async () => {
+      const clearBtn = document.getElementById('clear-history');
+      if (clearBtn.disabled) return;
+      if (!confirm(`"${document.getElementById('customerName')?.textContent || 'Bu mijoz'}" ning barcha savdo va to'lov tarixi o'chirilsinmi?\n\nBu amal qaytarib bo'lmaydi!`)) {
+        return;
+      }
+      if (!confirm('Haqiqatan ham barcha tranzaktsiyalarni o\'chirishni xohlaysizmi? Ombor zahirasi qayta tiklanadi.')) {
+        return;
+      }
+      clearBtn.disabled = true;
+      clearBtn.textContent = 'Tozalanmoqda...';
+      try {
+        const result = await apiFetch(`/api/warehouse/customers/${customerId}/clear-history`, {
+          method: 'POST',
+        });
+        setStatus(`✅ Tarix tozalandi. ${result.clearedTransactions || 0} ta yozuv o'chirildi. Omborga ${result.restoredStockKg || 0} kg qaytarildi.`);
+        await loadDetail();
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        clearBtn.disabled = false;
+        clearBtn.textContent = 'Barcha tarixni tozalash';
       }
     });
     document.getElementById('addEditCustomerName').addEventListener('click', () => {

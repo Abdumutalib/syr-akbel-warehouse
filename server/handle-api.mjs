@@ -11,6 +11,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     createWarehouseOrder,
     createWarehouseTransaction,
     currentWarehousePricing,
+    clearCustomerHistory,
     deleteCustomer,
     deleteStaffAccount,
     getCustomerDetail,
@@ -729,6 +730,22 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       sendApiJson(res, 200, { ok: true, ...result });
     } catch (e) {
       sendApiJson(res, e.statusCode || 404, { error: e.message || "Mijozni o'chirib bo'lmadi" });
+    }
+    return true;
+  }
+
+  const clearHistoryMatch = apiPath.match(/^\/api\/warehouse\/customers\/(\d+)\/clear-history$/);
+  if (clearHistoryMatch && req.method === "POST") {
+    if (!assertWarehouseAdmin(req, res)) {
+      return true;
+    }
+    try {
+      const result = await writeWarehouse((state) => {
+        return clearCustomerHistory(state, Number(clearHistoryMatch[1]));
+      });
+      sendApiJson(res, 200, { ok: true, ...result });
+    } catch (e) {
+      sendApiJson(res, e.statusCode || 400, { error: e.message || "Tarixni tozalab bo'lmadi" });
     }
     return true;
   }
