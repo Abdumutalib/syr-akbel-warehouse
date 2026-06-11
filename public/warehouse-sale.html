@@ -630,6 +630,7 @@
           </div>
           <p class="muted" style="margin-top: -6px; margin-bottom: 14px;">Yozayotganingiz avtomatik saqlanadi.</p>
           <button id="saveSale">Savdoni yozish</button>
+          <div id="saleStatus" class="status"></div>
         </div>
 
         <div class="card selected-customer">
@@ -652,6 +653,7 @@
 
   <script src="/warehouse/assets/warehouse-api.js"></script>
   <script src="/warehouse/assets/warehouse-auth-pin.js"></script>
+  <script src="/warehouse/assets/calc-logic.js"></script>
   <script>
     const usernameGroupEl = document.getElementById('usernameGroup');
     const usernameEl = document.getElementById('username');
@@ -703,6 +705,7 @@
     const calcMoneyPreviewEl = document.getElementById('calcMoneyPreview');
     const calcResultEl = document.getElementById('calcResult');
     const calcExpressionPreviewEl = document.getElementById('calcExpressionPreview');
+    const saleStatusEl = document.getElementById('saleStatus');
     const saleMode = location.pathname.endsWith('/transfer') ? 'transfer' : 'cash';
     let accessToken = (window.getWarehouseSearchParam ? window.getWarehouseSearchParam('access', location.search) : '') || localStorage.getItem('warehouse-access-token') || '';
     const customersState = [];
@@ -718,6 +721,14 @@
     function setStatus(message, isError = false) {
       statusEl.textContent = message || '';
       statusEl.classList.toggle('error', Boolean(isError));
+    }
+
+    function setSaleStatus(message, isError = false) {
+      if (saleStatusEl) {
+        saleStatusEl.textContent = message || '';
+        saleStatusEl.classList.toggle('error', Boolean(isError));
+      }
+      setStatus(message, isError); // Also update main status just in case
     }
 
     function applySaleModeUi() {
@@ -1567,7 +1578,7 @@
               })),
             }),
           });
-          setStatus(`Savdo yozildi${blockCount ? ` · ${numberFormat(blockCount)} blok` : ''}${salePhotoState.length ? ` · ${salePhotoState.length} ta rasm saqlandi` : ''}. Yangi qarz: ${numberFormat(data.debt)} so'm`);
+          setSaleStatus(`Savdo yozildi${blockCount ? ` · ${numberFormat(blockCount)} blok` : ''}${salePhotoState.length ? ` · ${salePhotoState.length} ta rasm saqlandi` : ''}. Yangi qarz: ${numberFormat(data.debt)} so'm`);
         } else {
           data = await apiFetch('/api/warehouse/customer-payment', {
             method: 'POST',
@@ -1584,7 +1595,7 @@
               })),
             }),
           });
-          setStatus(`To'lov yozildi${salePhotoState.length ? ` · ${salePhotoState.length} ta rasm saqlandi` : ''}. Yangi qarz: ${numberFormat(data.debt)} so'm`);
+          setSaleStatus(`To'lov yozildi${salePhotoState.length ? ` · ${salePhotoState.length} ta rasm saqlandi` : ''}. Yangi qarz: ${numberFormat(data.debt)} so'm`);
         }
         saleKgExpressionEl.value = '';
         saleBlockCountEl.value = '';
@@ -1599,7 +1610,7 @@
         updateCalculatorPreview();
         await loadCustomers();
       } catch (error) {
-        setStatus(error.message, true);
+        setSaleStatus(error.message, true);
       }
     });
 

@@ -2046,6 +2046,11 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
 
+  if (u.pathname === "/warehouse/assets/calc-logic.js" && req.method === "GET") {
+    serveWarehouseAsset("calc-logic.js", req, res);
+    return;
+  }
+
   if (u.pathname === "/warehouse/assets/warehouse-offline.js" && req.method === "GET") {
     serveWarehouseAsset("warehouse-offline.js", req, res);
     return;

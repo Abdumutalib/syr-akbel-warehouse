@@ -2,7 +2,7 @@
  * Сайтнинг барча кнопкалари ва API endpoint'ларини тест қилиш скрипти
  */
 
-const BASE = 'http://127.0.0.1:8792';
+const BASE = 'http://127.0.0.1:8789';
 const AUTH = 'Basic ' + Buffer.from('admin:admin').toString('base64');
 
 const results = [];

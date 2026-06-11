@@ -396,6 +396,7 @@
           <label for="paymentNote">Izoh</label>
           <textarea id="paymentNote" placeholder="Masalan: eski qarz uchun to'lov"></textarea>
           <button id="savePayment">To'lovni yozish</button>
+          <div id="paymentStatus" class="status"></div>
         </div>
 
         <div class="card">
@@ -407,6 +408,7 @@
           <label for="handoffNote">Izoh</label>
           <textarea id="handoffNote" placeholder="Masalan: kassaga topshirildi"></textarea>
           <button id="saveHandoff">Pul topshirildi</button>
+          <div id="handoffStatus" class="status"></div>
         </div>
       </aside>
 
@@ -451,6 +453,24 @@
     function setStatus(message, isError = false) {
       statusEl.textContent = message || '';
       statusEl.classList.toggle('error', Boolean(isError));
+    }
+
+    function setPaymentStatus(message, isError = false) {
+      const el = document.getElementById('paymentStatus');
+      if (el) {
+        el.textContent = message || '';
+        el.classList.toggle('error', Boolean(isError));
+      }
+      setStatus(message, isError);
+    }
+
+    function setHandoffStatus(message, isError = false) {
+      const el = document.getElementById('handoffStatus');
+      if (el) {
+        el.textContent = message || '';
+        el.classList.toggle('error', Boolean(isError));
+      }
+      setStatus(message, isError);
     }
 
     const pinAuth = window.createWarehousePinAuth({
@@ -893,14 +913,14 @@
             note: document.getElementById('paymentNote').value.trim(),
           }),
         });
-        setStatus(`To'lov yozildi. Yangi qarz: ${numberFormat(data.debt)} so'm`);
+        setPaymentStatus(`To'lov yozildi. Yangi qarz: ${numberFormat(data.debt)} so'm`);
         document.getElementById('paymentCash').value = '';
         document.getElementById('paymentTransfer').value = '';
         document.getElementById('paymentNote').value = '';
         applyAutoPaymentDate(true);
         await loadCustomers();
       } catch (error) {
-        setStatus(error.message, true);
+        setPaymentStatus(error.message, true);
       }
     });
 
@@ -914,13 +934,13 @@
             note: document.getElementById('handoffNote').value.trim(),
           }),
         });
-        setStatus(`Pul topshirildi: ${numberFormat(data.handoff && data.handoff.amount ? data.handoff.amount : 0)} so'm`);
+        setHandoffStatus(`Pul topshirildi: ${numberFormat(data.handoff && data.handoff.amount ? data.handoff.amount : 0)} so'm`);
         document.getElementById('handoffAmount').value = '';
         document.getElementById('handoffNote').value = '';
         resetTransactionDates();
         await loadCustomers();
       } catch (error) {
-        setStatus(error.message, true);
+        setHandoffStatus(error.message, true);
       }
     });
 

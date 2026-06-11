@@ -505,6 +505,7 @@
             <div class="tx-actions" style="margin-top: 8px;">
               <button id="saveCustomerInline" type="button">Mijozni saqlash</button>
             </div>
+            <div id="inlineCustomerStatus" class="status" style="margin-top:8px;"></div>
           </div>
           <div class="tx-actions">
             <button id="openCustomerEdit" class="secondary" type="button">Tahrir sahifasini ochish</button>
@@ -533,6 +534,7 @@
               <input id="receiptNote" placeholder="Masalan: 1-partiya">
             </div>
             <button id="createReceipt">Qabul qilish</button>
+            <div id="receiptStatus" class="status" style="margin-top:8px;"></div>
           </div>
           <div id="receiptList" class="staff-list" style="margin-top: 16px;"></div>
         </div>
@@ -553,6 +555,7 @@
           <h4 style="margin-bottom: 8px;">Qaysi sahifalarni ko'ra oladi</h4>
           <div id="staffPermissionsCreate" class="permission-grid"></div>
           <button id="createStaff">Xodimni saqlash</button>
+          <div id="staffStatus" class="status" style="margin-top:8px;"></div>
           <div id="staffList" class="staff-list"></div>
         </div>
 
@@ -690,6 +693,15 @@
     function setStatus(message, isError = false) {
       statusEl.textContent = message || "";
       statusEl.classList.toggle("error", Boolean(isError));
+    }
+
+    function setLocalStatus(id, message, isError = false) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.textContent = message || "";
+        el.classList.toggle("error", Boolean(isError));
+      }
+      setStatus(message, isError);
     }
 
     const pinAuth = window.createWarehousePinAuth({
@@ -1100,7 +1112,7 @@
     createReceiptBtn.addEventListener("click", async () => {
       const kg = Number(receiptKgEl.value);
       if (!kg || kg <= 0) {
-        setStatus("Hajm kiritilishi shart", true);
+        setLocalStatus("receiptStatus", "Hajm kiritilishi shart", true);
         return;
       }
       const payload = {
@@ -1109,24 +1121,24 @@
         pricePerKg: Number(receiptPriceEl.value) || 0,
         note: receiptNoteEl.value.trim()
       };
-      setStatus("Saqlanmoqda...");
+      setLocalStatus("receiptStatus", "Saqlanmoqda...");
       try {
         const data = await apiFetch("/api/warehouse/receipts", {
           method: "POST",
           body: JSON.stringify(payload)
         });
         if (data.ok) {
-          setStatus("Pishloq qabul qilindi.");
+          setLocalStatus("receiptStatus", "Pishloq qabul qilindi.");
           receiptKgEl.value = "";
           receiptBlocksEl.value = "";
           receiptPriceEl.value = "";
           receiptNoteEl.value = "";
           await loadPending();
         } else {
-          setStatus(data.error || "Xatolik", true);
+          setLocalStatus("receiptStatus", data.error || "Xatolik", true);
         }
       } catch (err) {
-        setStatus(err.message, true);
+        setLocalStatus("receiptStatus", err.message, true);
       }
     });
 
@@ -1187,14 +1199,14 @@
           }),
         });
         renderStaff(data.allStaff || []);
-        setStatus("Xodim saqlandi. Qaysi sahifalarni ko'rishini admin belgiladi.");
+        setLocalStatus("staffStatus", "Xodim saqlandi. Qaysi sahifalarni ko'rishini admin belgiladi.");
         document.getElementById("staffName").value = "";
 
 
         staffRoleEl.value = "seller";
         applyRoleDefaults();
       } catch (error) {
-        setStatus(error.message, true);
+        setLocalStatus("staffStatus", error.message, true);
       }
     });
 
@@ -1415,9 +1427,9 @@
         await loadCustomerQuickSelect();
         customerQuickSelectEl.value = String(customerId);
         await loadInlineCustomerDetail(String(customerId));
-        setStatus("Mijoz ma'lumotlari admin sahifasida saqlandi.");
+        setLocalStatus("inlineCustomerStatus", "Mijoz ma'lumotlari admin sahifasida saqlandi.");
       } catch (error) {
-        setStatus(error.message, true);
+        setLocalStatus("inlineCustomerStatus", error.message, true);
       }
     });
 
