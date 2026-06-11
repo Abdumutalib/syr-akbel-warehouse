@@ -279,27 +279,39 @@
       <aside class="stack">
         <div class="card">
           <div id="authPanel">
-            <h2 id="authTitle">Sotuvchi yoki admin kirishi</h2>
-            <div id="usernameGroup">
+            <!-- Linksiz holatda xabar -->
+            <div id="noLinkNotice" class="hidden">
+              <h2>Kirish uchun link kerak</h2>
+              <p class="muted">Admin sizga maxsus kirish linki berishi kerak. Ushbu link orqali PIN kod bilan kira olasiz.</p>
+              <p class="muted">Admindan link so'rang va shu link orqali sahifani oching.</p>
+            </div>
+            <!-- Access-link + PIN holatda -->
+            <div id="pinOnlyNotice" class="hidden">
+              <h2 id="authTitle">PIN kod kiriting</h2>
+              <div id="pinGroup">
+                <label for="pinCode">PIN kod</label>
+                <input id="pinCode" inputmode="numeric" maxlength="6" placeholder="4-6 raqam">
+              </div>
+              <div class="hero-links">
+                <button id="unlock-pin">Kirish</button>
+              </div>
+              <div id="authHint" class="muted"></div>
+            </div>
+            <!-- Eski formlar (faqat admin uchun, yashiringan) -->
+            <div id="usernameGroup" class="hidden">
               <label for="username">Username</label>
               <input id="username" autocomplete="username" placeholder="admin">
             </div>
-            <div id="passwordGroup">
+            <div id="passwordGroup" class="hidden">
               <label for="password">Password</label>
               <input id="password" type="password" autocomplete="current-password" placeholder="password">
             </div>
-            <div id="pinGroup">
-              <label for="pinCode">PIN kod</label>
-              <input id="pinCode" inputmode="numeric" maxlength="6" placeholder="4-6 raqam">
-            </div>
-            <div class="hero-links">
-              <button id="save-auth">Saqlash</button>
-              <button id="unlock-pin" class="secondary">PIN bilan kirish</button>
-              <button id="clear-pin" class="secondary">PINni o'chirish</button>
-              <button id="show-login" class="secondary hidden">Login bilan kirish</button>
+            <div class="hero-links hidden" id="hiddenAuthButtons">
+              <button id="save-auth" class="hidden">Saqlash</button>
+              <button id="clear-pin" class="hidden">PINni o'chirish</button>
+              <button id="show-login" class="hidden">Login bilan kirish</button>
               <button id="reload" class="secondary">Yangilash</button>
             </div>
-            <div id="authHint" class="muted">Birinchi marta username/password bilan kiring. PIN yozib saqlasangiz, keyingi safar shu PIN yetadi.</div>
           </div>
           <div id="activeSessionNotice" class="muted hidden"></div>
           <div id="status" class="status"></div>
@@ -790,39 +802,47 @@
     }
 
     document.getElementById('save-auth').addEventListener('click', async () => {
-      try {
-        await pinAuth.rememberFromCredentials();
-        authHeader();
-        await loadCustomers();
-        authUi.markAuthenticated({ username: usernameEl.value.trim(), password: passwordEl.value });
-      } catch (error) {
-        setStatus(error.message, true);
-      }
+      // save-auth is hidden for sellers; only available to admins
     });
 
     document.getElementById('unlock-pin').addEventListener('click', async () => {
+      const pin = (document.getElementById('pinCode') || {value:''}).value.trim();
+      if (!pin) {
+        setStatus('PIN kiriting', true);
+        return;
+      }
       try {
-        const credentials = await pinAuth.unlockWithPin();
-        await loadCustomers();
-        authUi.markAuthenticated(credentials);
-      } catch (error) {
-        setStatus(error.message, true);
+        const res = await apiFetch('/api/warehouse/verify-pin', {
+          method: 'POST',
+          body: JSON.stringify({ pin })
+        });
+        if (res.ok) {
+          if (window.setWarehouseOperatorProfile) {
+            window.setWarehouseOperatorProfile({
+              kind: 'staff',
+              role: res.role || 'seller',
+              username: res.username,
+              fullName: res.fullName,
+              permissions: res.permissions || [],
+            });
+          }
+          await loadCustomers();
+          document.getElementById('authPanel').hidden = true;
+          activeSessionNoticeEl.hidden = false;
+          activeSessionNoticeEl.textContent = `${res.fullName || res.username} — kirish tasdiqlandi.`;
+          setStatus('Tayyor.');
+        }
+      } catch (err) {
+        setStatus(err.message || 'PIN noto\'g\'ri', true);
       }
     });
 
     document.getElementById('clear-pin').addEventListener('click', () => {
-      try {
-        pinAuth.clearPin();
-        authUi.render();
-      } catch (error) {
-        setStatus(error.message, true);
-      }
+      // hidden for sellers
     });
 
     showLoginButtonEl.addEventListener('click', () => {
-      authUi.showFullLogin();
-      staffPicker.showManualLogin();
-      setStatus('Boshqa login bilan kirish ochildi.');
+      // hidden for sellers
     });
 
     const cashSalePageLinkEl = document.getElementById('cashSalePageLink');
@@ -975,17 +995,57 @@
     staffPicker.load().catch(() => {});
 
     async function initPage() {
-      if (accessToken) {
-        const isWaitingForPin = await checkStaffLinkAuth();
-        if (isWaitingForPin) return; // UI is showing PIN prompt
+      const noLinkEl = document.getElementById('noLinkNotice');
+      const pinOnlyEl = document.getElementById('pinOnlyNotice');
+      const authPanelElInner = document.getElementById('authPanel');
+
+      if (!accessToken) {
+        // Linksiz: faqat "admin dan link so'rang" ko'rinadi
+        if (noLinkEl) noLinkEl.classList.remove('hidden');
+        if (pinOnlyEl) pinOnlyEl.classList.add('hidden');
+        authPanelElInner.hidden = false;
+        setStatus('Kirish uchun admin tomonidan berilgan link kerak.');
+        return;
       }
 
-      if (accessToken || pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
-        loadCustomers().catch((error) => setStatus(error.message, true));
-      } else if (pinAuth.hasPin()) {
-        setStatus('PIN saqlangan. PIN bilan kiring, keyin sotuvchi sahifasi yuklanadi.');
-      } else {
-        setStatus('Sotuvchi, admin yoki link orqali kiring, keyin sahifa ishga tushadi.');
+      // Link bor — auth-status tekshirish
+      try {
+        const data = await apiFetch('/api/warehouse/auth-status');
+        if (data.ok) {
+          if (data.isWaitingForPin) {
+            // PIN kutilmoqda
+            if (noLinkEl) noLinkEl.classList.add('hidden');
+            if (pinOnlyEl) pinOnlyEl.classList.remove('hidden');
+            authPanelElInner.hidden = false;
+            const hintEl = document.getElementById('authHint');
+            if (hintEl) hintEl.textContent = `${data.fullName || data.username} — PIN kodni kiriting.`;
+            setStatus('PIN kodni kiriting.');
+            return;
+          } else if (data.isUnlocked) {
+            // Allaqachon PIN orqali kirilgan
+            if (noLinkEl) noLinkEl.classList.add('hidden');
+            if (pinOnlyEl) pinOnlyEl.classList.add('hidden');
+            authPanelElInner.hidden = true;
+            activeSessionNoticeEl.hidden = false;
+            activeSessionNoticeEl.textContent = `${data.fullName || data.username} — kirish tasdiqlandi.`;
+            if (window.setWarehouseOperatorProfile) {
+              window.setWarehouseOperatorProfile({
+                kind: 'staff',
+                role: data.role || 'seller',
+                username: data.username,
+                fullName: data.fullName,
+                permissions: data.permissions || [],
+              });
+            }
+            loadCustomers().catch((error) => setStatus(error.message, true));
+            return;
+          }
+        }
+      } catch (e) {
+        setStatus('Link tekshirishda xatolik: ' + e.message, true);
+        if (noLinkEl) noLinkEl.classList.remove('hidden');
+        if (pinOnlyEl) pinOnlyEl.classList.add('hidden');
+        return;
       }
     }
 

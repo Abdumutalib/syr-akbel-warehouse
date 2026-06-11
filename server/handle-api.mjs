@@ -804,7 +804,9 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       username: operator.username,
       fullName: operator.fullName,
       role: operator.role,
+      permissions: operator.permissions || [],
       hasPin: operator.hasPin,
+      isUnlocked: operator.isUnlocked,
       isWaitingForPin: operator.hasPin && !operator.isUnlocked,
     });
     return true;
@@ -823,7 +825,16 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     }
     try {
       await writeWarehouse((state) => verifyStaffPin(state, token, body.pin));
-      sendApiJson(res, 200, { ok: true });
+      // After verification, look up the now-unlocked operator to return full profile
+      const unlockedOperator = readWarehouse((state) => authenticateStaffAccessToken(state, token));
+      sendApiJson(res, 200, {
+        ok: true,
+        username: unlockedOperator?.username || '',
+        fullName: unlockedOperator?.fullName || '',
+        role: unlockedOperator?.role || 'seller',
+        permissions: unlockedOperator?.permissions || [],
+        isUnlocked: true,
+      });
     } catch (e) {
       sendApiJson(res, 401, { error: e.message || "PIN noto'g'ri" });
     }
