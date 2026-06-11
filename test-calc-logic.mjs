@@ -34,16 +34,23 @@ function parseKgExpression(expression) {
   const values = [];
   const operators = [];
   function applyOperator() {
-    const op = operators.pop(), right = values.pop(), left = values.pop();
-    if (op === '+') values.push(left + right);
-    if (op === '-') values.push(left - right);
-    if (op === '*') values.push(left * right);
-    if (op === '/') { if (right === 0) throw new Error("0 ga bo'lib bo'lmaydi"); values.push(left / right); }
+    const op = operators.pop(), rightObj = values.pop(), leftObj = values.pop();
+    if (!leftObj || !rightObj) throw new Error("Ifoda noto'g'ri");
+    const left = leftObj.val;
+    let right = rightObj.val;
+    if (rightObj.isPct) {
+      if (op === '+' || op === '-') right = left * (right / 100);
+      else right = right / 100;
+    }
+    if (op === '+') values.push({ val: left + right, isPct: false });
+    if (op === '-') values.push({ val: left - right, isPct: false });
+    if (op === '*') values.push({ val: left * right, isPct: false });
+    if (op === '/') { if (right === 0) throw new Error("0 ga bo'lib bo'lmaydi"); values.push({ val: left / right, isPct: false }); }
   }
   try {
     for (const token of tokens) {
-      if (token.type === 'number') { values.push(token.value); continue; }
-      if (token.type === 'percent') { values.push(values.pop() / 100); continue; }
+      if (token.type === 'number') { values.push({ val: token.value, isPct: false }); continue; }
+      if (token.type === 'percent') { const v = values.pop(); values.push({ val: v.val, isPct: true }); continue; }
       if (token.type === 'leftParen') { operators.push('('); continue; }
       if (token.type === 'rightParen') {
         while (operators.length && operators[operators.length-1] !== '(') applyOperator();
@@ -57,12 +64,13 @@ function parseKgExpression(expression) {
     }
     while (operators.length) applyOperator();
   } catch(e) { return { ok: false, message: e.message }; }
-  const total = values[0];
+  if (values.length !== 1) return { ok: false, message: "Ifoda noto'g'ri" };
+  let total = values[0].val;
+  if (values[0].isPct) total = total / 100;
   if (!Number.isFinite(total) || total <= 0) return { ok: false, message: "Natija 0 dan katta bo'lishi kerak" };
   return { ok: true, value: Math.round(total * 1000) / 1000 };
 }
 
-// --- TEST CASES (telefonda haqiqiy foydalanish) ---
 const tests = [
   { input: '10,285', expected: 10.285 },
   { input: '10,285+10,895', expected: 21.18 },
@@ -71,6 +79,10 @@ const tests = [
   { input: '100*3', expected: 300 },
   { input: '15,5', expected: 15.5 },
   { input: '7+8+9', expected: 24 },
+  { input: '200+15%', expected: 230 },
+  { input: '200-15%', expected: 170 },
+  { input: '200*15%', expected: 30 },
+  { input: '200+10+5%', expected: 220.5 }
 ];
 
 console.log('=== Kalkulyator logika testi ===\n');

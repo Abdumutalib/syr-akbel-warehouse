@@ -83,30 +83,47 @@
     const stack = [];
     for (const token of output) {
       if (token.type === 'number') {
-        stack.push(token.value);
+        stack.push({ val: token.value, isPct: false });
         continue;
       }
 
       if (token.value === '%') {
         if (!stack.length) throw new Error('Foiz xatosi');
-        stack.push(stack.pop() / 100);
+        const v = stack.pop();
+        stack.push({ val: v.val, isPct: true });
         continue;
       }
 
-      const right = stack.pop();
-      const left = stack.pop();
+      const rightObj = stack.pop();
+      const leftObj = stack.pop();
+      if (!leftObj || !rightObj) throw new Error('Ifoda xatosi');
+      
+      const left = leftObj.val;
+      let right = rightObj.val;
+      
+      if (rightObj.isPct) {
+        if (token.value === '+' || token.value === '-') {
+          right = left * (right / 100);
+        } else {
+          right = right / 100;
+        }
+      }
+
       if (!Number.isFinite(left) || !Number.isFinite(right)) throw new Error('Ifoda xatosi');
-      if (token.value === '+') stack.push(left + right);
-      if (token.value === '-') stack.push(left - right);
-      if (token.value === '*') stack.push(left * right);
+      
+      if (token.value === '+') stack.push({ val: left + right, isPct: false });
+      if (token.value === '-') stack.push({ val: left - right, isPct: false });
+      if (token.value === '*') stack.push({ val: left * right, isPct: false });
       if (token.value === '/') {
         if (right === 0) throw new Error("Nolga bo'lib bo'lmaydi");
-        stack.push(left / right);
+        stack.push({ val: left / right, isPct: false });
       }
     }
 
-    if (stack.length !== 1 || !Number.isFinite(stack[0])) throw new Error('Ifoda xatosi');
-    const value = Math.round(stack[0] * 1000) / 1000;
+    if (stack.length !== 1 || !Number.isFinite(stack[0].val)) throw new Error('Ifoda xatosi');
+    let finalVal = stack[0].val;
+    if (stack[0].isPct) finalVal = finalVal / 100;
+    const value = Math.round(finalVal * 1000) / 1000;
     if (value <= 0) throw new Error("Natija 0 dan katta bo'lishi kerak.");
     return { ok: true, value, blockCount: Math.max(1, Math.ceil(value / 11)) };
   }
