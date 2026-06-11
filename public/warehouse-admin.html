@@ -1008,19 +1008,30 @@
       }
     }
 
-    async function approve(id) {
-      const cashPaidEl = document.getElementById(`cash-paid-${id}`);
-      const transferPaidEl = document.getElementById(`transfer-paid-${id}`);
-      const cashPaidAmount = Number(cashPaidEl?.value || 0);
-      const transferPaidAmount = Number(transferPaidEl?.value || 0);
-      const data = await apiFetch(`/api/warehouse/approve/${id}`, {
-        method: "POST",
-        body: JSON.stringify({ cashPaidAmount, transferPaidAmount }),
-      });
-      setStatus(
-        `Tasdiqlandi. Naqd: ${numberFormat(data.cashPaidAmount)} so'm, o'tkazma: ${numberFormat(data.transferPaidAmount)} so'm, yangi qarz: ${numberFormat(data.debt)} so'm`
-      );
-      await loadPending();
+    async function approve(id, triggerButton) {
+      if (triggerButton) {
+        triggerButton.disabled = true;
+        triggerButton.textContent = 'Tasdiqlanmoqda...';
+      }
+      try {
+        const cashPaidEl = document.getElementById(`cash-paid-${id}`);
+        const transferPaidEl = document.getElementById(`transfer-paid-${id}`);
+        const cashPaidAmount = Number(cashPaidEl?.value || 0);
+        const transferPaidAmount = Number(transferPaidEl?.value || 0);
+        const data = await apiFetch(`/api/warehouse/approve/${id}`, {
+          method: "POST",
+          body: JSON.stringify({ cashPaidAmount, transferPaidAmount }),
+        });
+        setStatus(
+          `✅ Tasdiqlandi. Naqd: ${numberFormat(data.cashPaidAmount)} so'm, o'tkazma: ${numberFormat(data.transferPaidAmount)} so'm, yangi qarz: ${numberFormat(data.debt)} so'm`
+        );
+        await loadPending();
+      } finally {
+        if (triggerButton) {
+          triggerButton.disabled = false;
+          triggerButton.textContent = 'Tasdiqlash';
+        }
+      }
     }
 
     document.getElementById("login-only").addEventListener("click", async () => {
@@ -1315,8 +1326,9 @@
     pendingListEl.addEventListener("click", async (event) => {
       const button = event.target.closest("[data-approve]");
       if (!button) return;
+      if (button.disabled) return;
       try {
-        await approve(button.getAttribute("data-approve"));
+        await approve(button.getAttribute("data-approve"), button);
       } catch (error) {
         setStatus(error.message, true);
       }

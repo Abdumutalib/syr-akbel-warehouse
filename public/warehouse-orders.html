@@ -622,6 +622,10 @@
     orderLargeKgEl.addEventListener('input', syncOrderKgTotal);
 
     document.getElementById('save-order').addEventListener('click', async () => {
+      const saveOrderBtn = document.getElementById('save-order');
+      if (saveOrderBtn.disabled) return;
+      saveOrderBtn.disabled = true;
+      saveOrderBtn.textContent = 'Saqlanmoqda...';
       try {
         const customerName = orderCustomerNameEl.value.trim();
         const organizationName = orderOrganizationNameEl.value.trim();
@@ -641,10 +645,13 @@
         orderLargeKgEl.value = '';
         orderTotalKgEl.value = '';
         orderNoteEl.value = '';
-        setStatus('Zakaz saqlandi.');
+        setStatus('✅ Zakaz saqlandi.');
         await loadOrders();
       } catch (error) {
         setStatus(error.message, true);
+      } finally {
+        saveOrderBtn.disabled = false;
+        saveOrderBtn.textContent = 'Zakazni saqlash';
       }
     });
 
@@ -697,11 +704,14 @@
       cancelEditOrderEl.addEventListener('click', closeEditOrderModal);
       saveEditOrderEl.addEventListener('click', async () => {
       if (!editOrderIdCurrent) return;
+      if (saveEditOrderEl.disabled) return;
       const note = document.getElementById('editOrderNote').value.trim();
       if (!note) {
         document.getElementById('editOrderStatus').textContent = 'Zakaz matnini kiriting.';
         return;
       }
+      saveEditOrderEl.disabled = true;
+      saveEditOrderEl.textContent = 'Saqlanmoqda...';
       try {
         await apiFetch(`/api/warehouse/orders/${editOrderIdCurrent}`, {
           method: 'PUT',
@@ -715,10 +725,13 @@
           }),
         });
         closeEditOrderModal();
-        setStatus('Zakaz yangilandi.');
+        setStatus('✅ Zakaz yangilandi.');
         await loadOrders();
       } catch (err) {
         document.getElementById('editOrderStatus').textContent = err.message;
+      } finally {
+        saveEditOrderEl.disabled = false;
+        saveEditOrderEl.textContent = 'Saqlash';
       }
       });
     }

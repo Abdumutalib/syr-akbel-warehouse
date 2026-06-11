@@ -785,6 +785,10 @@
       }
     });
     document.getElementById('save-customer').addEventListener('click', async () => {
+      const saveCustomerBtn = document.getElementById('save-customer');
+      if (saveCustomerBtn.disabled) return;
+      saveCustomerBtn.disabled = true;
+      saveCustomerBtn.textContent = 'Saqlanmoqda...';
       try {
         const paymentCategories = selectedCustomerCategories();
         if (!paymentCategories.length) {
@@ -809,9 +813,12 @@
           }),
         });
         await loadDetail();
-        setStatus('Mijoz ma\'lumotlari saqlandi.');
+        setStatus('✅ Mijoz ma\'lumotlari saqlandi.');
       } catch (error) {
         setStatus(error.message, true);
+      } finally {
+        saveCustomerBtn.disabled = false;
+        saveCustomerBtn.textContent = 'Saqlash';
       }
     });
     document.getElementById('addEditCustomerName').addEventListener('click', () => {

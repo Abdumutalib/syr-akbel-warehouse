@@ -863,6 +863,8 @@
     });
 
     document.getElementById('addCustomer').addEventListener('click', async () => {
+      const addCustomerBtn = document.getElementById('addCustomer');
+      if (addCustomerBtn.disabled) return;
       try {
         const paymentCategories = selectedCustomerCategories();
         const fullNames = collectMultiInputValues('customerNameList');
@@ -872,6 +874,8 @@
         if (!fullNames.length) {
           throw new Error("Kamida bitta F.I.Sh. kiriting.");
         }
+        addCustomerBtn.disabled = true;
+        addCustomerBtn.textContent = 'Saqlanmoqda...';
         await apiFetch('/api/warehouse/customers', {
           method: 'POST',
           body: JSON.stringify({
@@ -884,7 +888,7 @@
             paymentCategories,
           }),
         });
-        setStatus('Mijoz saqlandi.');
+        setStatus('✅ Mijoz saqlandi.');
         document.getElementById('customerOrganizationName').value = '';
         setMultiInputValues('customerNameList', [], { placeholder: 'Али ака' });
         setMultiInputValues('customerPhoneList', [], { placeholder: '+99890...' });
@@ -896,6 +900,9 @@
         await loadCustomers();
       } catch (error) {
         setStatus(error.message, true);
+      } finally {
+        addCustomerBtn.disabled = false;
+        addCustomerBtn.textContent = 'Mijozni saqlash';
       }
     });
 
