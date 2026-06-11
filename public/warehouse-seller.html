@@ -922,18 +922,31 @@
     });
 
     document.getElementById('savePayment').addEventListener('click', async () => {
+      const savePaymentBtn = document.getElementById('savePayment');
+      if (savePaymentBtn.disabled) return;
+      const cashVal = numericValue('paymentCash');
+      const transferVal = numericValue('paymentTransfer');
+      if (cashVal <= 0 && transferVal <= 0) {
+        setPaymentStatus('Kamida bitta summa kiriting (naqd yoki o\'tkazma).', true);
+        return;
+      }
+      savePaymentBtn.disabled = true;
+      savePaymentBtn.textContent = 'Yuborilmoqda...';
       try {
         const data = await apiFetch('/api/warehouse/customer-payment', {
           method: 'POST',
           body: JSON.stringify({
             userId: Number(paymentCustomerEl.value),
             transactionDate: paymentDateEl.value,
-            cashPaidAmount: numericValue('paymentCash'),
-            transferPaidAmount: numericValue('paymentTransfer'),
+            cashPaidAmount: cashVal,
+            transferPaidAmount: transferVal,
             note: document.getElementById('paymentNote').value.trim(),
           }),
         });
-        setPaymentStatus(`To'lov yozildi. Yangi qarz: ${numberFormat(data.debt)} so'm`);
+        const parts = [];
+        if (cashVal > 0) parts.push(`naqd: ${numberFormat(cashVal)}`);
+        if (transferVal > 0) parts.push(`o'tkazma: ${numberFormat(transferVal)}`);
+        setPaymentStatus(`✅ To'lov yozildi (${parts.join(', ')}). Yangi qarz: ${numberFormat(data.debt)} so'm`);
         document.getElementById('paymentCash').value = '';
         document.getElementById('paymentTransfer').value = '';
         document.getElementById('paymentNote').value = '';
@@ -941,26 +954,41 @@
         await loadCustomers();
       } catch (error) {
         setPaymentStatus(error.message, true);
+      } finally {
+        savePaymentBtn.disabled = false;
+        savePaymentBtn.textContent = 'To\'lovni yozish';
       }
     });
 
     document.getElementById('saveHandoff').addEventListener('click', async () => {
+      const saveHandoffBtn = document.getElementById('saveHandoff');
+      if (saveHandoffBtn.disabled) return;
+      const handoffVal = numericValue('handoffAmount');
+      if (handoffVal <= 0) {
+        setHandoffStatus('Summani kiriting.', true);
+        return;
+      }
+      saveHandoffBtn.disabled = true;
+      saveHandoffBtn.textContent = 'Yuborilmoqda...';
       try {
         const data = await apiFetch('/api/warehouse/seller-cash-handoffs', {
           method: 'POST',
           body: JSON.stringify({
             receivedAt: handoffDateEl.value,
-            amount: numericValue('handoffAmount'),
+            amount: handoffVal,
             note: document.getElementById('handoffNote').value.trim(),
           }),
         });
-        setHandoffStatus(`Pul topshirildi: ${numberFormat(data.handoff && data.handoff.amount ? data.handoff.amount : 0)} so'm`);
+        setHandoffStatus(`✅ Pul topshirildi: ${numberFormat(data.handoff && data.handoff.amount ? data.handoff.amount : 0)} so'm`);
         document.getElementById('handoffAmount').value = '';
         document.getElementById('handoffNote').value = '';
         resetTransactionDates();
         await loadCustomers();
       } catch (error) {
         setHandoffStatus(error.message, true);
+      } finally {
+        saveHandoffBtn.disabled = false;
+        saveHandoffBtn.textContent = 'Pul topshirildi';
       }
     });
 

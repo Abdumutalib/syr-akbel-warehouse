@@ -1415,14 +1415,6 @@
     });
 
     saleCustomerEl.addEventListener('change', () => {
-      saleKgExpressionEl.value = '';
-      saleBlockCountEl.value = '';
-      saleBlockCountEl.dataset.mode = 'auto';
-      syncExpressionHeight();
-      saleCashEl.value = '';
-      saleTransferEl.value = '';
-      saleNoteEl.value = '';
-      clearSalePhoto();
       closeCalculator();
       updateSelectedCustomerCard();
       updateCalculatorPreview();
@@ -1544,6 +1536,10 @@
     });
 
     document.getElementById('saveSale').addEventListener('click', async () => {
+      const saveSaleBtn = document.getElementById('saveSale');
+      if (saveSaleBtn.disabled) return;
+      saveSaleBtn.disabled = true;
+      saveSaleBtn.textContent = 'Yuborilmoqda...';
       try {
         const kgExpression = saleKgExpressionEl.value.trim();
         const cashPaidAmount = saleMode === 'transfer' ? 0 : Number(document.getElementById('saleCash').value || 0);
@@ -1578,7 +1574,8 @@
               })),
             }),
           });
-          setSaleStatus(`Savdo yozildi${blockCount ? ` · ${numberFormat(blockCount)} blok` : ''}${salePhotoState.length ? ` · ${salePhotoState.length} ta rasm saqlandi` : ''}. Yangi qarz: ${numberFormat(data.debt)} so'm`);
+          const newStockKg = data.stockKg != null ? data.stockKg : currentStockKg;
+          setSaleStatus(`✅ Savdo yozildi${blockCount ? ` · ${numberFormat(blockCount)} blok` : ''}${salePhotoState.length ? ` · ${salePhotoState.length} rasm` : ''}. Qarz: ${numberFormat(data.debt)} so'm · Ombor: ${numberFormat(newStockKg)} kg`);
         } else {
           data = await apiFetch('/api/warehouse/customer-payment', {
             method: 'POST',
@@ -1595,7 +1592,7 @@
               })),
             }),
           });
-          setSaleStatus(`To'lov yozildi${salePhotoState.length ? ` · ${salePhotoState.length} ta rasm saqlandi` : ''}. Yangi qarz: ${numberFormat(data.debt)} so'm`);
+          setSaleStatus(`✅ To'lov yozildi${salePhotoState.length ? ` · ${salePhotoState.length} rasm` : ''}. Yangi qarz: ${numberFormat(data.debt)} so'm`);
         }
         saleKgExpressionEl.value = '';
         saleBlockCountEl.value = '';
@@ -1611,6 +1608,9 @@
         await loadCustomers();
       } catch (error) {
         setSaleStatus(error.message, true);
+      } finally {
+        saveSaleBtn.disabled = false;
+        saveSaleBtn.textContent = 'Savdoni yozish';
       }
     });
 
