@@ -454,7 +454,7 @@
         display: block;
       }
 
-      .calculator {
+      .calculator.open {
         position: fixed;
         left: 0;
         right: 0;
@@ -468,13 +468,14 @@
         z-index: 60;
         background: rgba(255, 252, 248, 0.98);
         box-shadow: 0 -10px 34px rgba(0, 0, 0, 0.2);
+        display: block;
       }
 
       .calculator:not(.open) {
         display: none;
       }
 
-      .calculator.open {
+      .calculator:not(.open).has-expression {
         display: block;
       }
 
