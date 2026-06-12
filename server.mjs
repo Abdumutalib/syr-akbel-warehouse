@@ -49,6 +49,9 @@ import {
 import { handleAnalyticsRoute } from "./lib/analytics.mjs";
 import { handleWarehouseApiRoute } from "./server/handle-api.mjs";
 import { getClientIp, rateLimiter, recordFailedAuth, securityHeaders } from "./lib/rate-limiter.mjs";
+import { startAutoReports } from "./scripts/auto-reports.mjs";
+import { setupExtendedBot } from "./app/telegram-bot-extended.mjs";
+
 
 // Faylнинг абсолют йўлини аниқлаш учун
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -1758,12 +1761,22 @@ function withSafeRequestHandling(handler) {
   };
 }
 
+const extendedBotHandler = setupExtendedBot();
+
 const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   const u = new URL(req.url || "/", "http://127.0.0.1");
 
   // Security headers va rate limiting (healthz ni chetlab o'tamiz)
   securityHeaders(res);
   if (u.pathname !== "/healthz" && rateLimiter(req, res)) return;
+
+  if (u.pathname === "/telegram/webhook-extended" && req.method === "POST") {
+    if (extendedBotHandler) {
+      await extendedBotHandler(req, res);
+      return;
+    }
+  }
+
 
   if (u.pathname === "/healthz" && req.method === "GET") {
     res.setHeader("X-App-Version", APP_BUILD ? `${APP_VERSION}+${APP_BUILD.slice(0, 7)}` : APP_VERSION);
@@ -2259,4 +2272,5 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`Syr AKBEL standalone → http://127.0.0.1:${PORT}/warehouse/admin`);
   console.log(`Seller page → http://127.0.0.1:${PORT}/warehouse/seller`);
   startDebtReminderScheduler();
+  startAutoReports();
 });

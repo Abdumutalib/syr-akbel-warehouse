@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { forecaster } from "../lib/ai-forecaster.mjs";
 
 export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   const {
@@ -1390,6 +1391,32 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     return true;
   }
 
+  if (apiPath === "/api/forecast" && req.method === "GET") {
+    if (!assertWarehouseAdmin(req, res)) {
+      return true;
+    }
+    const months = Number(new URL(req.url, "http://localhost").searchParams.get("months") || 3);
+    try {
+      const forecast = await forecaster.forecast(months);
+      sendApiJson(res, 200, { success: true, forecast });
+    } catch (e) {
+      sendApiJson(res, 400, { error: e.message || "Prognoz hisoblab bo'lmadi" });
+    }
+    return true;
+  }
+
+  if (apiPath === "/api/reorder-suggestions" && req.method === "GET") {
+    if (!assertWarehouseAdmin(req, res)) {
+      return true;
+    }
+    try {
+      const suggestions = await forecaster.getReorderSuggestions();
+      sendApiJson(res, 200, { success: true, suggestions });
+    } catch (e) {
+      sendApiJson(res, 400, { error: e.message || "Tavsiyalar olinmadi" });
+    }
+    return true;
+  }
 
   const approveMatch = apiPath.match(/^\/api\/warehouse\/approve\/(\d+)$/);
   if (approveMatch && req.method === "POST") {
