@@ -106,11 +106,15 @@ describe("warehouse bot helpers", () => {
     });
 
     assert.equal(final.user.fullName, "Азиза");
-    assert.equal(final.debt, 130000);
+    // 15kg sold × 10,000 = 150,000. Paid: 20,000 cash + 30,000 transfer = 50,000.
+    // cashSales=150,000; cashPaid=20,000 → cashDebt=130,000
+    // transferSales=0;   transferPaid=30,000 → transferDebt=-30,000 (credit)
+    // currentDebt = 130,000 + (-30,000) = 100,000
+    assert.equal(final.debt, 100000);
     assert.equal(state.warehouse.currentStockKg, 85);
     assert.equal(final.transaction.cashPaidAmount, 0);
     assert.equal(final.transaction.transferPaidAmount, 0);
-    assert.equal(recalculateDebt(state, first.user.id), 130000);
+    assert.equal(recalculateDebt(state, first.user.id), 100000);
   });
 
   test("keeps legacy paidAmount data compatible", () => {
@@ -262,9 +266,13 @@ describe("warehouse bot helpers", () => {
     assert.equal(payment.transaction.kind, "payment");
     assert.equal(state.warehouse.currentStockKg, 42);
     assert.equal(summaries[0].fullName, "Музаффар");
+    // 8kg × 10,000 = 80,000. priceType resolved to "cash" (cashPaid > 0).
+    // cashSales=80,000; cashPaid=30,000 → cashDebt=50,000
+    // transferSales=0;  transferPaid=10,000+15,000=25,000 → transferDebt=-25,000 (credit)
+    // currentDebt = 50,000 + (-25,000) = 25,000
     assert.equal(summaries[0].cashDebt, 50000);
-    assert.equal(summaries[0].transferDebt, 0);
-    assert.equal(summaries[0].currentDebt, 50000);
+    assert.equal(summaries[0].transferDebt, -25000);
+    assert.equal(summaries[0].currentDebt, 25000);
     assert.equal(summaries[0].totalTakenKg, 8);
     assert.equal(summaries[0].totalPaid, 55000);
     assert.match(sale.transaction.createdAt, /^2026-04-15T12:00:00.000Z$/);
