@@ -102,11 +102,7 @@
       let right = rightObj.val;
       
       if (rightObj.isPct) {
-        if (token.value === '+' || token.value === '-') {
-          right = left * (right / 100);
-        } else {
-          right = right / 100;
-        }
+        right = right / 100;
       }
 
       if (!Number.isFinite(left) || !Number.isFinite(right)) throw new Error('Ifoda xatosi');

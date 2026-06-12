@@ -53,9 +53,32 @@ import { startAutoReports } from "./scripts/auto-reports.mjs";
 import { setupExtendedBot } from "./app/telegram-bot-extended.mjs";
 
 
-// Faylнинг абсолют йўлини аниқлаш учун
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
+// .env faylini yuklash
+try {
+  const envPath = path.join(ROOT, ".env");
+  if (fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, "utf8");
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const idx = trimmed.indexOf("=");
+      if (idx > 0) {
+        const key = trimmed.slice(0, idx).trim();
+        let value = trimmed.slice(idx + 1).trim();
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+        if (!process.env[key]) {
+          process.env[key] = value;
+        }
+      }
+    }
+  }
+} catch (e) {
+  console.warn("Failed to load .env file:", e.message);
+}
 
 const PORT = Number(process.env.PORT) || 8787;
 const APP_VERSION = resolveAppVersion();
