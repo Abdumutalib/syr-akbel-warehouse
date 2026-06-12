@@ -8,6 +8,8 @@ RUN npm ci --omit=dev
 COPY lib ./lib
 COPY public ./public
 COPY server ./server
+COPY app ./app
+COPY scripts ./scripts
 COPY tests ./tests
 COPY server.mjs ./server.mjs
 COPY .env.example ./.env.example
