@@ -315,6 +315,32 @@
       display: none !important;
     }
 
+    .segmented-control {
+      display: flex;
+      background: rgba(0, 0, 0, 0.05);
+      border-radius: 999px;
+      padding: 3px;
+      margin-bottom: 18px;
+    }
+    .segmented-control button {
+      flex: 1;
+      border-radius: 999px;
+      padding: 10px 14px;
+      background: transparent !important;
+      color: var(--ink) !important;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      box-shadow: none !important;
+      border: none !important;
+      cursor: pointer;
+      min-height: unset !important;
+      min-width: unset !important;
+    }
+    .segmented-control button.active {
+      background: var(--accent) !important;
+      color: #fff !important;
+    }
+
     @media (max-width: 820px) {
       .grid {
         grid-template-columns: 1fr;
@@ -516,7 +542,11 @@
         </div>
 
         <div class="card" style="margin-top: 20px; padding: 0; border: 0; box-shadow: none; background: transparent;">
-          <h3 style="margin-top: 0;">Pishloq қабул қилиш (Kirim)</h3>
+          <h3 id="receiptFormTitle" style="margin-top: 0;">Pishloq қабул қилиш (Kirim)</h3>
+          <div class="segmented-control" id="receiptTypeSelector">
+            <button class="active" id="receiptTypeKirimBtn" type="button">Qabul qilish (Kirim)</button>
+            <button id="receiptTypeReturnBtn" type="button">Taminotchiga qaytarish (Возврат)</button>
+          </div>
           <div style="display: grid; gap: 10px;">
             <div>
               <label for="receiptKg">Hajm (kg) <span style="color:#9f1239">*</span></label>
@@ -1092,25 +1122,30 @@
     const receiptNoteEl = document.getElementById("receiptNote");
     const createReceiptBtn = document.getElementById("createReceipt");
 
-    function renderReceipts(items) {
-      if (!items || !items.length) {
-        receiptListEl.innerHTML = "<p>Yaqinda pishloq qabul қилинмаган.</p>";
-        return;
-      }
-      receiptListEl.innerHTML = items.slice(0, 5).map(item => `
-        <article class="staff-item">
-          <div style="display: flex; justify-content: space-between;">
-            <strong>${item.amountKg} kg</strong>
-            <span style="font-size: 12px; color: var(--muted);">${new Date(item.receivedAt).toLocaleDateString()}</span>
-          </div>
-          <div style="font-size: 14px;">
-            ${item.blockCount ? `<span>Blok: ${item.blockCount} ta</span>` : ''}
-            ${item.pricePerKg ? `<span> · Narx: ${numberFormat(item.pricePerKg)}</span>` : ''}
-          </div>
-          ${item.note ? `<div style="font-size: 13px; color: var(--muted); margin-top: 4px;">${item.note}</div>` : ''}
-        </article>
-      `).join("");
-    }
+     function renderReceipts(items) {
+       if (!items || !items.length) {
+         receiptListEl.innerHTML = "<p>Yaqinda pishloq qabul қилинмаган.</p>";
+         return;
+       }
+       receiptListEl.innerHTML = items.slice(0, 5).map(item => {
+         const isReturn = item.kind === "return";
+         const sign = isReturn ? "-" : "";
+         const title = isReturn ? "Taminotchiga qaytarildi (Возврат)" : "Pishloq qabul qilindi";
+         return `
+         <article class="staff-item" style="${isReturn ? 'border-color: #fca5a5; background: #fff5f5;' : ''}">
+           <div style="display: flex; justify-content: space-between;">
+             <strong>${sign}${item.amountKg} kg</strong>
+             <span style="font-size: 12px; color: var(--muted);">${item.receivedAt ? new Date(item.receivedAt).toLocaleDateString() : ''}</span>
+           </div>
+           <div style="font-size: 14px;">
+             <span style="font-weight: bold; color: ${isReturn ? '#b91c1c' : 'var(--ok)'};">${title}</span>
+             ${item.blockCount ? `<span> · Blok: ${sign}${item.blockCount} ta</span>` : ''}
+             ${item.pricePerKg ? `<span> · Narx: ${numberFormat(item.pricePerKg)}</span>` : ''}
+           </div>
+           ${item.note ? `<div style="font-size: 13px; color: var(--muted); margin-top: 4px;">${item.note}</div>` : ''}
+         </article>
+       `}).join("");
+     }
 
     async function loadReceipts() {
       try {
@@ -1123,38 +1158,61 @@
       }
     }
 
-    createReceiptBtn.addEventListener("click", async () => {
-      const kg = Number(receiptKgEl.value);
-      if (!kg || kg <= 0) {
-        setLocalStatus("receiptStatus", "Hajm kiritilishi shart", true);
-        return;
-      }
-      const payload = {
-        amountKg: kg,
-        blockCount: Number(receiptBlocksEl.value) || 0,
-        pricePerKg: Number(receiptPriceEl.value) || 0,
-        note: receiptNoteEl.value.trim()
-      };
-      setLocalStatus("receiptStatus", "Saqlanmoqda...");
-      try {
-        const data = await apiFetch("/api/warehouse/receipts", {
-          method: "POST",
-          body: JSON.stringify(payload)
-        });
-        if (data.ok) {
-          setLocalStatus("receiptStatus", "Pishloq qabul qilindi.");
-          receiptKgEl.value = "";
-          receiptBlocksEl.value = "";
-          receiptPriceEl.value = "";
-          receiptNoteEl.value = "";
-          await loadPending();
-        } else {
-          setLocalStatus("receiptStatus", data.error || "Xatolik", true);
-        }
-      } catch (err) {
-        setLocalStatus("receiptStatus", err.message, true);
-      }
-    });
+     let receiptType = "receipt";
+     const receiptFormTitleEl = document.getElementById("receiptFormTitle");
+     const receiptTypeKirimBtn = document.getElementById("receiptTypeKirimBtn");
+     const receiptTypeReturnBtn = document.getElementById("receiptTypeReturnBtn");
+     
+     function setReceiptType(type) {
+       receiptType = type;
+       receiptTypeKirimBtn.classList.toggle("active", type === "receipt");
+       receiptTypeReturnBtn.classList.toggle("active", type === "return");
+       if (type === "return") {
+         receiptFormTitleEl.textContent = "Taminotchiga qaytarish (Возврат)";
+         createReceiptBtn.textContent = "Taminotchiga qaytarish";
+       } else {
+         receiptFormTitleEl.textContent = "Pishloq qabul qilish (Kirim)";
+         createReceiptBtn.textContent = "Qabul qilish";
+       }
+       setLocalStatus("receiptStatus", "");
+     }
+     
+     receiptTypeKirimBtn.addEventListener("click", () => setReceiptType("receipt"));
+     receiptTypeReturnBtn.addEventListener("click", () => setReceiptType("return"));
+
+     createReceiptBtn.addEventListener("click", async () => {
+       const kg = Number(receiptKgEl.value);
+       if (!kg || kg <= 0) {
+         setLocalStatus("receiptStatus", "Hajm kiritilishi shart", true);
+         return;
+       }
+       const payload = {
+         amountKg: kg,
+         blockCount: Number(receiptBlocksEl.value) || 0,
+         pricePerKg: Number(receiptPriceEl.value) || 0,
+         note: receiptNoteEl.value.trim(),
+         kind: receiptType
+       };
+       setLocalStatus("receiptStatus", "Saqlanmoqda...");
+       try {
+         const data = await apiFetch("/api/warehouse/receipts", {
+           method: "POST",
+           body: JSON.stringify(payload)
+         });
+         if (data.ok) {
+           setLocalStatus("receiptStatus", receiptType === "return" ? "Qaytarish saqlandi." : "Pishloq qabul qilindi.");
+           receiptKgEl.value = "";
+           receiptBlocksEl.value = "";
+           receiptPriceEl.value = "";
+           receiptNoteEl.value = "";
+           await loadPending();
+         } else {
+           setLocalStatus("receiptStatus", data.error || "Xatolik", true);
+         }
+       } catch (err) {
+         setLocalStatus("receiptStatus", err.message, true);
+       }
+     });
 
     document.getElementById("reload").addEventListener("click", async () => {
       try {

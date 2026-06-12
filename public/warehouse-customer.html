@@ -565,6 +565,7 @@
       if (entry.kind === 'payment') return 'To\'lov';
       if (entry.kind === 'sale') return 'Savdo';
       if (entry.kind === 'pending-sale') return 'Kutilayotgan savdo';
+      if (entry.kind === 'return') return 'Qaytarish (Возврат)';
       return 'Yozuv';
     }
     function paymentTypeLabel(entry) {
@@ -697,24 +698,29 @@
               </tr>
             </thead>
             <tbody>
-              ${historyState.map((entry) => {
-                const remainingDebt = Number(entry.totalPrice || 0) - Number(entry.paidAmount || 0);
-                const photos = transactionPhotos(entry);
-                return `
-                <tr>
-                  <td data-label="Sana">${dateLabel(entry.approvedAt || entry.createdAt)}</td>
-                  <td data-label="Turi">${kindLabel(entry)}</td>
-                  <td data-label="Kg">${entry.amountKg}</td>
-                  <td data-label="Blok">${entry.blockCount ? `${numberFormat(entry.blockCount)} blok` : '-'}</td>
-                  <td data-label="1 kg narx">${entry.pricePerKg ? `${numberFormat(entry.pricePerKg)} so'm` : '-'}</td>
-                  <td data-label="Jami summa">${numberFormat(entry.totalPrice)} so'm</td>
-                  <td data-label="Naqd yoki O'tkazma">${paymentTypeLabel(entry)}</td>
-                  <td data-label="Jami to'lov">${numberFormat(entry.paidAmount)} so'm</td>
-                  <td data-label="Qarz"><span class="${debtClass(remainingDebt)}">${numberFormat(remainingDebt)} so'm</span></td>
-                  <td data-label="Rasm">${photos.length ? `<button type="button" class="photo-link-button" data-history-photo-entry="${entry.id}">${photos.length === 1 ? 'Rasmni ko\'rish' : `${photos.length} ta rasmni ko\'rish`}</button>` : '-'}</td>
-                  <td data-label="Izoh" class="muted">${entry.note || 'Izoh yo\'q'}</td>
-                </tr>
-              `;
+               ${historyState.map((entry) => {
+                 const isReturn = entry.kind === 'return';
+                 const mult = isReturn ? -1 : 1;
+                 const remainingDebt = (Number(entry.totalPrice || 0) - Number(entry.paidAmount || 0)) * mult;
+                 const photos = transactionPhotos(entry);
+                 const showKg = isReturn ? `-${entry.amountKg}` : `${entry.amountKg}`;
+                 const showBlock = entry.blockCount ? `${isReturn ? '-' : ''}${numberFormat(entry.blockCount)} blok` : '-';
+                 const showTotalPrice = `${isReturn ? '-' : ''}${numberFormat(entry.totalPrice)} so'm`;
+                 return `
+                 <tr>
+                   <td data-label="Sana">${dateLabel(entry.approvedAt || entry.createdAt)}</td>
+                   <td data-label="Turi">${kindLabel(entry)}</td>
+                   <td data-label="Kg">${showKg}</td>
+                   <td data-label="Blok">${showBlock}</td>
+                   <td data-label="1 kg narx">${entry.pricePerKg ? `${numberFormat(entry.pricePerKg)} so'm` : '-'}</td>
+                   <td data-label="Jami summa">${showTotalPrice}</td>
+                   <td data-label="Naqd yoki O'tkazma">${paymentTypeLabel(entry)}</td>
+                   <td data-label="Jami to'lov">${numberFormat(entry.paidAmount)} so'm</td>
+                   <td data-label="Qarz"><span class="${debtClass(remainingDebt)}">${numberFormat(remainingDebt)} so'm</span></td>
+                   <td data-label="Rasm">${photos.length ? `<button type="button" class="photo-link-button" data-history-photo-entry="${entry.id}">${photos.length === 1 ? 'Rasmni ko\'rish' : `${photos.length} ta rasmni ko\'rish`}</button>` : '-'}</td>
+                   <td data-label="Izoh" class="muted">${entry.note || 'Izoh yo\'q'}</td>
+                 </tr>
+               `;
               }).join('')}
             </tbody>
           </table>

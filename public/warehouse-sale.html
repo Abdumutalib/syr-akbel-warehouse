@@ -229,6 +229,32 @@
     .debt-credit { color: var(--credit); }
     .hidden { display: none !important; }
 
+    .segmented-control {
+      display: flex;
+      background: rgba(0, 0, 0, 0.05);
+      border-radius: 999px;
+      padding: 3px;
+      margin-bottom: 18px;
+    }
+    .segmented-control button {
+      flex: 1;
+      border-radius: 999px;
+      padding: 10px 14px;
+      background: transparent !important;
+      color: var(--ink) !important;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      box-shadow: none !important;
+      border: none !important;
+      cursor: pointer;
+      min-height: unset !important;
+      min-width: unset !important;
+    }
+    .segmented-control button.active {
+      background: var(--accent) !important;
+      color: #fff !important;
+    }
+
     .calculator {
       border: 1px solid var(--line);
       border-radius: 18px;
@@ -554,6 +580,10 @@
         <div class="card">
           <h2 id="saleCardTitle">Savdo kiritish</h2>
           <div id="saleModeBanner" class="sale-mode-banner muted"></div>
+          <div class="segmented-control" id="saleTypeSelector">
+            <button class="active" id="saleTypeSaleBtn" type="button" data-tx-type="sale">Savdo kiritish</button>
+            <button id="saleTypeReturnBtn" type="button" data-tx-type="return">Qaytarish (Возврат)</button>
+          </div>
           <label for="saleCustomer">Mijoz</label>
           <select id="saleCustomer"></select>
           <label for="saleDate">Sana</label>
@@ -731,20 +761,33 @@
       setStatus(message, isError); // Also update main status just in case
     }
 
-    function applySaleModeUi() {
+    let txType = 'sale';
+    function setTxType(type) {
+      txType = type;
       const transferMode = saleMode === 'transfer';
-      document.title = transferMode ? 'Перечисление' : 'Naqd savdo';
-      salePageTitleEl.textContent = transferMode ? 'Перечисление' : 'Naqd savdo';
-      salePageEyebrowEl.hidden = true;
-      if (salePageShortcutsEl) salePageShortcutsEl.remove();
-      saleCardTitleEl.hidden = true;
-      saleModeBannerEl.hidden = true;
-      saleCashGroupEl.classList.toggle('hidden-field', transferMode);
-      saleTransferGroupEl.classList.toggle('hidden-field', !transferMode);
-      saleCashLabelEl.textContent = 'Naqd to\'lov';
-      saleTransferLabelEl.textContent = "O'tkazma to'lov";
-      saleCashEl.placeholder = '0';
-      saleTransferEl.placeholder = '0';
+      const saleCashGroup = document.getElementById('saleCashGroup');
+      const saveSaleBtn = document.getElementById('saveSale');
+      
+      const saleTypeSaleBtn = document.getElementById('saleTypeSaleBtn');
+      const saleTypeReturnBtn = document.getElementById('saleTypeReturnBtn');
+      if (saleTypeSaleBtn) saleTypeSaleBtn.classList.toggle('active', type === 'sale');
+      if (saleTypeReturnBtn) saleTypeReturnBtn.classList.toggle('active', type === 'return');
+      
+      if (type === 'return') {
+        salePageTitleEl.textContent = transferMode ? "Qaytarish (O'tkazma)" : "Qaytarish (Naqd)";
+        saveSaleBtn.textContent = 'Qaytarishni yozish';
+        if (saleCashGroup) saleCashGroup.parentElement.classList.add('hidden');
+      } else {
+        salePageTitleEl.textContent = transferMode ? 'Перечисление' : 'Naqd savdo';
+        saveSaleBtn.textContent = 'Savdoni yozish';
+        if (saleCashGroup) saleCashGroup.parentElement.classList.remove('hidden');
+      }
+      writeSaleDraft();
+    }
+
+    function applySaleModeUi() {
+      applySaleModePayments();
+      setTxType(txType);
     }
 
     function applySaleModePayments() {
@@ -1290,6 +1333,7 @@
     async function writeSaleDraft() {
       if (saleDraftRestorePending) return;
       const draft = {
+        txType,
         customerId: saleCustomerEl.value,
         date: saleDateEl.value,
         dateMode: saleDateEl.dataset.dateMode,
@@ -1319,6 +1363,7 @@
       
       if (!draft) {
         saleDraftRestorePending = false;
+        setTxType('sale');
         return;
       }
       try {
@@ -1332,12 +1377,18 @@
         saleTransferEl.value = draft.transfer || '';
         saleNoteEl.value = draft.note || '';
         salePhotoState = draft.photos || [];
+        if (draft.txType) {
+          setTxType(draft.txType);
+        } else {
+          setTxType('sale');
+        }
         syncExpressionHeight();
         renderPhotoPreviews();
         updateSelectedCustomerCard();
         updateCalculatorPreview();
       } catch (e) {
         console.error('Draft restore failed', e);
+        setTxType('sale');
       }
       saleDraftRestorePending = false;
     }
@@ -1549,12 +1600,39 @@
         const cashPaidAmount = saleMode === 'transfer' ? 0 : Number(document.getElementById('saleCash').value || 0);
         const transferPaidAmount = Number(document.getElementById('saleTransfer').value || 0);
         const note = document.getElementById('saleNote').value.trim();
-        if (!kgExpression && cashPaidAmount <= 0 && transferPaidAmount <= 0) {
+        if (txType !== 'return' && !kgExpression && cashPaidAmount <= 0 && transferPaidAmount <= 0) {
           throw new Error("Kg yoki to'lov summasini kiriting");
+        }
+        if (txType === 'return' && !kgExpression) {
+          throw new Error("Qaytarilgan kg miqdorini kiriting");
         }
 
         let data;
-        if (kgExpression) {
+        if (txType === 'return') {
+          const parsedKg = parseKgExpression(kgExpression);
+          if (!parsedKg.ok) {
+            throw new Error(parsedKg.message);
+          }
+          const blockCount = normalizedManualBlockCount() || parsedKg.blockCount;
+          data = await apiFetch('/api/warehouse/customer-return', {
+            method: 'POST',
+            body: JSON.stringify({
+              userId: Number(saleCustomerEl.value),
+              transactionDate: saleDateEl.value,
+              amountKg: parsedKg.value,
+              blockCount,
+              priceType: saleMode,
+              note,
+              photos: salePhotoState.map((entry) => ({
+                dataUrl: entry.dataUrl,
+                mimeType: entry.mimeType,
+                originalName: entry.originalName,
+              })),
+            }),
+          });
+          const newStockKg = data.stockKg != null ? data.stockKg : currentStockKg;
+          setSaleStatus(`✅ Qaytarish yozildi${blockCount ? ` · ${numberFormat(blockCount)} blok` : ''}${salePhotoState.length ? ` · ${salePhotoState.length} rasm` : ''}. Qarz: ${numberFormat(data.debt)} so'm · Ombor: ${newStockKg != null ? numberFormat(newStockKg) : '-'} kg`);
+        } else if (kgExpression) {
           const parsedKg = parseKgExpression(kgExpression);
           if (!parsedKg.ok) {
             throw new Error(parsedKg.message);
@@ -1579,7 +1657,7 @@
             }),
           });
           const newStockKg = data.stockKg != null ? data.stockKg : currentStockKg;
-          setSaleStatus(`✅ Savdo yozildi${blockCount ? ` · ${numberFormat(blockCount)} blok` : ''}${salePhotoState.length ? ` · ${salePhotoState.length} rasm` : ''}. Qarz: ${numberFormat(data.debt)} so'm · Ombor: ${numberFormat(newStockKg)} kg`);
+          setSaleStatus(`✅ Savdo yozildi${blockCount ? ` · ${numberFormat(blockCount)} blok` : ''}${salePhotoState.length ? ` · ${salePhotoState.length} rasm` : ''}. Qarz: ${numberFormat(data.debt)} so'm · Ombor: ${newStockKg != null ? numberFormat(newStockKg) : '-'} kg`);
         } else {
           data = await apiFetch('/api/warehouse/customer-payment', {
             method: 'POST',
@@ -1614,9 +1692,14 @@
         setSaleStatus(error.message, true);
       } finally {
         saveSaleBtn.disabled = false;
-        saveSaleBtn.textContent = 'Savdoni yozish';
+        saveSaleBtn.textContent = txType === 'return' ? 'Qaytarishni yozish' : 'Savdoni yozish';
       }
     });
+
+    const saleTypeSaleBtn = document.getElementById('saleTypeSaleBtn');
+    const saleTypeReturnBtn = document.getElementById('saleTypeReturnBtn');
+    if (saleTypeSaleBtn) saleTypeSaleBtn.addEventListener('click', () => setTxType('sale'));
+    if (saleTypeReturnBtn) saleTypeReturnBtn.addEventListener('click', () => setTxType('return'));
 
     applyAutoSaleDate(true);
     applySaleModeUi();

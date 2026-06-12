@@ -20,14 +20,19 @@ import {
   listCustomerSummaries,
   listDeletedCustomers,
   listStaffAccounts,
+  listWarehouseReceipts,
   loadWarehouseState,
   recalculateDebt,
   recordApprovedSale,
   recordCustomerPayment,
+  recordCustomerReturn,
+  recordWarehouseReceipt,
   restoreDeletedCustomer,
   revokeStaffAccessLink,
   saveWarehouseState,
   seedWarehouseStock,
+  summarizeOperatorDailyActivity,
+  summarizeWarehouseReceipts,
   updateWarehousePricing,
   updateStaffAccountPermissions,
   upsertCustomer,
@@ -442,5 +447,92 @@ describe("warehouse bot helpers", () => {
 
     revokeStaffAccessLink(state, seller.id, link.id);
     assert.equal(authenticateStaffAccessToken(state, link.token, "seller"), null);
+  });
+
+  test("handles warehouse receipts returns and updates stock/summary correctly", () => {
+    const state = loadWarehouseState(makeStatePath());
+    seedWarehouseStock(state, 100);
+
+    // Kirim: +50kg
+    recordWarehouseReceipt(state, {
+      amountKg: 50,
+      blockCount: 5,
+      pricePerKg: 10000,
+      note: "Kirim",
+    });
+    assert.equal(state.warehouse.currentStockKg, 150);
+
+    // Qaytarish: -20kg
+    recordWarehouseReceipt(state, {
+      amountKg: 20,
+      blockCount: 2,
+      pricePerKg: 10000,
+      note: "Return to supplier",
+      kind: "return",
+    });
+    assert.equal(state.warehouse.currentStockKg, 130);
+
+    const receipts = listWarehouseReceipts(state);
+    assert.equal(receipts.length, 2);
+    assert.equal(receipts[0].kind, "return");
+    assert.equal(receipts[1].kind, "receipt");
+
+    const summary = summarizeWarehouseReceipts(receipts);
+    // 50kg - 20kg = 30kg
+    assert.equal(summary.totalKg, 30);
+    // 5 blocks - 2 blocks = 3 blocks
+    assert.equal(summary.totalBlocks, 3);
+    // (50 * 10000) - (20 * 10000) = 300,000
+    assert.equal(summary.totalPrice, 300000);
+  });
+
+  test("handles customer returns, stock updates, debt breakdown, and operator summaries correctly", () => {
+    const state = loadWarehouseState(makeStatePath());
+    seedWarehouseStock(state, 100);
+
+    const user = upsertCustomer(state, {
+      fullName: "Jasur",
+      paymentCategories: ["cash"],
+    });
+
+    // 1. Sale: 10kg cash
+    const sale = recordApprovedSale(state, {
+      userId: user.id,
+      amountKg: 10,
+      blockCount: 1,
+      priceType: "cash",
+      note: "Sotuv",
+    }, {
+      pricePerKg: 10000,
+      actor: { id: 1, username: "oper1", fullName: "Operator 1", role: "seller" },
+    });
+    assert.equal(state.warehouse.currentStockKg, 90);
+    assert.equal(sale.debt, 100000);
+
+    // 2. Return: 2kg cash
+    const ret = recordCustomerReturn(state, {
+      userId: user.id,
+      amountKg: 2,
+      blockCount: 1,
+      priceType: "cash",
+      note: "Mijoz qaytardi",
+    }, {
+      pricePerKg: 10000,
+      actor: { id: 1, username: "oper1", fullName: "Operator 1", role: "seller" },
+    });
+    // Stock should increase back by 2kg: 90 + 2 = 92
+    assert.equal(state.warehouse.currentStockKg, 92);
+    // Debt should decrease by 20,000: 100,000 - 20,000 = 80,000
+    assert.equal(ret.debt, 80000);
+
+    const summaries = listCustomerSummaries(state);
+    assert.equal(summaries[0].currentDebt, 80000);
+    assert.equal(summaries[0].totalTakenKg, 8); // 10kg - 2kg = 8kg
+
+    const dailySummary = summarizeOperatorDailyActivity(state, { username: "oper1" });
+    // totalSales = 100,000 - 20,000 = 80,000
+    assert.equal(dailySummary.totalSales, 80000);
+    // totalBlocks = 1 - 1 = 0 blocks
+    assert.equal(dailySummary.totalBlocks, 0);
   });
 });

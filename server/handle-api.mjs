@@ -33,6 +33,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     readPostJson,
     recordApprovedSale,
     recordCustomerPayment,
+    recordCustomerReturn,
     recordSellerCashHandoff,
     restoreDeletedCustomer,
     revokeStaffAccessLink,
@@ -52,6 +53,8 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     buildAdminNewOrderMsg,
     buildCustomerSaleMsg,
     buildCustomerPaymentMsg,
+    buildChannelReturnMsg,
+    buildCustomerReturnMsg,
     summarizeApprovedTransactions,
     summarizeCustomers,
     summarizeWarehouseReceipts,
@@ -1274,6 +1277,78 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     return true;
   }
 
+  if (apiPath === "/api/warehouse/customer-return" && req.method === "POST") {
+    const body = await readPostJson(req);
+    if (body === null) {
+      sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
+      return true;
+    }
+    const operator = assertSellerWriteOperator(body, "Qaytarish yozish uchun mos ruxsat kerak");
+    if (!operator) {
+      return true;
+    }
+    const idempotencyKey = extractIdempotencyKey(req);
+    const idempotencyFingerprint = buildIdempotencyFingerprint(apiPath, body, operator);
+    try {
+      const { replay, statusCode, responseBody, result } = await writeWarehouse((state) => {
+        const hit = getIdempotencyHit(state, idempotencyKey, idempotencyFingerprint);
+        if (hit.type === "conflict") {
+          const err = new Error("Idempotency key boshqa so'rov bilan ishlatilgan");
+          err.statusCode = 409;
+          throw err;
+        }
+        if (hit.type === "replay") {
+          return {
+            replay: true,
+            statusCode: hit.statusCode,
+            responseBody: hit.responseBody,
+            result: null,
+          };
+        }
+        const pricing = currentWarehousePricing(state);
+        const result = recordCustomerReturn(state, body, {
+          pricing,
+          actor: operator,
+        });
+        const responseBody = {
+          ok: true,
+          customer: result.user,
+          debt: result.debt,
+          totalPaid: result.totalPaid,
+          transaction: result.transaction,
+          stockKg: state.warehouse.currentStockKg,
+          pricing,
+        };
+        saveIdempotencyResult(state, idempotencyKey, idempotencyFingerprint, 201, responseBody);
+        return { replay: false, statusCode: 201, responseBody, result };
+      });
+      if (replay) {
+        sendApiJson(res, statusCode, responseBody);
+        return true;
+      }
+      const returnMsgText = buildChannelReturnMsg(
+        result.user?.fullName || "Noma'lum",
+        result.transaction.amountKg,
+        result.transaction.totalPrice,
+        result.debt
+      );
+      await sendTelegramChannelMessage(returnMsgText);
+      await sendTelegramMessage(
+        result.user?.telegramId,
+        buildCustomerReturnMsg(
+          result.user?.fullName || "Hurmatli mijoz",
+          result.transaction.amountKg,
+          result.transaction.totalPrice,
+          result.debt
+        )
+      );
+      sendApiJson(res, statusCode, responseBody);
+    } catch (e) {
+      sendApiJson(res, e.statusCode || 400, { error: e.message || "Qaytarishni yozib bo'lmadi" });
+    }
+    return true;
+  }
+
   if (apiPath === "/api/warehouse/seller-cash-handoffs" && req.method === "POST") {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
@@ -1511,7 +1586,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const { csv } = readWarehouse((state) => {
       const pricing = currentWarehousePricing(state);
       const userMap = new Map(state.users.map((u) => [u.id, u.fullName]));
-    const KIND_LABELS = { sale: "Savdo", payment: "To'lov", "pending-sale": "Kutilayotgan" };
+    const KIND_LABELS = { sale: "Savdo", payment: "To'lov", "pending-sale": "Kutilayotgan", return: "Qaytarish" };
     const STATUS_LABELS = { approved: "Tasdiqlangan", pending: "Kutilayotgan" };
     const SEP = ";";
     const csvEscape = (v) => {

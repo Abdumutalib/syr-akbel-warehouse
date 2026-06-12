@@ -30,6 +30,7 @@ import {
   loadWarehouseState,
   recordApprovedSale,
   recordCustomerPayment,
+  recordCustomerReturn,
   recordSellerCashHandoff,
   recordWarehouseReceipt,
   restoreDeletedCustomer,
@@ -203,13 +204,15 @@ function buildDailySummaryCsv(state) {
     const day = dateStr ? new Date(dateStr).toLocaleDateString("ru-RU") : "Noma'lum";
     if (!byDate.has(day)) byDate.set(day, { cashSales: 0, transferSales: 0, naqd: 0, otkazma: 0, topshirilgan: 0 });
     const d = byDate.get(day);
-    if (tx.kind === "sale" || !tx.kind || tx.kind === "pending-sale") {
+    if (tx.kind === "sale" || !tx.kind || tx.kind === "pending-sale" || tx.kind === "return") {
       const priceType = tx.priceType || (Number(tx.transferPaidAmount || 0) > 0 && Number(tx.cashPaidAmount || 0) <= 0 ? "transfer" : "cash");
       const price = Number(tx.totalPrice || 0);
+      const isReturn = tx.kind === "return";
+      const mult = isReturn ? -1 : 1;
       if (priceType === "transfer") {
-        d.transferSales += price;
+        d.transferSales += price * mult;
       } else {
-        d.cashSales += price;
+        d.cashSales += price * mult;
       }
     }
     d.naqd += Number(tx.cashPaidAmount || 0);
@@ -314,16 +317,24 @@ function buildCustomerModeRows(detail, mode) {
     if (entry.kind === "sale" && entry.priceType === mode) {
       runningSales += Number(entry.totalPrice || 0);
     }
+    if (entry.kind === "return" && entry.priceType === mode) {
+      runningSales -= Number(entry.totalPrice || 0);
+    }
     const paymentAmount = getModePaymentAmount(entry, mode);
     runningPaid += paymentAmount;
 
-    const isModeSale = entry.kind === "sale" && (entry.priceType === mode || paymentAmount > 0);
+    const isModeSale = (entry.kind === "sale" || entry.kind === "return") && (entry.priceType === mode || paymentAmount > 0);
     const isModePayment = entry.kind === "payment" && paymentAmount > 0;
     if (!isModeSale && !isModePayment) continue;
 
     const dateText = formatWorksheetDate(entry.approvedAt || entry.createdAt);
-    const kg = isModeSale ? Number(entry.amountKg || 0) : 0;
-    const total = isModeSale ? Number(entry.totalPrice || 0) : 0;
+    let kg = 0;
+    let total = 0;
+    if (isModeSale) {
+      const mult = entry.kind === "return" ? -1 : 1;
+      kg = Number(entry.amountKg || 0) * mult;
+      total = Number(entry.totalPrice || 0) * mult;
+    }
 
     rows.push([
       dateText,
@@ -1487,6 +1498,39 @@ function buildCustomerPaymentMsg(userName, cashPaid, transferPaid, debt) {
   return lines.join("\n");
 }
 
+function buildChannelReturnMsg(userName, amountKg, totalPrice, debt) {
+  const lines = [
+    `🧀 ${WAREHOUSE_COMPANY_NAME}`,
+    `↩️ Mahsulot qaytarildi (Возврат)`,
+    ``,
+    `👤 Mijoz: ${userName}`,
+    `⚖️ Hajm: ${amountKg} kg`,
+    `💰 Narx: ${formatMoney(totalPrice)} so'm`,
+  ];
+  if (debt > 0) {
+    lines.push(`🔴 Qolgan qarz: ${formatMoney(debt)} so'm`);
+  } else {
+    lines.push(`✅ Qarz yo'q`);
+  }
+  return lines.join("\n");
+}
+
+function buildCustomerReturnMsg(userName, amountKg, totalPrice, debt) {
+  const lines = [
+    `🧀 ${WAREHOUSE_COMPANY_NAME}`,
+    ``,
+    `Hurmatli ${userName}, qaytarilgan mahsulot qabul qilindi.`,
+    `⚖️ Hajm: ${amountKg} kg`,
+    `💰 Narx: ${formatMoney(totalPrice)} so'm`,
+  ];
+  if (debt > 0) {
+    lines.push(`🔴 Qolgan qarz: ${formatMoney(debt)} so'm`);
+  } else {
+    lines.push(`✅ Qarz yo'q`);
+  }
+  return lines.join("\n");
+}
+
 function buildPendingReply(result) {
   return [
     "Qabul qilindi.",
@@ -1928,6 +1972,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         readPostJson,
         recordApprovedSale,
         recordCustomerPayment,
+        recordCustomerReturn,
         recordSellerCashHandoff,
         recordWarehouseReceipt,
         restoreDeletedCustomer,
@@ -1949,6 +1994,8 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         buildAdminNewOrderMsg,
         buildCustomerSaleMsg,
         buildCustomerPaymentMsg,
+        buildChannelReturnMsg,
+        buildCustomerReturnMsg,
         summarizeApprovedTransactions,
         summarizeOperatorDailyActivity,
         summarizeWarehouseReceipts,
