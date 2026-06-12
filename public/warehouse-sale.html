@@ -944,8 +944,12 @@
       const priceValue = saleMode === 'transfer' ? (customer.transferPricePerKg || currentPricing.transferPricePerKg) : (customer.cashPricePerKg || currentPricing.cashPricePerKg);
       priceEl.textContent = `Narx: ${numberFormat(priceValue)} so'm/kg`;
       if (customer.currentDebt != null) {
-        debtEl.textContent = balanceText(customer.currentDebt);
-        debtEl.className = debtClass(customer.currentDebt);
+        debtEl.innerHTML = `
+          Naqd balans: <span class="${debtClass(customer.cashDebt)}">${balanceText(customer.cashDebt || 0)}</span> · 
+          O'tkazma balans: <span class="${debtClass(customer.transferDebt)}">${balanceText(customer.transferDebt || 0)}</span> · 
+          Jami balans: <span class="${debtClass(customer.currentDebt)}">${balanceText(customer.currentDebt)}</span>
+        `;
+        debtEl.className = '';
       } else {
         debtEl.textContent = '';
       }

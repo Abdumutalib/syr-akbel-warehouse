@@ -233,11 +233,13 @@
           <div class="stat">Lokatsiya<strong id="locationValue">-</strong></div>
           <div class="stat">Telegram ID<strong id="telegramValue">-</strong></div>
           <div class="stat">Jami olingan kg<strong id="kgValue">0</strong></div>
-          <div class="stat">Jami savdo<strong id="salesValue">0</strong></div>
-          <div class="stat">Jami to'lov<strong id="paidValue">0</strong></div>
+          <div class="stat">Naqd savdo<strong id="cashSalesValue">0</strong></div>
+          <div class="stat">O'tkazma savdo<strong id="transferSalesValue">0</strong></div>
+          <div class="stat">Naqd to'lov<strong id="cashPaidValue">0</strong></div>
+          <div class="stat">O'tkazma to'lov<strong id="transferPaidValue">0</strong></div>
           <div class="stat">Naqd balans<strong id="cashDebtValue">0</strong></div>
           <div class="stat">O'tkazma balans<strong id="transferDebtValue">0</strong></div>
-          <div class="stat">Qolgan balans<strong id="debtValue">0</strong></div>
+          <div class="stat">Jami balans<strong id="debtValue">0</strong></div>
           <div class="stat">Amaldagi naqd narx<strong id="customerCashPriceValue">0</strong><div id="customerCashPriceMeta" class="muted">Umumiy narx</div></div>
           <div class="stat">Amaldagi o'tkazma narx<strong id="customerTransferPriceValue">0</strong><div id="customerTransferPriceMeta" class="muted">Umumiy narx</div></div>
         </div>
@@ -646,8 +648,10 @@
       }
       document.getElementById('telegramValue').textContent = (data.customer.telegramIds || []).join(', ') || '-';
       document.getElementById('kgValue').textContent = String(data.summary.totalTakenKg || 0);
-      document.getElementById('salesValue').textContent = amountText(data.summary.totalSales);
-      document.getElementById('paidValue').textContent = amountText(data.summary.totalPaid);
+      document.getElementById('cashSalesValue').textContent = amountText(data.summary.cashSales);
+      document.getElementById('transferSalesValue').textContent = amountText(data.summary.transferSales);
+      document.getElementById('cashPaidValue').textContent = amountText(data.summary.cashPaid);
+      document.getElementById('transferPaidValue').textContent = amountText(data.summary.transferPaid);
       document.getElementById('cashDebtValue').textContent = balanceText(data.summary.cashDebt);
       document.getElementById('transferDebtValue').textContent = balanceText(data.summary.transferDebt);
       document.getElementById('debtValue').textContent = balanceText(data.summary.currentDebt);

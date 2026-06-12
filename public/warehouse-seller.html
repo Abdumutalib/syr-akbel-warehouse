@@ -322,11 +322,13 @@
           <div class="stats">
             <div class="stat">Mijozlar soni<strong id="countValue">0</strong></div>
             <div class="stat">Ombor kg<strong id="stockValue">0</strong></div>
-            <div class="stat">Jami savdo<strong id="salesValue">0</strong></div>
-            <div class="stat">Jami to'lov<strong id="paidValue">0</strong></div>
+            <div class="stat">Naqd savdo<strong id="cashSalesValue">0</strong></div>
+            <div class="stat">O'tkazma savdo<strong id="transferSalesValue">0</strong></div>
+            <div class="stat">Naqd to'lov<strong id="cashPaidValue">0</strong></div>
+            <div class="stat">O'tkazma to'lov<strong id="transferPaidValue">0</strong></div>
             <div class="stat">Naqd balans<strong id="cashDebtValue">0</strong></div>
             <div class="stat">O'tkazma balans<strong id="transferDebtValue">0</strong></div>
-            <div class="stat">Qolgan balans<strong id="debtValue">0</strong></div>
+            <div class="stat">Jami balans<strong id="debtValue">0</strong></div>
           </div>
         </div>
 
@@ -736,8 +738,10 @@
     function updateSummary(summary = {}, stockKg = 0) {
       document.getElementById('countValue').textContent = String(summary.count || 0);
       document.getElementById('stockValue').textContent = String(stockKg || 0);
-      document.getElementById('salesValue').textContent = numberFormat(summary.totalSales || 0);
-      document.getElementById('paidValue').textContent = numberFormat(summary.totalPaid || 0);
+      document.getElementById('cashSalesValue').textContent = numberFormat(summary.cashSales || 0);
+      document.getElementById('transferSalesValue').textContent = numberFormat(summary.transferSales || 0);
+      document.getElementById('cashPaidValue').textContent = numberFormat(summary.cashPaid || 0);
+      document.getElementById('transferPaidValue').textContent = numberFormat(summary.transferPaid || 0);
       document.getElementById('cashDebtValue').textContent = balanceText(summary.cashDebt || 0);
       document.getElementById('transferDebtValue').textContent = balanceText(summary.transferDebt || 0);
       document.getElementById('debtValue').textContent = balanceText(summary.currentDebt || 0);
@@ -764,10 +768,10 @@
             <span>#${customer.id}</span>
           </div>
           <p class="muted">Tashkilot: ${customer.organizationName || '-'} · INN: ${customer.taxId || '-'}</p>
-          <p>${customer.totalTakenKg} kg olingan${customer.currentDebt == null ? '' : ` · ${numberFormat(customer.totalSales)} so'm savdo`}</p>
+          <p>${customer.totalTakenKg} kg olingan${customer.currentDebt == null ? '' : ` · Naqd savdo: ${numberFormat(customer.cashSales || 0)} so'm | O'tkazma savdo: ${numberFormat(customer.transferSales || 0)} so'm`}</p>
           ${customer.currentDebt != null
-            ? `<p>${numberFormat(customer.totalPaid)} so'm to'langan · <span class="${debtClass(customer.currentDebt)}">${balanceText(customer.currentDebt)}</span></p>
-          <p>Naqd balans: <span class="${debtClass(customer.cashDebt)}">${balanceText(customer.cashDebt || 0)}</span> · O'tkazma balans: <span class="${debtClass(customer.transferDebt)}">${balanceText(customer.transferDebt || 0)}</span></p>`
+            ? `<p>Naqd to'lov: ${numberFormat(customer.cashPaid || 0)} so'm | O'tkazma to'lov: ${numberFormat(customer.transferPaid || 0)} so'm</p>
+          <p>Naqd balans: <span class="${debtClass(customer.cashDebt)}">${balanceText(customer.cashDebt || 0)}</span> · O'tkazma balans: <span class="${debtClass(customer.transferDebt)}">${balanceText(customer.transferDebt || 0)}</span> · Jami balans: <span class="${debtClass(customer.currentDebt)}">${balanceText(customer.currentDebt)}</span></p>`
             : '<p class="muted">Umumiy qarz yoki haqdorlik sotuvchidan yopilgan.</p>'}
           <p class="muted">Telefonlar: ${(customer.phones || []).join(', ') || '-'} · Telegram: ${(customer.telegramIds || []).join(', ') || '-'} · Lokatsiya: ${customer.location || '-'}</p>
           <p><a href="${withAccess(`/warehouse/customers/${customer.id}`)}">Mijoz sahifasini ochish</a></p>

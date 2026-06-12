@@ -201,10 +201,16 @@ function buildDailySummaryCsv(state) {
   for (const tx of approved) {
     const dateStr = tx.approvedAt || tx.createdAt || "";
     const day = dateStr ? new Date(dateStr).toLocaleDateString("ru-RU") : "Noma'lum";
-    if (!byDate.has(day)) byDate.set(day, { savdo: 0, naqd: 0, otkazma: 0, topshirilgan: 0 });
+    if (!byDate.has(day)) byDate.set(day, { cashSales: 0, transferSales: 0, naqd: 0, otkazma: 0, topshirilgan: 0 });
     const d = byDate.get(day);
     if (tx.kind === "sale" || !tx.kind || tx.kind === "pending-sale") {
-      d.savdo += Number(tx.totalPrice || 0);
+      const priceType = tx.priceType || (Number(tx.transferPaidAmount || 0) > 0 && Number(tx.cashPaidAmount || 0) <= 0 ? "transfer" : "cash");
+      const price = Number(tx.totalPrice || 0);
+      if (priceType === "transfer") {
+        d.transferSales += price;
+      } else {
+        d.cashSales += price;
+      }
     }
     d.naqd += Number(tx.cashPaidAmount || 0);
     d.otkazma += Number(tx.transferPaidAmount || 0);
@@ -220,25 +226,53 @@ function buildDailySummaryCsv(state) {
   });
 
   // Overall totals
-  let totalSavdo = 0, totalNaqd = 0, totalOtkazma = 0, totalTopshirilgan = 0;
+  let totalCashSales = 0, totalTransferSales = 0, totalNaqd = 0, totalOtkazma = 0, totalTopshirilgan = 0;
   for (const [, d] of sortedDays) {
-    totalSavdo += d.savdo;
+    totalCashSales += d.cashSales;
+    totalTransferSales += d.transferSales;
     totalNaqd += d.naqd;
     totalOtkazma += d.otkazma;
     totalTopshirilgan += d.topshirilgan;
   }
   const totalPaid = totalNaqd + totalOtkazma;
-  const umumiyQarzdorlik = Math.max(0, totalSavdo - totalPaid);
+  const totalCashDebt = Math.max(0, totalCashSales - totalNaqd);
+  const totalTransferDebt = Math.max(0, totalTransferSales - totalOtkazma);
+  const umumiyQarzdorlik = totalCashDebt + totalTransferDebt;
 
-  const header = ["Sana", "Kunlik savdo", "Naqd to'lov", "O'tkazma to'lov", "Jami to'langan", "Sotuvchi topshirgan", "Kunlik qarz"].join(SEP);
+  const header = ["Sana", "Kunlik naqd savdo", "Kunlik o'tkazma savdo", "Naqd to'lov", "O'tkazma to'lov", "Jami to'langan", "Sotuvchi topshirgan", "Kunlik naqd qarz", "Kunlik o'tkazma qarz", "Jami qarz"].join(SEP);
   const rows = sortedDays.map(([day, d]) => {
     const jami = d.naqd + d.otkazma;
-    const qarz = Math.max(0, d.savdo - jami);
-    return [day, fmtMoney(d.savdo), fmtMoney(d.naqd), fmtMoney(d.otkazma), fmtMoney(jami), fmtMoney(d.topshirilgan), fmtMoney(qarz)].map(csvEscape).join(SEP);
+    const naqdQarz = Math.max(0, d.cashSales - d.naqd);
+    const otkazmaQarz = Math.max(0, d.transferSales - d.otkazma);
+    const jamiQarz = naqdQarz + otkazmaQarz;
+    return [
+      day,
+      fmtMoney(d.cashSales),
+      fmtMoney(d.transferSales),
+      fmtMoney(d.naqd),
+      fmtMoney(d.otkazma),
+      fmtMoney(jami),
+      fmtMoney(d.topshirilgan),
+      fmtMoney(naqdQarz),
+      fmtMoney(otkazmaQarz),
+      fmtMoney(jamiQarz)
+    ].map(csvEscape).join(SEP);
   });
 
-  const jamiRow = ["JAMI", fmtMoney(totalSavdo), fmtMoney(totalNaqd), fmtMoney(totalOtkazma), fmtMoney(totalPaid), fmtMoney(totalTopshirilgan), fmtMoney(umumiyQarzdorlik)].map(csvEscape).join(SEP);
-  const debtRow = ["Umumiy qarzdorlik", fmtMoney(umumiyQarzdorlik), "", "", "", "", ""].map(csvEscape).join(SEP);
+  const jamiRow = [
+    "JAMI",
+    fmtMoney(totalCashSales),
+    fmtMoney(totalTransferSales),
+    fmtMoney(totalNaqd),
+    fmtMoney(totalOtkazma),
+    fmtMoney(totalPaid),
+    fmtMoney(totalTopshirilgan),
+    fmtMoney(totalCashDebt),
+    fmtMoney(totalTransferDebt),
+    fmtMoney(umumiyQarzdorlik)
+  ].map(csvEscape).join(SEP);
+
+  const debtRow = ["Umumiy qarzdorlik", `Naqd: ${fmtMoney(totalCashDebt)} | O'tkazma: ${fmtMoney(totalTransferDebt)}`, "", "", "", "", "", "", "", ""].map(csvEscape).join(SEP);
 
   return "\uFEFF" + [header, ...rows, "", jamiRow, debtRow].join("\r\n");
 }
@@ -277,16 +311,12 @@ function buildCustomerModeRows(detail, mode) {
   const rows = [];
 
   for (const entry of entries) {
-    const totalPaidForEntry =
-      entry.cashPaidAmount != null || entry.transferPaidAmount != null
-        ? Number(entry.cashPaidAmount || 0) + Number(entry.transferPaidAmount || 0)
-        : Number(entry.paidAmount || 0);
-    if (entry.kind === "sale") {
+    if (entry.kind === "sale" && entry.priceType === mode) {
       runningSales += Number(entry.totalPrice || 0);
     }
-    runningPaid += totalPaidForEntry;
-
     const paymentAmount = getModePaymentAmount(entry, mode);
+    runningPaid += paymentAmount;
+
     const isModeSale = entry.kind === "sale" && (entry.priceType === mode || paymentAmount > 0);
     const isModePayment = entry.kind === "payment" && paymentAmount > 0;
     if (!isModeSale && !isModePayment) continue;
@@ -1622,7 +1652,11 @@ function summarizeCustomers(entries) {
     (summary, entry) => {
       summary.count += 1;
       summary.totalTakenKg += Number(entry.totalTakenKg || 0);
+      summary.cashSales += Number(entry.cashSales || 0);
+      summary.transferSales += Number(entry.transferSales || 0);
       summary.totalSales += Number(entry.totalSales || 0);
+      summary.cashPaid += Number(entry.cashPaid || 0);
+      summary.transferPaid += Number(entry.transferPaid || 0);
       summary.totalPaid += Number(entry.totalPaid || 0);
       summary.cashDebt += Number(entry.cashDebt || 0);
       summary.transferDebt += Number(entry.transferDebt || 0);
@@ -1633,7 +1667,11 @@ function summarizeCustomers(entries) {
     {
       count: 0,
       totalTakenKg: 0,
+      cashSales: 0,
+      transferSales: 0,
       totalSales: 0,
+      cashPaid: 0,
+      transferPaid: 0,
       totalPaid: 0,
       cashDebt: 0,
       transferDebt: 0,

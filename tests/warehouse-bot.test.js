@@ -101,11 +101,11 @@ describe("warehouse bot helpers", () => {
     });
 
     assert.equal(final.user.fullName, "Азиза");
-    assert.equal(final.debt, 100000);
+    assert.equal(final.debt, 130000);
     assert.equal(state.warehouse.currentStockKg, 85);
     assert.equal(final.transaction.cashPaidAmount, 0);
     assert.equal(final.transaction.transferPaidAmount, 0);
-    assert.equal(recalculateDebt(state, first.user.id), 100000);
+    assert.equal(recalculateDebt(state, first.user.id), 130000);
   });
 
   test("keeps legacy paidAmount data compatible", () => {
@@ -259,7 +259,7 @@ describe("warehouse bot helpers", () => {
     assert.equal(summaries[0].fullName, "Музаффар");
     assert.equal(summaries[0].cashDebt, 50000);
     assert.equal(summaries[0].transferDebt, 0);
-    assert.equal(summaries[0].currentDebt, 25000);
+    assert.equal(summaries[0].currentDebt, 50000);
     assert.equal(summaries[0].totalTakenKg, 8);
     assert.equal(summaries[0].totalPaid, 55000);
     assert.match(sale.transaction.createdAt, /^2026-04-15T12:00:00.000Z$/);
