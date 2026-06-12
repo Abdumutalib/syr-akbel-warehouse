@@ -473,6 +473,9 @@
         <div style="margin-top: 16px;">
           <button id="export-csv">CSV yuklab olish (Excel)</button>
         </div>
+        <div style="margin-top: 16px; border-top: 1px solid var(--line); padding-top: 16px;">
+          <button id="clear-history" style="background: #9f1239; width: 100%;">Tarixni tozalash (Savdo, to'lov, zakaz)</button>
+        </div>
 
         <div class="card" style="margin-top: 20px; padding: 0; border: 0; box-shadow: none; background: transparent;">
           <h3 style="margin-top: 0;">Mijozni tez tahrirlash</h3>
@@ -1354,6 +1357,26 @@
         a.remove();
         URL.revokeObjectURL(url);
         setStatus("CSV yuklandi.");
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    document.getElementById("clear-history").addEventListener("click", async () => {
+      if (!confirm("Diqqat! Barcha savdolar, to'lovlar va zakazlar butunlay o'chiriladi. Mijozlar profillari va xodimlar saqlab qolinadi. Ushbu amalni ortga qaytarib bo'lmaydi. Rozimisiz?")) {
+        return;
+      }
+      try {
+        setStatus("Tarix tozalanmoqda...");
+        const data = await apiFetch("/api/warehouse/clear-history", {
+          method: "POST"
+        });
+        if (data.ok) {
+          setStatus("Barcha savdolar, to'lovlar va zakazlar tozalandi.");
+          await loadPending();
+        } else {
+          setStatus(data.error || "Xatolik yuz berdi", true);
+        }
       } catch (error) {
         setStatus(error.message, true);
       }

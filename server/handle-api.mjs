@@ -1361,6 +1361,36 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     return true;
   }
 
+  if (apiPath === "/api/warehouse/clear-history" && req.method === "POST") {
+    if (!assertWarehouseAdmin(req, res)) {
+      return true;
+    }
+    try {
+      await writeWarehouse((state) => {
+        state.transactions = [];
+        state.orders = [];
+        state.deletedCustomers = [];
+        state.sellerCashHandoffs = [];
+        state.telegramMessages = [];
+        state.idempotencyRequests = [];
+        if (Array.isArray(state.users)) {
+          for (const user of state.users) {
+            user._debtCache = {
+              cashDebt: 0,
+              transferDebt: 0,
+              currentDebt: 0
+            };
+          }
+        }
+      });
+      sendApiJson(res, 200, { ok: true });
+    } catch (e) {
+      sendApiJson(res, 400, { error: e.message || "Tarixni tozalab bo'lmadi" });
+    }
+    return true;
+  }
+
+
   const approveMatch = apiPath.match(/^\/api\/warehouse\/approve\/(\d+)$/);
   if (approveMatch && req.method === "POST") {
     if (!assertWarehouseAdmin(req, res)) {
