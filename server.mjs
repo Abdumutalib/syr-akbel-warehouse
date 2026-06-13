@@ -52,6 +52,8 @@ import { handleWarehouseApiRoute } from "./server/handle-api.mjs";
 import { getClientIp, rateLimiter, recordFailedAuth, securityHeaders } from "./lib/rate-limiter.mjs";
 import { startAutoReports } from "./scripts/auto-reports.mjs";
 import { setupExtendedBot } from "./app/telegram-bot-extended.mjs";
+import { executeTransaction } from "./lib/core.mjs";
+import { forecaster } from "./lib/ai-forecaster.mjs";
 
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -1667,15 +1669,17 @@ function summarizeApprovedTransactions(entries) {
   return entries.reduce(
     (summary, entry) => {
       summary.count += 1;
-      summary.totalKg += Number(entry.amountKg || 0);
-      if ((entry.kind || "sale") === "sale" && Number(entry.amountKg || 0) > 0) {
-        summary.totalBlocks += Number(entry.blockCount || 0);
+      const isReturn = (entry.kind || "sale") === "return";
+      const sign = isReturn ? -1 : 1;
+      summary.totalKg += sign * Number(entry.amountKg || 0);
+      if (Number(entry.amountKg || 0) > 0) {
+        summary.totalBlocks += sign * Number(entry.blockCount || 0);
       }
-      summary.totalPrice += Number(entry.totalPrice || 0);
+      summary.totalPrice += sign * Number(entry.totalPrice || 0);
       summary.totalPaid += Number(entry.paidAmount || 0);
       summary.cashPaidAmount += Number(entry.cashPaidAmount || 0);
       summary.transferPaidAmount += Number(entry.transferPaidAmount || 0);
-      summary.remainingDebt += Math.max(0, Number(entry.totalPrice || 0) - Number(entry.paidAmount || 0));
+      summary.remainingDebt += (Number(entry.totalPrice || 0) * sign) - Number(entry.paidAmount || 0);
       return summary;
     },
     {
@@ -1880,6 +1884,31 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
       await extendedBotHandler(req, res);
       return;
     }
+  }
+
+  if (u.pathname === "/api/sales" && req.method === "POST") {
+    try {
+      const body = await readPostJson(req);
+      if (body === null) {
+        sendApiJson(res, 400, { success: false, error: "JSON formati noto'g'ri" }, req);
+        return;
+      }
+      const result = executeTransaction(body);
+      sendApiJson(res, 200, result, req);
+    } catch (e) {
+      sendApiJson(res, 400, { success: false, error: e.message }, req);
+    }
+    return;
+  }
+
+  if (u.pathname === "/api/forecast" && req.method === "GET") {
+    try {
+      const f = await forecaster.forecast();
+      sendApiJson(res, 200, { success: true, forecast: f }, req);
+    } catch (e) {
+      sendApiJson(res, 400, { success: false, error: e.message }, req);
+    }
+    return;
   }
 
 
