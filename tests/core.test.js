@@ -63,10 +63,10 @@ describe('Core Transaction Engine', () => {
     assert.strictEqual(updatedClient.totalPaid, 200000);
     assert.strictEqual(updatedClient.totalTakenKg, 10);
 
-    // Verify stock was incremented (and is in sync)
+    // Verify stock was decremented (and is in sync)
     const cheeseStock = state.stock.find(p => p.id === 'cheese');
-    assert.strictEqual(cheeseStock.quantity, 210);
-    assert.strictEqual(state.warehouse.currentStockKg, 210);
+    assert.strictEqual(cheeseStock.quantity, 190);
+    assert.strictEqual(state.warehouse.currentStockKg, 190);
 
     // Verify transaction fields
     const tx = state.transactions[0];
