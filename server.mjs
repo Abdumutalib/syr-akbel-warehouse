@@ -55,6 +55,15 @@ import { setupExtendedBot } from "./app/telegram-bot-extended.mjs";
 import { executeTransaction } from "./lib/core.mjs";
 import { forecaster } from "./lib/ai-forecaster.mjs";
 import { resolveAllowedOrigins, getAllowedOriginHeaderValue } from "./lib/deployment-config.mjs";
+import {
+  applyWarehouseSyncEvent,
+  createWarehousePostgresStore,
+  getWarehouseSyncPeerState,
+  listWarehouseSyncEvents,
+  loadWarehouseStateFromPostgres,
+  updateWarehouseSyncPeerState,
+  writeWarehouseStateToPostgres,
+} from "./lib/warehouse-postgres.mjs";
 
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -103,6 +112,13 @@ const WAREHOUSE_STATE_PATH = resolveWarehouseStatePath();
 const WAREHOUSE_TRANSACTION_PHOTO_DIR = path.join(path.dirname(WAREHOUSE_STATE_PATH), "transaction-photos");
 const SCHEDULER_STATE_PATH = path.join(path.dirname(WAREHOUSE_STATE_PATH), "scheduler.json");
 const WAREHOUSE_SITE_TOKEN = process.env.WAREHOUSE_SITE_TOKEN?.trim() || "";
+const WAREHOUSE_STATE_SYNC_TOKEN = String(process.env.WAREHOUSE_STATE_SYNC_TOKEN || process.env.WAREHOUSE_AUTH_SYNC_TOKEN || "").trim();
+const WAREHOUSE_STATE_SYNC_TARGETS = String(process.env.WAREHOUSE_STATE_SYNC_TARGETS || process.env.WAREHOUSE_AUTH_SYNC_TARGETS || "")
+  .split(/[\s,;]+/)
+  .map((entry) => entry.trim())
+  .filter(Boolean)
+  .map((entry) => entry.replace(/\/+$/, ""));
+const WAREHOUSE_STATE_SYNC_INTERVAL_MS = Math.max(5000, Number(process.env.WAREHOUSE_STATE_SYNC_INTERVAL_MS) || 15000);
 
 // --- Qarz eslatma scheduler holati ---
 const DEBT_REMINDER_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 kun
@@ -133,11 +149,17 @@ function saveSchedulerState(state) {
 // In-memory holat (server restart da fayldan tiklanadi)
 let schedulerState = loadSchedulerState();
 
-let warehouseStateCache = loadWarehouseState(WAREHOUSE_STATE_PATH);
+const warehouseFileSeedState = loadWarehouseState(WAREHOUSE_STATE_PATH);
+const warehousePostgresStore = await createWarehousePostgresStore();
+let warehouseStateCache = warehousePostgresStore
+  ? await loadWarehouseStateFromPostgres(warehousePostgresStore, warehouseFileSeedState)
+  : warehouseFileSeedState;
 let warehouseWriteQueue = Promise.resolve();
 let yandexUploadTimer = null;
 let yandexUploadInFlight = false;
 let yandexUploadRequested = false;
+let warehouseStateSyncTimer = null;
+let warehouseStateSyncInFlight = false;
 
 function resolveWarehouseStatePath() {
   const configured = process.env.WAREHOUSE_STATE_FILE?.trim() || "data/warehouse.json";
@@ -586,7 +608,14 @@ function flushWarehouseSave() {
   }
 }
 
-function saveWarehouse(state) {
+async function persistWarehouseStateToPostgres(state, options = {}) {
+  if (!warehousePostgresStore) {
+    return null;
+  }
+  return writeWarehouseStateToPostgres(warehousePostgresStore, state, options);
+}
+
+async function saveWarehouse(state, options = {}) {
   warehouseStateCache = state;
   warehouseSavePending = true;
   scheduleYandexCsvUpload();
@@ -594,6 +623,7 @@ function saveWarehouse(state) {
   if (!warehouseSaveTimer) {
     warehouseSaveTimer = setTimeout(flushWarehouseSave, 300);
   }
+  return persistWarehouseStateToPostgres(state, options);
 }
 
 // Graceful shutdown flush
@@ -607,12 +637,93 @@ function withWarehouseRead(handler) {
 function withWarehouseWrite(handler) {
   const task = warehouseWriteQueue.then(async () => {
     const result = await handler(warehouseStateCache);
-    saveWarehouse(warehouseStateCache);
+    await saveWarehouse(warehouseStateCache);
     return result;
   });
   warehouseWriteQueue = task.catch(() => {});
   return task;
 }
+
+async function pullWarehouseStateEventsFromPeer(baseUrl) {
+  if (!warehousePostgresStore || !WAREHOUSE_STATE_SYNC_TOKEN) {
+    return;
+  }
+
+  const peerState = await getWarehouseSyncPeerState(warehousePostgresStore, baseUrl);
+  const url = new URL(`${baseUrl}/api/warehouse/state-sync/events`);
+  url.searchParams.set("afterEventId", String(peerState.lastEventId || 0));
+  url.searchParams.set("limit", "100");
+
+  const response = await fetch(url, {
+    headers: {
+      "X-Warehouse-Sync-Token": WAREHOUSE_STATE_SYNC_TOKEN,
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || `State sync xato (${response.status})`);
+  }
+
+  const events = Array.isArray(data.events) ? data.events : [];
+  let lastEventId = peerState.lastEventId || 0;
+  let conflicts = 0;
+
+  for (const event of events) {
+    lastEventId = Math.max(lastEventId, Number(event?.eventId || 0));
+    const result = await applyWarehouseSyncEvent(warehousePostgresStore, event);
+    if (result.applied && result.nextState) {
+      warehouseStateCache = result.nextState;
+      saveWarehouseState(WAREHOUSE_STATE_PATH, warehouseStateCache);
+      scheduleYandexCsvUpload();
+    } else if (result.conflict) {
+      conflicts += 1;
+    }
+  }
+
+  await updateWarehouseSyncPeerState(warehousePostgresStore, baseUrl, {
+    lastEventId,
+    lastSyncAt: new Date().toISOString(),
+    lastError: conflicts > 0 ? `conflicts=${conflicts}` : null,
+  });
+}
+
+async function syncWarehouseStateFromPeers() {
+  if (warehouseStateSyncInFlight || !warehousePostgresStore || !WAREHOUSE_STATE_SYNC_TOKEN || WAREHOUSE_STATE_SYNC_TARGETS.length === 0) {
+    return;
+  }
+  warehouseStateSyncInFlight = true;
+  try {
+    for (const baseUrl of WAREHOUSE_STATE_SYNC_TARGETS) {
+      try {
+        await pullWarehouseStateEventsFromPeer(baseUrl);
+      } catch (error) {
+        const peerState = await getWarehouseSyncPeerState(warehousePostgresStore, baseUrl);
+        await updateWarehouseSyncPeerState(warehousePostgresStore, baseUrl, {
+          lastEventId: peerState.lastEventId,
+          lastSyncAt: new Date().toISOString(),
+          lastError: error.message || String(error),
+        });
+      }
+    }
+  } finally {
+    warehouseStateSyncInFlight = false;
+  }
+}
+
+function startWarehouseStateSyncLoop() {
+  if (!warehousePostgresStore || !WAREHOUSE_STATE_SYNC_TOKEN || WAREHOUSE_STATE_SYNC_TARGETS.length === 0 || warehouseStateSyncTimer) {
+    return;
+  }
+  syncWarehouseStateFromPeers().catch(() => {});
+  warehouseStateSyncTimer = setInterval(() => {
+    syncWarehouseStateFromPeers().catch(() => {});
+  }, WAREHOUSE_STATE_SYNC_INTERVAL_MS);
+  warehouseStateSyncTimer.unref?.();
+}
+
+startWarehouseStateSyncLoop();
 
 function scheduleYandexCsvUpload() {
   yandexUploadRequested = true;
@@ -2067,6 +2178,26 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   if (u.pathname.startsWith("/api/") || u.pathname.startsWith("/warehouse/api/")) {
     if (!requestOriginAllowed(req)) {
       sendApiJson(res, 403, { error: "Bu origin uchun ruxsat yo'q" });
+      return;
+    }
+    if (apiPath === "/api/warehouse/state-sync/events" && req.method === "GET") {
+      const headerToken = String(req.headers["x-warehouse-sync-token"] || "").trim();
+      if (!warehousePostgresStore) {
+        sendApiJson(res, 503, { error: "Postgres sync sozlanmagan" });
+        return;
+      }
+      if (!WAREHOUSE_STATE_SYNC_TOKEN || !headerToken || headerToken !== WAREHOUSE_STATE_SYNC_TOKEN) {
+        sendApiJson(res, 401, { error: "Sync token noto'g'ri" });
+        return;
+      }
+      const afterEventId = Math.max(0, Number(u.searchParams.get("afterEventId") || 0));
+      const limit = Math.min(200, Math.max(1, Number(u.searchParams.get("limit") || 50)));
+      const events = await listWarehouseSyncEvents(warehousePostgresStore, { afterEventId, limit });
+      sendApiJson(res, 200, {
+        ok: true,
+        serverId: warehousePostgresStore.serverId,
+        events,
+      });
       return;
     }
     // Analytics endpointlari

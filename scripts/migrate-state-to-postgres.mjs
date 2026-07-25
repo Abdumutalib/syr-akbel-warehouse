@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Client } from "pg";
+import {
+  closeWarehousePostgresStore,
+  createWarehousePostgresStore,
+  writeWarehouseStateToPostgres,
+} from "../lib/warehouse-postgres.mjs";
+import { normalizeWarehouseState } from "../lib/warehouse-bot.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -32,38 +37,23 @@ async function main() {
   }
 
   const statePath = resolveStatePath();
-  const state = readStateJson(statePath);
-  const recordId = process.env.WAREHOUSE_DB_RECORD_ID?.trim() || "primary";
-
-  const client = new Client({ connectionString });
-  await client.connect();
+  const state = normalizeWarehouseState(readStateJson(statePath));
+  const store = await createWarehousePostgresStore({
+    connectionString,
+    recordId: process.env.WAREHOUSE_DB_RECORD_ID?.trim() || "primary",
+    serverId: process.env.WAREHOUSE_SERVER_ID?.trim() || process.env.HOSTNAME?.trim() || "migration",
+  });
 
   try {
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS warehouse_state (
-        id TEXT PRIMARY KEY,
-        state JSONB NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-
-    await client.query(
-      `
-      INSERT INTO warehouse_state (id, state, updated_at)
-      VALUES ($1, $2::jsonb, NOW())
-      ON CONFLICT (id)
-      DO UPDATE SET
-        state = EXCLUDED.state,
-        updated_at = NOW()
-      `,
-      [recordId, JSON.stringify(state)]
-    );
+    const result = await writeWarehouseStateToPostgres(store, state, {
+      skipSyncEvent: process.env.WAREHOUSE_DB_SKIP_SYNC_EVENT === "1",
+    });
 
     const usersCount = Array.isArray(state.users) ? state.users.length : 0;
     const txCount = Array.isArray(state.transactions) ? state.transactions.length : 0;
-    console.log(`OK: JSON -> Postgres migratsiya bajarildi. id=${recordId}, users=${usersCount}, tx=${txCount}`);
+    console.log(`OK: JSON -> Postgres migratsiya bajarildi. id=${store.recordId}, users=${usersCount}, tx=${txCount}, event=${result.eventId ?? "skip"}`);
   } finally {
-    await client.end();
+    await closeWarehousePostgresStore(store);
   }
 }
 
