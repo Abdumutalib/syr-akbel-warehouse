@@ -14,7 +14,7 @@ Start command:
   npm start
 
 Health check:
-  /warehouse/admin
+  /healthz
 
 Persistent data:
   Use a mounted volume and point state file there:
