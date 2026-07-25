@@ -608,6 +608,15 @@
     }
 
     function render() {
+      const toggleVisibility = (element, shouldShow) => {
+        if (!element) {
+          return;
+        }
+        const visible = Boolean(shouldShow);
+        element.hidden = !visible;
+        element.style.display = visible ? '' : 'none';
+      };
+
       const canUsePin = pinAuth.canUsePin ? pinAuth.canUsePin() : true;
       const pinAvailable = pinAuth.hasPin();
       const sessionActive = isSessionActive();
@@ -627,27 +636,13 @@
       if (titleEl) {
         titleEl.textContent = pinOnlyMode ? pinTitle : fullTitle;
       }
-      if (resolvedUsernameGroup) {
-        resolvedUsernameGroup.hidden = pinOnlyMode;
-      }
-      if (passwordGroupEl) {
-        passwordGroupEl.hidden = pinOnlyMode;
-      }
-      if (resolvedLoginButton) {
-        resolvedLoginButton.hidden = pinOnlyMode || setupPinMode;
-      }
-      if (saveAuthButtonEl) {
-        saveAuthButtonEl.hidden = pinOnlyMode;
-      }
-      if (unlockPinButtonEl) {
-        unlockPinButtonEl.hidden = sessionActive || !pinAvailable;
-      }
-      if (clearPinButtonEl) {
-        clearPinButtonEl.hidden = sessionActive || !pinAvailable;
-      }
-      if (showLoginButtonEl) {
-        showLoginButtonEl.hidden = sessionActive || !pinOnlyMode || strictMode;
-      }
+      toggleVisibility(resolvedUsernameGroup, !pinOnlyMode);
+      toggleVisibility(passwordGroupEl, !pinOnlyMode);
+      toggleVisibility(resolvedLoginButton, !(pinOnlyMode || setupPinMode));
+      toggleVisibility(saveAuthButtonEl, !pinOnlyMode);
+      toggleVisibility(unlockPinButtonEl, !(sessionActive || !pinAvailable));
+      toggleVisibility(clearPinButtonEl, !(sessionActive || !pinAvailable));
+      toggleVisibility(showLoginButtonEl, !(sessionActive || !pinOnlyMode || strictMode));
       if (hintEl) {
         if (sessionActive) {
           hintEl.textContent = '';
