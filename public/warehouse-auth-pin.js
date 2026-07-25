@@ -300,7 +300,19 @@
   }
 
   function resolveProfileForCurrentUser(store, username) {
-    return getProfileForUsername(store, username) || (!normalizeUsername(username) ? getSoleProfile(store) : null);
+    const direct = getProfileForUsername(store, username);
+    if (direct) {
+      return direct;
+    }
+    const normalized = normalizeUsername(username);
+    if (!normalized) {
+      const lastUsernameProfile = getProfileForUsername(store, store && store.lastUsername ? store.lastUsername : '');
+      if (lastUsernameProfile) {
+        return lastUsernameProfile;
+      }
+      return getSoleProfile(store);
+    }
+    return null;
   }
 
   function clearLegacyPasswords() {
@@ -559,7 +571,9 @@
       authPanelEl,
       sessionNoticeEl,
       titleEl,
+      usernameGroupEl,
       passwordGroupEl,
+      loginButtonEl,
       saveAuthButtonEl,
       unlockPinButtonEl,
       clearPinButtonEl,
@@ -570,6 +584,8 @@
       fullHint,
       pinHint,
       activeHint = 'Kirish tasdiqlandi.',
+      requirePinOnly = true,
+      strictPinSetupHint = 'Birinchi kirishda login/password va PIN kiriting. Keyin faqat PIN bilan kirasiz.',
     } = options;
 
     let forceFullLogin = false;
@@ -592,9 +608,14 @@
     }
 
     function render() {
+      const canUsePin = pinAuth.canUsePin ? pinAuth.canUsePin() : true;
       const pinAvailable = pinAuth.hasPin();
       const sessionActive = isSessionActive();
-      const pinOnlyMode = !sessionActive && pinAvailable && !forceFullLogin && !accessToken;
+      const strictMode = Boolean(requirePinOnly && canUsePin && !accessToken);
+      const setupPinMode = Boolean(strictMode && !sessionActive && !pinAvailable);
+      const pinOnlyMode = Boolean(strictMode && !sessionActive && pinAvailable && !forceFullLogin);
+      const resolvedLoginButton = loginButtonEl || document.getElementById('login-only');
+      const resolvedUsernameGroup = usernameGroupEl || document.getElementById('usernameGroup');
 
       if (authPanelEl) {
         authPanelEl.hidden = sessionActive;
@@ -606,8 +627,14 @@
       if (titleEl) {
         titleEl.textContent = pinOnlyMode ? pinTitle : fullTitle;
       }
+      if (resolvedUsernameGroup) {
+        resolvedUsernameGroup.hidden = pinOnlyMode;
+      }
       if (passwordGroupEl) {
         passwordGroupEl.hidden = pinOnlyMode;
+      }
+      if (resolvedLoginButton) {
+        resolvedLoginButton.hidden = pinOnlyMode || setupPinMode;
       }
       if (saveAuthButtonEl) {
         saveAuthButtonEl.hidden = pinOnlyMode;
@@ -619,10 +646,18 @@
         clearPinButtonEl.hidden = sessionActive || !pinAvailable;
       }
       if (showLoginButtonEl) {
-        showLoginButtonEl.hidden = sessionActive || !pinOnlyMode;
+        showLoginButtonEl.hidden = sessionActive || !pinOnlyMode || strictMode;
       }
       if (hintEl) {
-        hintEl.textContent = sessionActive ? '' : (pinOnlyMode ? pinHint : fullHint);
+        if (sessionActive) {
+          hintEl.textContent = '';
+        } else if (pinOnlyMode) {
+          hintEl.textContent = pinHint;
+        } else if (setupPinMode) {
+          hintEl.textContent = strictPinSetupHint;
+        } else {
+          hintEl.textContent = fullHint;
+        }
       }
     }
 

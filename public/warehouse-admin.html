@@ -444,6 +444,20 @@
             <button id="reload" class="secondary">Qayta yuklash</button>
           </div>
           <div id="authHint" style="color: #6d6255; font-size: 14px; margin-top: 8px;">Birinchi marta login/password bilan kiring. PIN yozib saqlasangiz, keyingi safar шу PIN билан кириш мумкин.</div>
+          <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);">
+            <h3 style="margin: 0 0 8px;">Login/parolni hamma serverda yangilash</h3>
+            <div id="adminCredentialCurrent" style="font-size: 13px; color: var(--muted); margin-bottom: 8px;"></div>
+            <label for="newAdminUsername">Yangi username</label>
+            <input id="newAdminUsername" autocomplete="off" placeholder="Masalan: akbel">
+            <label for="newAdminPassword">Yangi password</label>
+            <input id="newAdminPassword" type="password" autocomplete="new-password" placeholder="Kamida 8 belgi">
+            <label for="newAdminPasswordConfirm">Passwordni tasdiqlang</label>
+            <input id="newAdminPasswordConfirm" type="password" autocomplete="new-password" placeholder="Qayta kiriting">
+            <div class="tx-actions" style="margin-top: 8px;">
+              <button id="update-admin-credentials">Saqlash va sync qilish</button>
+            </div>
+            <div id="adminCredentialStatus" class="status" style="margin-top:8px;"></div>
+          </div>
         </div>
         <div id="activeSessionNotice" style="color: #6d6255; font-size: 14px; margin-bottom: 12px;" class="hidden"></div>
 
@@ -684,12 +698,19 @@
     const authPanelEl = document.getElementById("authPanel");
     const activeSessionNoticeEl = document.getElementById("activeSessionNotice");
     const authTitleEl = document.getElementById("authTitle");
+    const usernameGroupEl = document.getElementById("usernameGroup");
     const passwordGroupEl = document.getElementById("passwordGroup");
+    const loginOnlyButtonEl = document.getElementById("login-only");
     const saveAuthButtonEl = document.getElementById("save-auth");
     const unlockPinButtonEl = document.getElementById("unlock-pin");
     const clearPinButtonEl = document.getElementById("clear-pin");
     const showLoginButtonEl = document.getElementById("show-login");
     const authHintEl = document.getElementById("authHint");
+    const newAdminUsernameEl = document.getElementById("newAdminUsername");
+    const newAdminPasswordEl = document.getElementById("newAdminPassword");
+    const newAdminPasswordConfirmEl = document.getElementById("newAdminPasswordConfirm");
+    const updateAdminCredentialsEl = document.getElementById("update-admin-credentials");
+    const adminCredentialCurrentEl = document.getElementById("adminCredentialCurrent");
     const stockKgEl = document.getElementById("stockKg");
     const pendingCountEl = document.getElementById("pendingCount");
     const stockValueEl = document.getElementById("stockValue");
@@ -752,7 +773,9 @@
       authPanelEl,
       sessionNoticeEl: activeSessionNoticeEl,
       titleEl: authTitleEl,
+      usernameGroupEl,
       passwordGroupEl,
+      loginButtonEl: loginOnlyButtonEl,
       saveAuthButtonEl,
       unlockPinButtonEl,
       clearPinButtonEl,
@@ -760,8 +783,10 @@
       hintEl: authHintEl,
       fullTitle: 'Admin kirishi',
       pinTitle: 'PIN bilan kirish',
-      fullHint: 'Har safar login va parol qo\'lda yoziladi. Ilovani o\'rnatib PIN saqlasangiz, keyingi kirishda PIN ishlatishingiz mumkin.',
-      pinHint: 'Ilova o\'rnatilgandan keyin username ni yozib, PIN kod bilan kiring.',
+      fullHint: 'Birinchi marta login va parol bilan kiring.',
+      pinHint: 'PIN kodni kiriting. Login/parol endi so\'ralmaydi.',
+      strictPinSetupHint: 'Birinchi kirishda login/parol va PIN kiriting, keyin faqat PIN bilan kirasiz.',
+      requirePinOnly: true,
       activeHint: 'Kirish tasdiqlandi. Shu tab ichida qayta login so\'ralmaydi.',
     });
 
@@ -776,6 +801,24 @@
     }
 
     const apiFetch = (url, options = {}) => window.warehouseApi.fetch(url, options, typeof authHeader === 'function' ? authHeader() : '', typeof accessToken !== 'undefined' ? accessToken : '');
+
+    function setAdminCredentialStatus(message, isError = false) {
+      const el = document.getElementById("adminCredentialStatus");
+      if (!el) return;
+      el.textContent = message || "";
+      el.classList.toggle("error", Boolean(isError));
+    }
+
+    async function loadAdminCredentialProfile() {
+      const data = await apiFetch("/api/warehouse/admin-credentials");
+      if (adminCredentialCurrentEl) {
+        const sourceText = data.source === "state" ? "(saqlangan)" : "(env)";
+        adminCredentialCurrentEl.textContent = `Joriy username: ${data.username || "-"} ${sourceText}`;
+      }
+      if (newAdminUsernameEl && !newAdminUsernameEl.value.trim()) {
+        newAdminUsernameEl.value = data.username || "";
+      }
+    }
 
     function numberFormat(value) {
       return new Intl.NumberFormat("ru-RU").format(Number(value || 0));
@@ -1005,6 +1048,7 @@
       await loadCustomerQuickSelect();
       await loadTelegramInbox();
       await loadReceipts();
+      await loadAdminCredentialProfile();
       setStatus("");
     }
 
@@ -1069,6 +1113,9 @@
 
     document.getElementById("login-only").addEventListener("click", async () => {
       try {
+        if (pinAuth.canUsePin() && !pinAuth.hasPin()) {
+          throw new Error("PIN o'rnating va 'Kirishni saqlash' tugmasi bilan kiring.");
+        }
         if (!usernameEl.value.trim() || !passwordEl.value) {
           throw new Error("Admin username va password kiriting.");
         }
@@ -1113,6 +1160,44 @@
     showLoginButtonEl.addEventListener('click', () => {
       authUi.showFullLogin();
       setStatus('Boshqa login bilan kirish ochildi.');
+    });
+
+    updateAdminCredentialsEl?.addEventListener("click", async () => {
+      try {
+        const username = (newAdminUsernameEl?.value || "").trim();
+        const password = newAdminPasswordEl?.value || "";
+        const confirmPassword = newAdminPasswordConfirmEl?.value || "";
+        if (!username || !password || !confirmPassword) {
+          throw new Error("Yangi username va password maydonlarini to'ldiring.");
+        }
+        if (password !== confirmPassword) {
+          throw new Error("Password tasdiqlash mos kelmadi.");
+        }
+
+        setAdminCredentialStatus("Saqlanmoqda va sync qilinmoqda...");
+        updateAdminCredentialsEl.disabled = true;
+        const data = await apiFetch("/api/warehouse/admin-credentials", {
+          method: "POST",
+          body: JSON.stringify({ username, password }),
+        });
+
+        usernameEl.value = username;
+        passwordEl.value = password;
+        pinAuth.markSessionActive({ username, password });
+        authUi.markAuthenticated({ username, password });
+
+        if (newAdminPasswordEl) newAdminPasswordEl.value = "";
+        if (newAdminPasswordConfirmEl) newAdminPasswordConfirmEl.value = "";
+
+        const syncedCount = Array.isArray(data?.sync?.ok) ? data.sync.ok.length : 0;
+        setAdminCredentialStatus(`Login/parol yangilandi. Sync bajarilgan serverlar: ${syncedCount}.`);
+        await loadAdminCredentialProfile();
+        setStatus("Yangi login/parol joriy qilindi.");
+      } catch (error) {
+        setAdminCredentialStatus(error.message || "Login/parolni yangilashda xatolik", true);
+      } finally {
+        if (updateAdminCredentialsEl) updateAdminCredentialsEl.disabled = false;
+      }
     });
 
     const receiptListEl = document.getElementById("receiptList");
@@ -1400,7 +1485,12 @@
         setStatus("CSV tayyorlanmoqda...");
         const auth = authHeader();
         const base = location.pathname.startsWith("/warehouse") ? "/warehouse/api/warehouse/export-csv" : "/api/warehouse/export-csv";
-        const resp = await fetch(base, { headers: { Authorization: auth } });
+        const resp = await fetch(base, {
+          headers: {
+            Authorization: auth,
+            "X-Warehouse-Authorization": auth,
+          },
+        });
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
           throw new Error(err.error || "Yuklab bo'lmadi");
@@ -1531,9 +1621,9 @@
     if (pinAuth.hasActiveSession() || (usernameEl.value && passwordEl.value)) {
       loadPending().catch((error) => setStatus(error.message, true));
     } else if (pinAuth.hasPin()) {
-      setStatus("PIN saqlangan. PIN bilan kiring, keyin admin sahifasi yuklanadi.");
+      setStatus("PIN saqlangan. Endi faqat PIN bilan kirasiz.");
     } else {
-      setStatus("Admin login va parolini kiriting, keyin kutilayotgan yozuvlar yuklanadi.");
+      setStatus("Birinchi kirish: login/parol va PIN kiriting, keyin faqat PIN talab qilinadi.");
     }
     applyRoleDefaults();
 
