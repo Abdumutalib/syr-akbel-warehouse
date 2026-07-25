@@ -814,7 +814,6 @@
 
       if (!filteredStaff.length) {
         wrapper.hidden = true;
-        usernameGroupEl.hidden = false;
         return [];
       }
 
