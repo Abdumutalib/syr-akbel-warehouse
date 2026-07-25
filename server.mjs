@@ -54,6 +54,7 @@ import { startAutoReports } from "./scripts/auto-reports.mjs";
 import { setupExtendedBot } from "./app/telegram-bot-extended.mjs";
 import { executeTransaction } from "./lib/core.mjs";
 import { forecaster } from "./lib/ai-forecaster.mjs";
+import { resolveAllowedOrigins, getAllowedOriginHeaderValue } from "./lib/deployment-config.mjs";
 
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -93,6 +94,7 @@ const APP_BUILD =
 const WAREHOUSE_COMPANY_NAME = process.env.WAREHOUSE_COMPANY_NAME?.trim() || "Сыр АКБЕЛ";
 const WAREHOUSE_ALLOWED_ORIGIN =
   process.env.WAREHOUSE_ALLOWED_ORIGIN?.trim() || `http://127.0.0.1:${PORT}`;
+const WAREHOUSE_ALLOWED_ORIGINS = resolveAllowedOrigins(WAREHOUSE_ALLOWED_ORIGIN);
 const WAREHOUSE_MAX_REQUEST_BYTES = Math.max(
   256 * 1024,
   Number(process.env.WAREHOUSE_MAX_REQUEST_BYTES) || 6 * 1024 * 1024
@@ -593,10 +595,11 @@ function extractWarehouseAccessToken(req) {
   return "";
 }
 
-function baseApiJsonHeaders() {
+function baseApiJsonHeaders(req = null) {
+  const originValue = getAllowedOriginHeaderValue(req?.headers?.origin, WAREHOUSE_ALLOWED_ORIGIN);
   return {
     "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": WAREHOUSE_ALLOWED_ORIGIN,
+    "Access-Control-Allow-Origin": originValue || WAREHOUSE_ALLOWED_ORIGINS[0],
     Vary: "Origin",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -610,7 +613,10 @@ function baseApiJsonHeaders() {
 
 function requestOriginAllowed(req) {
   const origin = typeof req.headers.origin === "string" ? req.headers.origin.trim() : "";
-  return !origin || origin === WAREHOUSE_ALLOWED_ORIGIN;
+  if (!origin) {
+    return true;
+  }
+  return Boolean(getAllowedOriginHeaderValue(origin, WAREHOUSE_ALLOWED_ORIGIN));
 }
 
 function requiredWarehouseRoutePermissions(pathname) {
@@ -933,12 +939,12 @@ function checkSiteGate(req, res, u) {
       ${errorText ? `<div class="err-box"><span>⚠️</span><span>${errorText}</span></div>` : ""}
       <form method="post" action="/warehouse-register" autocomplete="off">
         <div class="field">
-          <label>Login</label>
-          <input type="text" name="username" placeholder="Admin login" autocomplete="username" autofocus>
+          <label for="gate-username">Login</label>
+          <input id="gate-username" type="text" name="username" placeholder="Admin login" autocomplete="username" required autofocus>
         </div>
         <div class="field">
-          <label>Parol</label>
-          <input type="password" name="password" placeholder="••••••••" autocomplete="current-password">
+          <label for="gate-password">Parol</label>
+          <input id="gate-password" type="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
         </div>
         <button type="submit" class="btn">Kirish →</button>
       </form>
@@ -1115,7 +1121,7 @@ function isCompressibleMime(contentType) {
 
 function sendApiJson(res, status, data, req = null) {
   const json = JSON.stringify(data);
-  const headers = baseApiJsonHeaders();
+  const headers = baseApiJsonHeaders(req);
   if (req && acceptsGzip(req)) {
     const compressed = zlib.gzipSync(Buffer.from(json, "utf8"), { level: 6 });
     headers["Content-Encoding"] = "gzip";
@@ -1168,7 +1174,7 @@ function assertWarehouseAdmin(req, res) {
   if (!auth || auth.username !== expectedUser || auth.password !== expectedPassword) {
     const ip = getClientIp(req);
     recordFailedAuth(ip);
-    res.writeHead(401, baseApiJsonHeaders());
+    res.writeHead(401, baseApiJsonHeaders(req));
     res.end(JSON.stringify({ error: "Admin so'rovi uchun ruxsat yo'q" }));
     return null;
   }
@@ -1253,7 +1259,7 @@ function assertWarehouseOperator(req, res, options = {}) {
     allowAdmin,
   });
   if (!operator) {
-    res.writeHead(401, baseApiJsonHeaders());
+    res.writeHead(401, baseApiJsonHeaders(req));
     res.end(JSON.stringify({ error: message }));
     return null;
   }
@@ -1924,9 +1930,16 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         build: APP_BUILD || null,
         uptimeSec: Math.round(process.uptime()),
         now: new Date().toISOString(),
+        allowedOrigins: WAREHOUSE_ALLOWED_ORIGINS,
       },
       req
     );
+    return;
+  }
+
+  if (u.pathname === "/readyz" && req.method === "GET") {
+    res.setHeader("X-App-Version", APP_BUILD ? `${APP_VERSION}+${APP_BUILD.slice(0, 7)}` : APP_VERSION);
+    sendApiJson(res, 200, { ok: true, ready: true }, req);
     return;
   }
 
@@ -1936,7 +1949,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
       return;
     }
     res.writeHead(204, {
-      ...baseApiJsonHeaders(),
+      ...baseApiJsonHeaders(req),
       "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Warehouse-Access",
     });
