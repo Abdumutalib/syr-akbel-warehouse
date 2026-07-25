@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const baseUrl = (process.env.SMOKE_BASE_URL || "https://akbelim.com").replace(/\/$/, "");
+const baseUrl = (process.env.SMOKE_BASE_URL || "http://127.0.0.1:8787").replace(/\/$/, "");
 const username = process.env.SMOKE_WAREHOUSE_USER || "";
 const password = process.env.SMOKE_WAREHOUSE_PASS || "";
 
@@ -18,10 +18,10 @@ const pagePaths = [
 
 const publicApiPaths = [
   "/healthz",
-  "/warehouse/api/warehouse/staff-directory",
 ];
 
 const authApiPaths = [
+  "/warehouse/api/warehouse/staff-directory",
   "/warehouse/api/warehouse/customers",
   "/warehouse/api/warehouse/orders",
   "/warehouse/api/warehouse/order-customer-directory",
