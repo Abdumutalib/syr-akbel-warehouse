@@ -1626,6 +1626,91 @@ function buildDebtReminderMsg(userName, debt) {
   ].join("\n");
 }
 
+function isTelegramDailyReportRequester(telegramId) {
+  if (telegramId === null || telegramId === undefined) return false;
+  const rawId = String(telegramId).trim();
+  if (!rawId) return false;
+  const allowed = [
+    process.env.TELEGRAM_ADMIN_CHAT_ID?.trim(),
+    process.env.TELEGRAM_ACCOUNTANT_CHAT_ID?.trim(),
+  ].filter(Boolean);
+  return allowed.some((entry) => String(entry).trim() === rawId);
+}
+
+function buildTelegramDailyFinanceReport(state, date = new Date()) {
+  const today = date.toISOString().split("T")[0];
+  const approvedToday = (state.transactions || []).filter((tx) => {
+    if (String(tx?.status || "").toLowerCase() !== "approved") {
+      return false;
+    }
+    const txDate = String(tx?.approvedAt || tx?.createdAt || "").split("T")[0];
+    return txDate === today;
+  });
+
+  const summary = approvedToday.reduce((acc, tx) => {
+    const kind = String(tx?.kind || "sale").toLowerCase();
+    const sign = kind === "return" ? -1 : 1;
+    acc.transactions += 1;
+    acc.totalKg += sign * Number(tx?.amountKg || 0);
+    acc.totalAmount += sign * Number(tx?.totalPrice || 0);
+    acc.cashAmount += sign * Number(tx?.cashPaidAmount || 0);
+    acc.transferAmount += sign * Number(tx?.transferPaidAmount || 0);
+    return acc;
+  }, {
+    transactions: 0,
+    totalKg: 0,
+    totalAmount: 0,
+    cashAmount: 0,
+    transferAmount: 0,
+  });
+
+  const lines = [
+    `🧾 ${WAREHOUSE_COMPANY_NAME}`,
+    `📊 Kunlik cash/transfer hisobot`,
+    `📅 Sana: ${today}`,
+    ``,
+    `🧮 Tranzaksiyalar: ${summary.transactions} ta`,
+    `⚖️ Jami hajm: ${summary.totalKg.toFixed(3)} kg`,
+    `💰 Savdo summasi: ${formatMoney(summary.totalAmount)} so'm`,
+    `💵 Naqd: ${formatMoney(summary.cashAmount)} so'm`,
+    `📲 O'tkazma: ${formatMoney(summary.transferAmount)} so'm`,
+  ];
+
+  return {
+    date: today,
+    summary,
+    text: lines.join("\n"),
+  };
+}
+
+async function sendTelegramDailyFinanceReport(options = {}) {
+  const state = options.state || loadWarehouse();
+  const report = buildTelegramDailyFinanceReport(state, options.date || new Date());
+  const recipients = Array.isArray(options.chatIds) && options.chatIds.length
+    ? options.chatIds
+    : [
+        process.env.TELEGRAM_ADMIN_CHAT_ID?.trim(),
+        process.env.TELEGRAM_ACCOUNTANT_CHAT_ID?.trim(),
+      ];
+  const normalizedRecipients = recipients
+    .filter((entry) => entry != null)
+    .map((entry) => String(entry).trim())
+    .filter(Boolean);
+  const uniqueRecipients = [...new Set(normalizedRecipients)];
+  let sent = 0;
+  for (const chatId of uniqueRecipients) {
+    const ok = await sendTelegramMessage(chatId, report.text);
+    if (ok) sent += 1;
+  }
+  return {
+    ok: sent > 0,
+    sent,
+    recipients: uniqueRecipients.length,
+    summary: report.summary,
+    date: report.date,
+  };
+}
+
 // --- Scheduler: har 3 kunda bir marta tekshirish ---
 function startDebtReminderScheduler() {
   async function check() {
@@ -2064,6 +2149,8 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         getSchedulerState: () => schedulerState,
         sendDebtRemindersToAll,
         sendDebtReminderApprovalRequest,
+        sendTelegramDailyFinanceReport,
+        isTelegramDailyReportRequester,
         cancelPendingDebtReminder: () => {
           schedulerState.pendingDebtReminderApproval = false;
           saveSchedulerState(schedulerState);

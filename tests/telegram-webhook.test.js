@@ -169,6 +169,26 @@ function makeDeps(state, dbPath, overrides = {}) {
     cancelPendingDebtReminder: () => {
       deps._schedulerState.pendingDebtReminderApproval = false;
     },
+    isTelegramDailyReportRequester: (telegramId) => Number(telegramId) === 999,
+    sendTelegramDailyFinanceReport: async (options = {}) => {
+      const chatIds = Array.isArray(options.chatIds) ? options.chatIds : [999];
+      for (const chatId of chatIds) {
+        await deps.sendTelegramMessage(chatId, "KUNLIK HISOBOT");
+      }
+      return {
+        ok: true,
+        sent: chatIds.length,
+        recipients: chatIds.length,
+        summary: {
+          transactions: 1,
+          totalKg: 10,
+          totalAmount: 100000,
+          cashAmount: 40000,
+          transferAmount: 60000,
+        },
+        date: "2026-01-01",
+      };
+    },
   };
   return deps;
 }
@@ -310,6 +330,49 @@ describe("Telegram webhook handleri", () => {
     assert.ok(deps._sentToAdmin[0].includes("@valijon"), `Admin DM da username yo'q: ${deps._sentToAdmin[0]}`);
     assert.ok(deps._sentToChannel[0].includes("@valijon"), `Kanal xabarida username yo'q: ${deps._sentToChannel[0]}`);
   });
+
+  test("10. /hisobot — ruxsatli chat kunlik hisobot oladi", async () => {
+    const { dbPath, state } = makeTempState();
+    const deps = makeDeps(state, dbPath);
+    deps._postBody = {
+      message: {
+        text: "/hisobot",
+        chat: { id: 999 },
+      },
+    };
+
+    const req = makeReq("POST", deps._postBody);
+    const res = makeRes();
+    await handleWarehouseApiRoute(req, res, null, "/api/telegram/webhook", deps);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.reportSent, true);
+    assert.equal(deps._sentToUser.length, 1);
+    assert.equal(deps._sentToUser[0].id, 999);
+    assert.ok(deps._sentToUser[0].text.includes("KUNLIK HISOBOT"));
+  });
+
+  test("11. /hisobot — ruxsatsiz chat rad etiladi", async () => {
+    const { dbPath, state } = makeTempState();
+    const deps = makeDeps(state, dbPath);
+    deps._postBody = {
+      message: {
+        text: "/hisobot",
+        chat: { id: 111 },
+      },
+    };
+
+    const req = makeReq("POST", deps._postBody);
+    const res = makeRes();
+    await handleWarehouseApiRoute(req, res, null, "/api/telegram/webhook", deps);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.denied, true);
+    assert.equal(deps._sentToUser.length, 1);
+    assert.ok(deps._sentToUser[0].text.includes("faqat admin yoki buxgalterlar"));
+  });
 });
 
 describe("Qarz eslatma scheduler (admin ruxsati)", () => {
@@ -395,5 +458,21 @@ describe("Qarz eslatma scheduler (admin ruxsati)", () => {
     assert.equal(res.statusCode, 200);
     assert.equal(deps._sentToUser.length, 0, "Mijozga xabar yuborilmasligi kerak");
     assert.ok(deps._sentToAdmin[0].includes("yo'q"), `Admin DM: ${deps._sentToAdmin[0]}`);
+  });
+});
+
+describe("Telegram daily report API", () => {
+  test("seller/accountant/admin API orqali hisobot yubora oladi", async () => {
+    const { dbPath, state } = makeTempState();
+    const deps = makeDeps(state, dbPath);
+    deps._postBody = {};
+    const req = makeReq("POST", deps._postBody);
+    const res = makeRes();
+
+    await handleWarehouseApiRoute(req, res, null, "/api/warehouse/telegram/daily-report", deps);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.report.sent, 1);
   });
 });

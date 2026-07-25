@@ -46,6 +46,8 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     sendTelegramTransferChannelMessage,
     sendTransactionPhotosToChannels,
     sendTelegramAdminDm,
+    sendTelegramDailyFinanceReport,
+    isTelegramDailyReportRequester,
     buildChannelSaleMsg,
     buildChannelPaymentMsg,
     buildChannelApprovalMsg,
@@ -327,6 +329,29 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
 
+    // /hisobot — admin yoki buxgalterga kunlik cash/transfer hisobot
+    if (txt === "/hisobot") {
+      const canRequest = isTelegramDailyReportRequester(payload.telegramId);
+      if (!canRequest) {
+        await sendTelegramMessage(payload.telegramId, "❌ Bu buyruq faqat admin yoki buxgalterlar uchun.");
+        sendApiJson(res, 200, { ok: true, denied: true });
+        return true;
+      }
+      try {
+        const reportResult = await sendTelegramDailyFinanceReport({ chatIds: [payload.telegramId] });
+        if (reportResult?.ok) {
+          sendApiJson(res, 200, { ok: true, reportSent: true });
+        } else {
+          await sendTelegramMessage(payload.telegramId, "⚠️ Hisobot yuborilmadi. Telegram sozlamalarini tekshiring.");
+          sendApiJson(res, 200, { ok: true, reportSent: false });
+        }
+      } catch (e) {
+        await sendTelegramMessage(payload.telegramId, `❌ Hisobotda xatolik: ${e.message || "noma'lum xatolik"}`);
+        sendApiJson(res, 200, { ok: true, reportSent: false });
+      }
+      return true;
+    }
+
     // Buyurtma qabul qilish (misol: Ali aka 12 kg)
     try {
       const result = await createWarehouseTransaction(payload);
@@ -394,6 +419,31 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       (Array.isArray(state.telegramMessages) ? state.telegramMessages : []).slice(0, limit)
     );
     sendApiJson(res, 200, { ok: true, messages });
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/telegram/daily-report" && req.method === "POST") {
+    if (!assertWarehouseOperator(req, res, {
+      allowAdmin: true,
+      roles: ["seller", "accountant"],
+      message: "Telegram hisobot yuborish uchun kirish kerak",
+    })) {
+      return true;
+    }
+    try {
+      const report = await sendTelegramDailyFinanceReport();
+      if (!report?.ok) {
+        const envMissing = Number(report?.recipients || 0) <= 0;
+        sendApiJson(res, 400, { error: envMissing
+          ? "Hisobot yuborilmadi: TELEGRAM_ADMIN_CHAT_ID yoki TELEGRAM_ACCOUNTANT_CHAT_ID sozlanmagan."
+          : "Hisobot yuborilmadi: Telegram API xatosi yoki chatga yuborish muvaffaqiyatsiz bo'ldi.",
+        });
+        return true;
+      }
+      sendApiJson(res, 200, { ok: true, report });
+    } catch (e) {
+      sendApiJson(res, 400, { error: e.message || "Hisobotni yuborib bo'lmadi" });
+    }
     return true;
   }
 

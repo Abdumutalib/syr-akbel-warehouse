@@ -599,7 +599,10 @@
       </aside>
 
       <main class="card">
-        <h2>Tasdiq kutayotgan yozuvlar</h2>
+        <h2>
+          Tasdiq kutayotgan yozuvlar
+          <button id="sendDailyTelegramReport" class="secondary" style="font-size: 13px; padding: 4px 12px; margin-left: 12px; vertical-align: middle;">Telegram hisobot</button>
+        </h2>
         <div id="pendingList" class="tx-list"></div>
 
         <h2 style="margin-top: 32px;">
@@ -693,6 +696,7 @@
     const stockKgEl = document.getElementById("stockKg");
     const pendingCountEl = document.getElementById("pendingCount");
     const stockValueEl = document.getElementById("stockValue");
+    const sendDailyTelegramReportEl = document.getElementById("sendDailyTelegramReport");
     const cashPriceValueEl = document.getElementById("cashPriceValue");
     const transferPriceValueEl = document.getElementById("transferPriceValue");
     const cashPriceKgEl = document.getElementById("cashPriceKg");
@@ -853,6 +857,7 @@
             <span>#${item.id}</span>
           </div>
           <p>${item.amountKg} kg · ${numberFormat(item.totalPrice)} so'm</p>
+          ${renderPendingSource(item)}
           <p class="raw">${item.extractedText || ""}</p>
           <label for="cash-paid-${item.id}">Naqd pul</label>
           <input id="cash-paid-${item.id}" type="number" min="0" step="1" placeholder="0">
@@ -863,6 +868,33 @@
           </div>
         </article>
       `).join("");
+    }
+
+    function renderPendingSource(item) {
+      const telegramRaw = item?.user?.telegramId;
+      if (!telegramRaw) {
+        return `<p style="margin-top:4px; color: var(--muted);">Qo'lda kiritilgan</p>`;
+      }
+      const telegramId = Number(telegramRaw);
+      return `<p style="margin-top:4px; color: var(--muted);">Telegram buyurtma · ID: ${Number.isFinite(telegramId) ? telegramId : "-"}</p>`;
+    }
+
+    async function sendDailyTelegramReport() {
+      if (!sendDailyTelegramReportEl) return;
+      if (sendDailyTelegramReportEl.disabled) return;
+      sendDailyTelegramReportEl.disabled = true;
+      sendDailyTelegramReportEl.textContent = "Yuborilmoqda...";
+      try {
+        const data = await apiFetch("/api/warehouse/telegram/daily-report", { method: "POST" });
+        const sent = Number(data?.report?.sent || 0);
+        const recipients = Number(data?.report?.recipients || 0);
+        setStatus(`✅ Telegram hisobot yuborildi (${sent}/${recipients})`);
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        sendDailyTelegramReportEl.disabled = false;
+        sendDailyTelegramReportEl.textContent = "Telegram hisobot";
+      }
     }
 
     function renderStaff(staff) {
@@ -1539,6 +1571,9 @@
 
     document.getElementById("refreshInbox")?.addEventListener("click", () => {
       loadTelegramInbox().catch(() => {});
+    });
+    sendDailyTelegramReportEl?.addEventListener("click", () => {
+      sendDailyTelegramReport().catch(() => {});
     });
   </script>
   <script src="/warehouse/assets/warehouse-offline.js"></script>
