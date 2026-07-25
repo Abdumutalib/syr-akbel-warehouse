@@ -2,6 +2,33 @@
  * Warehouse API and utilities
  */
 
+const GET_CACHE_TTL_MS = 60 * 1000;
+const getRequestMemoryCache = new Map();
+const inFlightGetRequests = new Map();
+
+function cloneJsonValue(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function getMemoryCachedResponse(cacheKey) {
+  const entry = getRequestMemoryCache.get(cacheKey);
+  if (!entry) {
+    return null;
+  }
+  if (Date.now() - entry.updatedAt > GET_CACHE_TTL_MS) {
+    getRequestMemoryCache.delete(cacheKey);
+    return null;
+  }
+  return cloneJsonValue(entry.data);
+}
+
+function setMemoryCachedResponse(cacheKey, data) {
+  getRequestMemoryCache.set(cacheKey, {
+    updatedAt: Date.now(),
+    data: cloneJsonValue(data),
+  });
+}
+
 window.warehouseApi = {
   /**
    * Centralized apiFetch logic
@@ -10,11 +37,30 @@ window.warehouseApi = {
     const normalizedUrl = typeof url === 'string' && url.startsWith('/api/warehouse')
       ? `/warehouse/api${url.slice('/api'.length)}`
       : url;
+    const requestMethod = String(options.method || 'GET').toUpperCase();
+    const cacheKey = requestMethod === 'GET' ? normalizedUrl : '';
+
+    if (cacheKey) {
+      const cached = getMemoryCachedResponse(cacheKey);
+      if (cached) {
+        return cached;
+      }
+      const pending = inFlightGetRequests.get(cacheKey);
+      if (pending) {
+        return pending.then((data) => cloneJsonValue(data));
+      }
+    }
 
     const requestHeaders = new Headers(options.headers || {});
 
     if (authHeaderValue && !requestHeaders.has('Authorization')) {
       requestHeaders.set('Authorization', authHeaderValue);
+    }
+    if (authHeaderValue && !requestHeaders.has('X-Warehouse-Authorization')) {
+      requestHeaders.set('X-Warehouse-Authorization', authHeaderValue);
+    }
+    if (!authHeaderValue && requestHeaders.has('Authorization') && !requestHeaders.has('X-Warehouse-Authorization')) {
+      requestHeaders.set('X-Warehouse-Authorization', requestHeaders.get('Authorization') || '');
     }
     if (accessToken && !requestHeaders.has('X-Warehouse-Access')) {
       requestHeaders.set('X-Warehouse-Access', accessToken);
@@ -51,34 +97,63 @@ window.warehouseApi = {
       }
     }
 
-    while (retries <= maxRetries) {
-      try {
-        response = await performFetch();
-        
-        // Retry on 5xx errors if we have an idempotency key
-        if (response.status >= 500 && response.status <= 599 && requestHeaders.has('Idempotency-Key') && retries < maxRetries) {
-          retries++;
-          await new Promise(r => setTimeout(r, 1000 * retries)); // Exponential-ish backoff
-          continue;
-        }
-        break;
-      } catch (err) {
-        if (options && options.method && options.method !== 'GET') {
-          if (window.warehouseOfflineQueue) {
-            await window.warehouseOfflineQueue.addRequest(normalizedUrl, options, authHeaderValue, accessToken);
-            return { success: true, offline: true, message: 'Oflayn saqlandi' };
+    const requestRunner = async () => {
+      while (retries <= maxRetries) {
+        try {
+          response = await performFetch();
+          
+          // Retry on 5xx errors if we have an idempotency key
+          if (response.status >= 500 && response.status <= 599 && requestHeaders.has('Idempotency-Key') && retries < maxRetries) {
+            retries++;
+            await new Promise(r => setTimeout(r, 1000 * retries)); // Exponential-ish backoff
+            continue;
           }
+          break;
+        } catch (err) {
+          if (requestMethod === 'GET') {
+            const cached = getMemoryCachedResponse(cacheKey)
+              || await (window.warehouseOfflineQueue?.getCachedGet?.(cacheKey, 24 * 60 * 60 * 1000).catch(() => null));
+            if (cached) {
+              setMemoryCachedResponse(cacheKey, cached);
+              return cloneJsonValue(cached);
+            }
+          }
+          if (options && options.method && options.method !== 'GET') {
+            if (window.warehouseOfflineQueue) {
+              await window.warehouseOfflineQueue.addRequest(normalizedUrl, options, authHeaderValue, accessToken);
+              return { success: true, offline: true, message: 'Oflayn saqlandi' };
+            }
+          }
+          throw err;
         }
-        throw err;
+      }
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || `So'rov bajarilmadi (${response.status})`);
+      }
+
+      if (cacheKey) {
+        setMemoryCachedResponse(cacheKey, data);
+        if (window.warehouseOfflineQueue?.setCachedGet) {
+          window.warehouseOfflineQueue.setCachedGet(cacheKey, data).catch(() => {});
+        }
+      }
+
+      return data;
+    };
+
+    const execution = requestRunner();
+    if (cacheKey) {
+      inFlightGetRequests.set(cacheKey, execution);
+    }
+    try {
+      return await execution;
+    } finally {
+      if (cacheKey) {
+        inFlightGetRequests.delete(cacheKey);
       }
     }
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data.error || `So'rov bajarilmadi (${response.status})`);
-    }
-
-    return data;
   },
 
   /**

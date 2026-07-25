@@ -1,8 +1,31 @@
-const CACHE_NAME = 'akbel-cache-v10000';
-const MAX_CACHE_ITEMS = 50;
+const CACHE_NAME = 'akbel-cache-v10001';
+const MAX_CACHE_ITEMS = 120;
+const CORE_ASSETS = [
+  '/warehouse/admin',
+  '/warehouse/customers',
+  '/warehouse/orders',
+  '/warehouse/ledger',
+  '/warehouse/seller',
+  '/warehouse/seller/sale/cash',
+  '/warehouse/seller/sale/transfer',
+  '/warehouse/assets/warehouse-api.js',
+  '/warehouse/assets/warehouse-auth-pin.js',
+  '/warehouse/assets/warehouse-offline.js',
+  '/warehouse-top-nav.js',
+  '/favicon.svg',
+  '/icon-192.png',
+];
+const OFFLINE_HTML = `<!doctype html><html lang="uz"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Oflayn</title><body style="font-family:sans-serif;background:#f6efe6;color:#1d1a16;display:grid;place-items:center;min-height:100vh;margin:0;padding:24px;text-align:center"><div><h1 style="margin:0 0 12px">Siz oflaynsiz</h1><p style="margin:0;max-width:28rem;line-height:1.5">Oxirgi yuklangan sahifalar va keshlangan ma'lumotlar mavjud bo'lsa ishlaydi. Tarmoq qaytgach so'rovlar avtomatik yuboriladi.</p></div></body></html>`;
 
 self.addEventListener('install', event => {
-  self.skipWaiting();
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(CORE_ASSETS.map((url) => new Request(url, { cache: 'reload' })));
+    await cache.put('/__offline__', new Response(OFFLINE_HTML, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    }));
+    self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', event => {
@@ -45,26 +68,32 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Network First, fallback to cache (faqat statik fayllar uchun)
-  event.respondWith(
-    fetch(req).then(res => {
-      // Tarmoq ishladi, javobni keshga saqlaymiz
-      const resClone = res.clone();
-      caches.open(CACHE_NAME).then(cache => {
-        if (req.url.startsWith('http')) {
-          cache.put(req, resClone).then(() => {
-            trimCache(CACHE_NAME, MAX_CACHE_ITEMS);
-          });
-        }
-      });
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const cachedRes = await cache.match(req, { ignoreSearch: true });
+    const networkFetch = fetch(req).then(async (res) => {
+      if (res && res.ok && req.url.startsWith('http')) {
+        await cache.put(req, res.clone());
+        trimCache(CACHE_NAME, MAX_CACHE_ITEMS);
+      }
       return res;
-    }).catch(async err => {
-      // Tarmoq uzildi, keshdan qidiramiz
-      const cachedRes = await caches.match(req);
-      if (cachedRes) {
-        return cachedRes;
+    });
+
+    if (cachedRes) {
+      event.waitUntil(networkFetch.catch(() => null));
+      return cachedRes;
+    }
+
+    try {
+      return await networkFetch;
+    } catch (err) {
+      if (req.mode === 'navigate') {
+        const offlineRes = await cache.match('/__offline__');
+        if (offlineRes) {
+          return offlineRes;
+        }
       }
       throw err;
-    })
-  );
+    }
+  })());
 });

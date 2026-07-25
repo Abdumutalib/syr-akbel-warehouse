@@ -1,9 +1,11 @@
 const DB_NAME = 'akbel-offline-db';
+const DB_VERSION = 2;
 const STORE_NAME = 'sync-queue';
+const API_CACHE_STORE = 'api-cache';
 
 function openOfflineDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (e) => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -11,6 +13,9 @@ function openOfflineDb() {
       }
       if (!db.objectStoreNames.contains('drafts')) {
         db.createObjectStore('drafts', { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(API_CACHE_STORE)) {
+        db.createObjectStore(API_CACHE_STORE, { keyPath: 'key' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -61,6 +66,9 @@ window.warehouseOfflineQueue = {
     }
     if (authValue && !headersObj['authorization'] && !headersObj['Authorization']) {
       headersObj['Authorization'] = authValue;
+    }
+    if (authValue && !headersObj['x-warehouse-authorization'] && !headersObj['X-Warehouse-Authorization']) {
+      headersObj['X-Warehouse-Authorization'] = authValue;
     }
     if (accessToken && !headersObj['x-warehouse-access']) {
       headersObj['x-warehouse-access'] = accessToken;
@@ -139,6 +147,57 @@ window.warehouseOfflineQueue = {
       const store = tx.objectStore('drafts');
       const req = store.delete(key);
       req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async setCachedGet(key, data) {
+    const db = await openOfflineDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(API_CACHE_STORE, 'readwrite');
+      const store = tx.objectStore(API_CACHE_STORE);
+      const req = store.put({ key, data, updatedAt: Date.now() });
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async getCachedGet(key, maxAgeMs = 5 * 60 * 1000) {
+    const db = await openOfflineDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(API_CACHE_STORE, 'readonly');
+      const store = tx.objectStore(API_CACHE_STORE);
+      const req = store.get(key);
+      req.onsuccess = () => {
+        const record = req.result;
+        if (!record) {
+          resolve(null);
+          return;
+        }
+        if (maxAgeMs > 0 && Date.now() - Number(record.updatedAt || 0) > maxAgeMs) {
+          resolve(null);
+          return;
+        }
+        resolve(record.data ?? null);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async purgeExpiredCache(maxAgeMs = 24 * 60 * 60 * 1000) {
+    const db = await openOfflineDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(API_CACHE_STORE, 'readwrite');
+      const store = tx.objectStore(API_CACHE_STORE);
+      const req = store.getAll();
+      req.onsuccess = async () => {
+        const items = Array.isArray(req.result) ? req.result : [];
+        const expired = items.filter((entry) => Date.now() - Number(entry.updatedAt || 0) > maxAgeMs);
+        for (const entry of expired) {
+          store.delete(entry.key);
+        }
+        resolve(expired.length);
+      };
       req.onerror = () => reject(req.error);
     });
   },
@@ -224,6 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('warehouse-offline-saved', updateIndicator);
   
   updateIndicator();
+  window.warehouseOfflineQueue.purgeExpiredCache().catch(() => {});
   setInterval(() => {
     if (navigator.onLine) {
       window.warehouseOfflineQueue.syncPendingRequests();
