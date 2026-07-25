@@ -157,6 +157,86 @@ function loadWarehouse() {
   return warehouseStateCache;
 }
 
+function readConfiguredAdminCredentials(state = warehouseStateCache) {
+  const envUsername = String(process.env.WAREHOUSE_ADMIN_USERNAME || "").trim();
+  const envPassword = String(process.env.WAREHOUSE_ADMIN_PASSWORD || "").trim();
+  const storedUsername = String(state?.adminCredentials?.username || "").trim();
+  const storedPassword = String(state?.adminCredentials?.password || "").trim();
+
+  if (storedUsername && storedPassword) {
+    return {
+      username: storedUsername,
+      password: storedPassword,
+      source: "state",
+    };
+  }
+
+  return {
+    username: envUsername,
+    password: envPassword,
+    source: "env",
+  };
+}
+
+function setConfiguredAdminCredentials(state, username, password) {
+  if (!state || typeof state !== "object") return;
+  if (!state.adminCredentials || typeof state.adminCredentials !== "object") {
+    state.adminCredentials = {};
+  }
+  state.adminCredentials.username = String(username || "").trim();
+  state.adminCredentials.password = String(password || "").trim();
+  state.adminCredentials.updatedAt = new Date().toISOString();
+}
+
+const WAREHOUSE_AUTH_SYNC_TOKEN = String(process.env.WAREHOUSE_AUTH_SYNC_TOKEN || "").trim();
+const WAREHOUSE_AUTH_SYNC_TARGETS = String(process.env.WAREHOUSE_AUTH_SYNC_TARGETS || "")
+  .split(/[\s,;]+/)
+  .map((entry) => entry.trim())
+  .filter(Boolean)
+  .map((entry) => entry.replace(/\/+$/, ""));
+
+async function propagateAdminCredentials({ username, password }) {
+  if (!WAREHOUSE_AUTH_SYNC_TOKEN || WAREHOUSE_AUTH_SYNC_TARGETS.length === 0) {
+    return {
+      enabled: false,
+      reason: "sync-not-configured",
+      targets: WAREHOUSE_AUTH_SYNC_TARGETS,
+      ok: [],
+      failed: [],
+    };
+  }
+
+  const ok = [];
+  const failed = [];
+  for (const base of WAREHOUSE_AUTH_SYNC_TARGETS) {
+    const url = `${base}/api/warehouse/admin-credentials/sync`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Warehouse-Sync-Token": WAREHOUSE_AUTH_SYNC_TOKEN,
+        },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!response.ok) {
+        failed.push({ target: base, status: response.status });
+        continue;
+      }
+      ok.push(base);
+    } catch (error) {
+      failed.push({ target: base, error: error.message });
+    }
+  }
+
+  return {
+    enabled: true,
+    targets: WAREHOUSE_AUTH_SYNC_TARGETS,
+    ok,
+    failed,
+  };
+}
+
 function buildCsvContent(state, mode = "all") {
   const userMap = new Map(state.users.map((u) => [u.id, u.fullName]));
   const KIND_LABELS = { sale: "Savdo", payment: "To'lov", "pending-sale": "Kutilayotgan" };
@@ -585,6 +665,20 @@ function parseBasicAuthHeader(headerValue) {
     username: decoded.slice(0, separator),
     password: decoded.slice(separator + 1),
   };
+}
+
+function extractWarehouseBasicAuthHeader(req) {
+  const candidates = [
+    req?.headers?.authorization,
+    req?.headers?.["x-warehouse-authorization"],
+    req?.headers?.["x-warehouse-auth"],
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
 }
 
 function extractWarehouseAccessToken(req) {
@@ -1162,15 +1256,17 @@ async function readPostJson(req) {
 }
 
 function assertWarehouseAdmin(req, res) {
-  const expectedUser = process.env.WAREHOUSE_ADMIN_USERNAME?.trim();
-  const expectedPassword = process.env.WAREHOUSE_ADMIN_PASSWORD?.trim();
+  const { username: expectedUser, password: expectedPassword } = readConfiguredAdminCredentials(loadWarehouse());
   if (!expectedUser || !expectedPassword) {
     sendApiJson(res, 503, {
       error: "Admin login va paroli sozlanmagan. WAREHOUSE_ADMIN_USERNAME va WAREHOUSE_ADMIN_PASSWORD ni kiriting.",
     });
     return false;
   }
-  const auth = parseBasicAuthHeader(req.headers.authorization);
+  if (isGateAuthenticatedByCookie(req)) {
+    return true;
+  }
+  const auth = parseBasicAuthHeader(extractWarehouseBasicAuthHeader(req));
   if (!auth || auth.username !== expectedUser || auth.password !== expectedPassword) {
     const ip = getClientIp(req);
     recordFailedAuth(ip);
@@ -1211,13 +1307,20 @@ function authenticateWarehouseOperator(req, options = {}) {
       }
     }
   }
-  const auth = parseBasicAuthHeader(req.headers.authorization);
+  const auth = parseBasicAuthHeader(extractWarehouseBasicAuthHeader(req));
   if (!auth) {
     return null;
   }
   const allowAdmin = options.allowAdmin !== false;
-  const expectedUser = process.env.WAREHOUSE_ADMIN_USERNAME?.trim();
-  const expectedPassword = process.env.WAREHOUSE_ADMIN_PASSWORD?.trim();
+  const { username: expectedUser, password: expectedPassword } = readConfiguredAdminCredentials(state);
+  if (allowAdmin && isGateAuthenticatedByCookie(req) && expectedUser) {
+    return {
+      kind: "admin",
+      role: "admin",
+      username: expectedUser,
+      fullName: "Admin",
+    };
+  }
   if (
     allowAdmin &&
     expectedUser &&
@@ -1951,7 +2054,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     res.writeHead(204, {
       ...baseApiJsonHeaders(req),
       "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Warehouse-Access",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Warehouse-Authorization, X-Warehouse-Auth, X-Warehouse-Access",
     });
     res.end();
     return;
@@ -1982,6 +2085,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     try {
       if (await handleWarehouseApiRoute(req, res, u, apiPath, {
         approveTransaction,
+        authSyncToken: WAREHOUSE_AUTH_SYNC_TOKEN,
         assertWarehouseAdmin,
         assertWarehouseOperator,
         authenticateStaffAccessToken,
@@ -2008,6 +2112,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         permanentlyDeleteCustomer,
         listStaffAccounts,
         loadWarehouse,
+        readConfiguredAdminCredentials,
         withWarehouseRead,
         withWarehouseWrite,
         normalizeApprovalPayment,
@@ -2021,6 +2126,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         revokeStaffAccessLink,
         saveWarehouse,
         setCustomerSellerBalanceVisibility,
+        setConfiguredAdminCredentials,
         seedWarehouseStock,
         sendApiJson: (res, status, data) => sendApiJson(res, status, data, req),
         sendTelegramAdminDm,
@@ -2051,6 +2157,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         deleteWarehouseOrder,
         upsertCustomer,
         verifyStaffPin,
+        propagateAdminCredentials,
         recordTelegramMessage: async ({ telegramId, text, type }) => {
           await withWarehouseWrite((state) => {
             // customerName ni telegramId bo'yicha topish
@@ -2099,8 +2206,9 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     const params = new URLSearchParams(body);
     const username = String(params.get("username") || "").trim();
     const password = String(params.get("password") || "").trim();
-    const expectedUser = process.env.WAREHOUSE_ADMIN_USERNAME?.trim() || "";
-    const expectedPassword = process.env.WAREHOUSE_ADMIN_PASSWORD?.trim() || "";
+    const configuredAdmin = readConfiguredAdminCredentials(loadWarehouse());
+    const expectedUser = configuredAdmin.username || "";
+    const expectedPassword = configuredAdmin.password || "";
 
     if (!username || !password) {
       redirectTo(res, "/warehouse-register?error=missing_credentials");

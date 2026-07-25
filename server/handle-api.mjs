@@ -24,9 +24,12 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     listWarehouseOrders,
     listWarehouseReceipts,
     permanentlyDeleteCustomer,
+    propagateAdminCredentials,
     recordWarehouseReceipt,
+    readConfiguredAdminCredentials,
     listStaffAccounts,
     loadWarehouse,
+    authSyncToken,
     withWarehouseRead,
     withWarehouseWrite,
     normalizeApprovalPayment,
@@ -38,6 +41,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     restoreDeletedCustomer,
     revokeStaffAccessLink,
     saveWarehouse,
+    setConfiguredAdminCredentials,
     seedWarehouseStock,
     sendApiJson,
     sendTelegramMessage,
@@ -98,6 +102,27 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return false;
     }
     return Number(customer?.ownerOperatorId) === operatorId;
+  };
+
+  const syncToken = String(authSyncToken || "").trim();
+  const isStrongPassword = (value) => /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(String(value || ""));
+
+  const parseAdminCredentialsBody = (body) => {
+    if (!body || typeof body !== "object") {
+      throw new Error("JSON formati noto'g'ri");
+    }
+    const username = String(body.username || "").trim();
+    const password = String(body.password || "").trim();
+    if (!username || !password) {
+      throw new Error("Username va password majburiy");
+    }
+    if (username.length < 3) {
+      throw new Error("Username kamida 3 ta belgi bo'lishi kerak");
+    }
+    if (!isStrongPassword(password)) {
+      throw new Error("Password kamida 8 ta belgi, katta-kichik harf va raqam bo'lishi kerak");
+    }
+    return { username, password };
   };
 
   const IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -1412,6 +1437,99 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       sendApiJson(res, 200, { ok: true, pricing });
     } catch (e) {
       sendApiJson(res, 400, { error: e.message || "Narxlarni saqlab bo'lmadi" });
+    }
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/admin-credentials" && req.method === "GET") {
+    if (!assertWarehouseAdmin(req, res)) {
+      return true;
+    }
+    const credentials = readWarehouse((state) => readConfiguredAdminCredentials(state));
+    sendApiJson(res, 200, {
+      ok: true,
+      username: credentials.username,
+      source: credentials.source,
+      updatedAt: loadWarehouse()?.adminCredentials?.updatedAt || null,
+    });
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/admin-credentials" && req.method === "POST") {
+    if (!assertWarehouseAdmin(req, res)) {
+      return true;
+    }
+    const body = await readPostJson(req);
+    if (body === null) {
+      sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
+      return true;
+    }
+    try {
+      const next = parseAdminCredentialsBody(body);
+      const previous = readWarehouse((state) => readConfiguredAdminCredentials(state));
+      const saved = await writeWarehouse((state) => {
+        setConfiguredAdminCredentials(state, next.username, next.password);
+        const effective = readConfiguredAdminCredentials(state);
+        return {
+          username: effective.username,
+          source: effective.source,
+          updatedAt: state?.adminCredentials?.updatedAt || null,
+        };
+      });
+
+      const syncResult = await propagateAdminCredentials(next);
+      if (syncResult.enabled && syncResult.failed.length > 0) {
+        await writeWarehouse((state) => {
+          setConfiguredAdminCredentials(state, previous.username, previous.password);
+        });
+        sendApiJson(res, 502, {
+          ok: false,
+          error: "Sync bajarilmadi, lokal o'zgarish ham bekor qilindi",
+          credentials: {
+            username: previous.username,
+            source: "state",
+          },
+          sync: syncResult,
+        });
+        return true;
+      }
+
+      sendApiJson(res, 200, {
+        ok: true,
+        credentials: saved,
+        sync: syncResult,
+      });
+    } catch (e) {
+      sendApiJson(res, 400, { error: e.message || "Login/parolni saqlab bo'lmadi" });
+    }
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/admin-credentials/sync" && req.method === "POST") {
+    const headerToken = String(req.headers["x-warehouse-sync-token"] || "").trim();
+    if (!syncToken || !headerToken || headerToken !== syncToken) {
+      sendApiJson(res, 401, { error: "Sync token noto'g'ri" });
+      return true;
+    }
+    const body = await readPostJson(req);
+    if (body === null) {
+      sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
+      return true;
+    }
+    try {
+      const next = parseAdminCredentialsBody(body);
+      const saved = await writeWarehouse((state) => {
+        setConfiguredAdminCredentials(state, next.username, next.password);
+        const effective = readConfiguredAdminCredentials(state);
+        return {
+          username: effective.username,
+          source: effective.source,
+          updatedAt: state?.adminCredentials?.updatedAt || null,
+        };
+      });
+      sendApiJson(res, 200, { ok: true, credentials: saved });
+    } catch (e) {
+      sendApiJson(res, 400, { error: e.message || "Sync credentials xato" });
     }
     return true;
   }

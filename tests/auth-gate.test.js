@@ -66,7 +66,7 @@ async function waitForServer(url) {
   while (Date.now() < deadline) {
     try {
       const response = await fetch(url, { redirect: "manual" });
-      if (response.status > 0) {
+      if (response.status >= 200 && response.status < 500) {
         return;
       }
     } catch {}
