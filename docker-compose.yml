@@ -1,0 +1,24 @@
+# Биtta sервер uchun standart Docker Compose fayli
+# Ishlatish: docker compose up -d
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      # /data papkasi konteyner ichida, akbel-data esa serverda doimiy saqlanadi
+      - akbel-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  akbel-data:
+    driver: local

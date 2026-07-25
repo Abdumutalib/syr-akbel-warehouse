@@ -1,0 +1,45 @@
+# Ikkala server uchun Docker Compose fayli (NFS shared volume bilan)
+#
+# Tayyorgarlik:
+#   1. Birinchi serverda NFS sozlang:
+#        apt install nfs-kernel-server
+#        mkdir -p /srv/akbel-data/transaction-photos
+#        echo '/srv/akbel-data  SERVER2_IP(rw,sync,no_subtree_check)' >> /etc/exports
+#        exportfs -a
+#
+#   2. Ikkinchi serverda NFS klient o'rnating:
+#        apt install nfs-common
+#
+#   3. Ikkala serverda .env da WAREHOUSE_ALLOWED_ORIGIN ni to'ldiring:
+#        WAREHOUSE_ALLOWED_ORIGIN=https://akbelim.com,https://server2.akbelim.com
+#
+#   4. NFS_SERVER_IP o'zgaruvchisini .env ga qo'shing:
+#        NFS_SERVER_IP=<birinchi server IP>
+#
+# Ishlatish (ikkala serverda):
+#   docker compose -f docker-compose.multi.yml up -d
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - akbel-shared:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  akbel-shared:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${NFS_SERVER_IP},rw,sync,hard,intr
+      device: ":/srv/akbel-data"
