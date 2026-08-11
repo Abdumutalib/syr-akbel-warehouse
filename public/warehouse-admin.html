@@ -892,17 +892,17 @@
       pendingListEl.innerHTML = items.map((item) => `
         <article class="tx">
           <div class="tx-header">
-            <strong>${item.user?.fullName || "Noma'lum"}</strong>
-            <span>#${item.id}</span>
+            <strong>${window.escapeHtml(item.user?.fullName || "Noma'lum")}</strong>
+            <span>#${window.escapeHtml(item.id)}</span>
           </div>
-          <p>${item.amountKg} kg · ${numberFormat(item.totalPrice)} so'm</p>
-          <p class="raw">${item.extractedText || ""}</p>
-          <label for="cash-paid-${item.id}">Naqd pul</label>
-          <input id="cash-paid-${item.id}" type="number" min="0" step="1" placeholder="0">
-          <label for="transfer-paid-${item.id}">O'tkazma</label>
-          <input id="transfer-paid-${item.id}" type="number" min="0" step="1" placeholder="0">
+          <p>${window.escapeHtml(item.amountKg)} kg · ${window.escapeHtml(numberFormat(item.totalPrice))} so'm</p>
+          <p class="raw">${window.escapeHtml(item.extractedText || "")}</p>
+          <label for="cash-paid-${window.escapeHtml(item.id)}">Naqd pul</label>
+          <input id="cash-paid-${window.escapeHtml(item.id)}" type="number" min="0" step="1" placeholder="0">
+          <label for="transfer-paid-${window.escapeHtml(item.id)}">O'tkazma</label>
+          <input id="transfer-paid-${window.escapeHtml(item.id)}" type="number" min="0" step="1" placeholder="0">
           <div class="tx-actions">
-            <button data-approve="${item.id}">Tasdiqlash</button>
+            <button data-approve="${window.escapeHtml(item.id)}">Tasdiqlash</button>
           </div>
         </article>
       `).join("");
@@ -914,45 +914,44 @@
         return;
       }
       staffListEl.innerHTML = staff.map((entry) => {
-        // Für admin role - alle Berechtigungen anzeigen
-        const effectivePermissions = entry.role === "admin" 
-          ? Object.keys(STAFF_PERMISSION_LABELS) 
+        const effectivePermissions = entry.role === "admin"
+          ? Object.keys(STAFF_PERMISSION_LABELS)
           : (entry.permissions || []);
-        
-        const roleLabel = entry.role === "seller" ? "Sotuvchi" : entry.role === "admin" ? "Administrator" : "Buxgalter";
-        
-        return `
-        <article class="staff-item" data-staff-id="${entry.id}">
-          <strong>${entry.fullName}</strong>
 
-          <div>Lavozim: ${roleLabel}</div>
-          <div style="margin-top: 6px;">Ko'ra oladigan sahifalar: ${permissionSummary(effectivePermissions)}</div>
+        const roleLabel = entry.role === "seller" ? "Sotuvchi" : entry.role === "admin" ? "Administrator" : "Buxgalter";
+
+        return `
+        <article class="staff-item" data-staff-id="${window.escapeHtml(entry.id)}">
+          <strong>${window.escapeHtml(entry.fullName)}</strong>
+
+          <div>Lavozim: ${window.escapeHtml(roleLabel)}</div>
+          <div style="margin-top: 6px;">Ko'ra oladigan sahifalar: ${window.escapeHtml(permissionSummary(effectivePermissions))}</div>
           <div class="tx-actions">
-            ${effectivePermissions.map((permission) => `<button data-create-link="${entry.id}" data-link-permission="${permission}" class="secondary">${STAFF_PERMISSION_LABELS[permission]} linki</button>`).join('')}
+            ${effectivePermissions.map((permission) => `<button data-create-link="${window.escapeHtml(entry.id)}" data-link-permission="${window.escapeHtml(permission)}" class="secondary">${window.escapeHtml(STAFF_PERMISSION_LABELS[permission])} linki</button>`).join('')}
           </div>
           <div class="link-list">
             ${(entry.accessLinks || []).map((link) => `
               <article class="link-item">
-                <strong>${STAFF_PERMISSION_LABELS[link.permission] || link.permission}</strong>
-                <div class="link-url">${accessLinkUrl(link.permission, link.token)}</div>
-                <div>${link.revokedAt ? 'Holati: Bekor qilingan' : 'Holati: Faol'}</div>
+                <strong>${window.escapeHtml(STAFF_PERMISSION_LABELS[link.permission] || link.permission)}</strong>
+                <div class="link-url">${window.escapeHtml(accessLinkUrl(link.permission, link.token))}</div>
+                <div>${window.escapeHtml(link.revokedAt ? 'Holati: Bekor qilingan' : 'Holati: Faol')}</div>
                 <div class="tx-actions">
-                  ${link.revokedAt ? '' : `<button data-revoke-link="${entry.id}" data-link-id="${link.id}">Linkni bekor qilish</button>`}
+                  ${link.revokedAt ? '' : `<button data-revoke-link="${window.escapeHtml(entry.id)}" data-link-id="${window.escapeHtml(link.id)}">Linkni bekor qilish</button>`}
                 </div>
               </article>
-            `).join('') || '<p>Hozircha актив link yo\'q.</p>'}
+            `).join('') || '<p>Hozircha aktiv link yo\'q.</p>'}
           </div>
           <div class="permission-grid">
             ${Object.entries(STAFF_PERMISSION_LABELS).map(([key, label]) => `
               <label class="permission-option">
-                <input type="checkbox" name="staff-permissions-${entry.id}" value="${key}" ${effectivePermissions?.includes(key) ? "checked" : ""}>
-                <span>${label}</span>
+                <input type="checkbox" name="staff-permissions-${window.escapeHtml(entry.id)}" value="${window.escapeHtml(key)}" ${effectivePermissions?.includes(key) ? "checked" : ""}>
+                <span>${window.escapeHtml(label)}</span>
               </label>
             `).join("")}
           </div>
           <div class="tx-actions">
-            <button data-save-permissions="${entry.id}" class="secondary">Ruxsatlarni saqlash</button>
-            <button data-delete-staff="${entry.id}">O'chirish</button>
+            <button data-save-permissions="${window.escapeHtml(entry.id)}" class="secondary">Ruxsatlarni saqlash</button>
+            <button data-delete-staff="${window.escapeHtml(entry.id)}">O'chirish</button>
           </div>
         </article>
       `}).join("");
@@ -965,15 +964,15 @@
       }
       deletedCustomerListEl.innerHTML = customers.map((entry) => `
         <article class="staff-item">
-          <strong>${entry.fullName}</strong>
-          <div>Telefon: ${entry.phone || "-"}</div>
-          <div>Telegram: ${entry.telegramId || "-"}</div>
-          <div>O'chirilgan yozuvlar: ${entry.deletedTransactions}</div>
-          <div>Qaytadigan kg: ${entry.restoredStockKg}</div>
-          <div>O'chirilgan vaqti: ${entry.deletedAt ? new Intl.DateTimeFormat('ru-RU').format(new Date(entry.deletedAt)) : '-'}</div>
+          <strong>${window.escapeHtml(entry.fullName)}</strong>
+          <div>Telefon: ${window.escapeHtml(entry.phone || "-")}</div>
+          <div>Telegram: ${window.escapeHtml(entry.telegramId || "-")}</div>
+          <div>O'chirilgan yozuvlar: ${window.escapeHtml(entry.deletedTransactions)}</div>
+          <div>Qaytadigan kg: ${window.escapeHtml(entry.restoredStockKg)}</div>
+          <div>O'chirilgan vaqti: ${window.escapeHtml(entry.deletedAt ? new Intl.DateTimeFormat('ru-RU').format(new Date(entry.deletedAt)) : '-')}</div>
           <div class="tx-actions">
-            <button data-restore-customer="${entry.id}" class="secondary">Mijozni tiklash</button>
-            <button data-permanent-delete-customer="${entry.id}" style="background: #9f1239;">Butunlay o'chirish</button>
+            <button data-restore-customer="${window.escapeHtml(entry.id)}" class="secondary">Mijozni tiklash</button>
+            <button data-permanent-delete-customer="${window.escapeHtml(entry.id)}" style="background: #9f1239;">Butunlay o'chirish</button>
           </div>
         </article>
       `).join("");
@@ -1064,12 +1063,12 @@
       el.innerHTML = messages.map((m) => `
         <article class="tx" style="background: #f9f6f0;">
           <div class="tx-header">
-            <strong>${m.customerName || "Noma'lum"}</strong>
-            <span style="color: var(--muted); font-size: 13px;">${INBOX_TYPE_LABELS[m.type] || m.type}</span>
+            <strong>${window.escapeHtml(m.customerName || "Noma'lum")}</strong>
+            <span style="color: var(--muted); font-size: 13px;">${window.escapeHtml(INBOX_TYPE_LABELS[m.type] || m.type)}</span>
           </div>
-          <p class="raw" style="margin: 0; font-size: 15px; color: var(--ink);">${m.text.replace(/</g, "&lt;")}</p>
+          <p class="raw" style="margin: 0; font-size: 15px; color: var(--ink);">${window.escapeHtml(m.text || "")}</p>
           <p style="margin: 6px 0 0; color: var(--muted); font-size: 12px;">
-            ${m.telegramId ? `ID: ${m.telegramId} · ` : ""}${new Date(m.receivedAt).toLocaleString("uz-UZ")}
+            ${m.telegramId ? `ID: ${window.escapeHtml(m.telegramId)} · ` : ""}${window.escapeHtml(new Date(m.receivedAt).toLocaleString("uz-UZ"))}
           </p>
         </article>
       `).join("");

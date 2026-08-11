@@ -292,4 +292,77 @@ describe("warehouse auth gate", () => {
     assert.match(response.headers.get("content-type") || "", /text\/html/);
     assert.equal(server.getStderr(), "");
   });
+
+  test("blocks route access until a staff PIN is verified", async () => {
+    let token = "";
+    const server = await startServer({
+      seedState(state) {
+        const account = createStaffAccount(state, {
+          username: "pin-route-user",
+          password: "secret1",
+          fullName: "Pin Route User",
+          role: "seller",
+          permissions: ["seller"],
+          pin: "1234",
+        });
+        const link = createStaffAccessLink(state, account.id, "seller");
+        token = link.token;
+      },
+    });
+
+    const pageResponse = await fetch(`http://127.0.0.1:${server.port}/warehouse/seller?access=${encodeURIComponent(token)}`, {
+      redirect: "manual",
+    });
+
+    assert.equal(pageResponse.status, 302);
+    assert.equal(pageResponse.headers.get("location"), "/warehouse-register?error=link_revoked");
+    assert.equal(server.getStderr(), "");
+  });
+
+  test("requires and unlocks a PIN for staff access links", async () => {
+    let token = "";
+    const server = await startServer({
+      seedState(state) {
+        const account = createStaffAccount(state, {
+          username: "pin-user",
+          password: "secret1",
+          fullName: "Pin User",
+          role: "seller",
+          permissions: ["seller"],
+          pin: "1234",
+        });
+        const link = createStaffAccessLink(state, account.id, "seller");
+        token = link.token;
+      },
+    });
+
+    assert.ok(token);
+
+    const authStatus = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/auth-status?access=${encodeURIComponent(token)}`);
+    const authJson = await authStatus.json();
+
+    assert.equal(authStatus.status, 200);
+    assert.equal(authJson.hasPin, true);
+    assert.equal(authJson.isUnlocked, false);
+    assert.equal(authJson.isWaitingForPin, true);
+
+    const badPin = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/verify-pin?access=${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: "9999" }),
+    });
+    assert.equal(badPin.status, 401);
+
+    const goodPin = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/verify-pin?access=${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: "1234" }),
+    });
+    const unlocked = await goodPin.json();
+
+    assert.equal(goodPin.status, 200);
+    assert.equal(unlocked.isUnlocked, true);
+    assert.equal(unlocked.role, "seller");
+    assert.equal(server.getStderr(), "");
+  });
 });

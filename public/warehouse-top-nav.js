@@ -187,6 +187,7 @@
     }
     return {
       Authorization: `Basic ${btoa(`${credentials.username}:${credentials.password}`)}`,
+      "X-Warehouse-Authorization": `Basic ${btoa(`${credentials.username}:${credentials.password}`)}`,
     };
   }
 

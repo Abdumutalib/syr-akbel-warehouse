@@ -27,10 +27,41 @@ const authApiPaths = [
   "/warehouse/api/warehouse/order-customer-directory",
 ];
 
+let sessionCookie = "";
+
 function authHeader() {
-  if (!username || !password) return {};
+  if (!username || !password) {
+    return sessionCookie ? { Cookie: sessionCookie } : {};
+  }
   const encoded = Buffer.from(`${username}:${password}`, "utf8").toString("base64");
-  return { Authorization: `Basic ${encoded}` };
+  const auth = `Basic ${encoded}`;
+  const headers = {
+    Authorization: auth,
+    "X-Warehouse-Authorization": auth,
+  };
+  if (sessionCookie) {
+    headers.Cookie = sessionCookie;
+  }
+  return headers;
+}
+
+async function establishSessionCookie() {
+  if (!username || !password) return "";
+  const form = new URLSearchParams({ username, password }).toString();
+  const response = await fetch(`${baseUrl}/warehouse-register`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
+    body: form,
+    redirect: "manual",
+  });
+  const setCookie = response.headers.get("set-cookie") || "";
+  const cookie = setCookie.split(",").map((entry) => entry.trim()).find((entry) => entry.startsWith("warehouse-site="));
+  if (!cookie) return "";
+  return cookie.split(";")[0];
 }
 
 async function checkPath(pathname, options = {}) {
@@ -64,6 +95,19 @@ function printResult(prefix, result) {
 
 async function main() {
   const failures = [];
+
+  if (username && password) {
+    try {
+      sessionCookie = await establishSessionCookie();
+      if (sessionCookie) {
+        console.log("[OK] SESSION /warehouse-register cookie olindi");
+      } else {
+        console.log("[WARN] SESSION cookie olinmadi, faqat header auth bilan davom etiladi");
+      }
+    } catch (error) {
+      console.log(`[WARN] SESSION login xatoligi: ${error.message}`);
+    }
+  }
 
   for (const path of pagePaths) {
     try {

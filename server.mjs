@@ -913,14 +913,24 @@ function authenticateStaffLinkForRoute(req, u) {
   const state = loadWarehouse();
   for (const permission of routePermissions) {
     const operator = authenticateStaffAccessToken(state, tokenInfo.token, permission);
-    if (operator) {
+    if (!operator) {
+      continue;
+    }
+    if (operator.hasPin && !operator.isUnlocked) {
       return {
-        ok: true,
+        ok: false,
+        reason: "pin-required",
         token: tokenInfo.token,
         fromQuery: Boolean(tokenInfo.fromQuery),
         cookieToken: tokenInfo.fromCookie,
       };
     }
+    return {
+      ok: true,
+      token: tokenInfo.token,
+      fromQuery: Boolean(tokenInfo.fromQuery),
+      cookieToken: tokenInfo.fromCookie,
+    };
   }
   return { ok: false, reason: "invalid-token" };
 }
@@ -955,6 +965,17 @@ function checkSiteGate(req, res, u) {
         ? `${STAFF_LINK_COOKIE}=${staffLinkAuth.token}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`
         : null,
     };
+  }
+  if (staffLinkAuth.reason === "pin-required") {
+    const destination = "/warehouse-register";
+    const clearStaffCookie = `${STAFF_LINK_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`;
+    res.writeHead(302, {
+      Location: `${destination}?error=link_revoked`,
+      "Cache-Control": "no-store",
+      "Set-Cookie": clearStaffCookie,
+    });
+    res.end();
+    return { allowed: false };
   }
 
   // Login qilinmagan bo'lsa, har doim registration sahifasiga yo'naltir

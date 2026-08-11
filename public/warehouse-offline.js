@@ -81,7 +81,10 @@ window.warehouseOfflineQueue = {
       method: options.method || 'GET',
       headers: headersObj,
       bodyData: serializedBody,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      attempts: 0,
+      lastError: null,
+      status: 'pending',
     };
 
     return new Promise((resolve, reject) => {
@@ -115,6 +118,26 @@ window.warehouseOfflineQueue = {
       const req = store.delete(id);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
+    });
+  },
+
+  async updateRequest(id, patch) {
+    const db = await openOfflineDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        const current = getReq.result;
+        if (!current) {
+          resolve();
+          return;
+        }
+        const req = store.put({ ...current, ...patch });
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
     });
   },
 
@@ -223,16 +246,28 @@ window.warehouseOfflineQueue = {
             body: body
           };
           const response = await fetch(req.url, fetchOptions);
-          // If successful or client error or idempotency conflict, remove it.
-          if (response.ok || response.status === 400 || response.status === 403 || response.status === 404 || response.status === 409) {
+          if (response.ok || response.status === 400 || response.status === 403 || response.status === 404 || response.status === 409 || response.status === 422) {
             await this.removeRequest(req.id);
             successCount++;
           } else if (response.status === 401) {
             break;
+          } else {
+            await this.updateRequest(req.id, {
+              attempts: Number(req.attempts || 0) + 1,
+              lastError: `HTTP ${response.status}`,
+              lastAttemptAt: Date.now(),
+              status: 'retrying',
+            });
           }
         } catch (err) {
+          await this.updateRequest(req.id, {
+            attempts: Number(req.attempts || 0) + 1,
+            lastError: err?.message || 'unknown',
+            lastAttemptAt: Date.now(),
+            status: 'retrying',
+          });
           console.error('Oflayn sinxronizatsiya xatosi:', err);
-          break; 
+          break;
         }
       }
     } finally {

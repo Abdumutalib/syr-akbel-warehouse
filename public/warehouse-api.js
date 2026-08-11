@@ -6,6 +6,18 @@ const GET_CACHE_TTL_MS = 60 * 1000;
 const getRequestMemoryCache = new Map();
 const inFlightGetRequests = new Map();
 
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[char] || char));
+}
+
+window.escapeHtml = escapeHtml;
+
 function cloneJsonValue(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
@@ -27,6 +39,25 @@ function setMemoryCachedResponse(cacheKey, data) {
     updatedAt: Date.now(),
     data: cloneJsonValue(data),
   });
+}
+
+async function getStaleCachedResponse(cacheKey) {
+  const memoryCached = getMemoryCachedResponse(cacheKey);
+  if (memoryCached) {
+    return memoryCached;
+  }
+  try {
+    if (window.warehouseOfflineQueue?.getCachedGet) {
+      const offlineCached = await window.warehouseOfflineQueue.getCachedGet(cacheKey, 24 * 60 * 60 * 1000);
+      if (offlineCached) {
+        setMemoryCachedResponse(cacheKey, offlineCached);
+        return cloneJsonValue(offlineCached);
+      }
+    }
+  } catch {
+    // Ignore offline-cache issues and fall back to network handling.
+  }
+  return null;
 }
 
 window.warehouseApi = {
@@ -101,18 +132,31 @@ window.warehouseApi = {
       while (retries <= maxRetries) {
         try {
           response = await performFetch();
-          
-          // Retry on 5xx errors if we have an idempotency key
-          if (response.status >= 500 && response.status <= 599 && requestHeaders.has('Idempotency-Key') && retries < maxRetries) {
-            retries++;
-            await new Promise(r => setTimeout(r, 1000 * retries)); // Exponential-ish backoff
-            continue;
+
+          if (requestMethod === 'GET' && response.status >= 500 && response.status <= 599) {
+            if (retries < maxRetries) {
+              retries += 1;
+              await new Promise((resolve) => setTimeout(resolve, 1000 * retries));
+              continue;
+            }
+            const cached = await getStaleCachedResponse(cacheKey);
+            if (cached) {
+              setMemoryCachedResponse(cacheKey, cached);
+              return cloneJsonValue(cached);
+            }
+          }
+
+          if (requestMethod === 'GET' && !response.ok && response.status >= 500 && response.status <= 599) {
+            const cached = await getStaleCachedResponse(cacheKey);
+            if (cached) {
+              setMemoryCachedResponse(cacheKey, cached);
+              return cloneJsonValue(cached);
+            }
           }
           break;
         } catch (err) {
           if (requestMethod === 'GET') {
-            const cached = getMemoryCachedResponse(cacheKey)
-              || await (window.warehouseOfflineQueue?.getCachedGet?.(cacheKey, 24 * 60 * 60 * 1000).catch(() => null));
+            const cached = await getStaleCachedResponse(cacheKey);
             if (cached) {
               setMemoryCachedResponse(cacheKey, cached);
               return cloneJsonValue(cached);
@@ -128,8 +172,21 @@ window.warehouseApi = {
         }
       }
 
-      const data = await response.json().catch(() => ({}));
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
       if (!response.ok) {
+        if (requestMethod === 'GET' && response.status >= 500 && response.status <= 599) {
+          const cached = await getStaleCachedResponse(cacheKey);
+          if (cached) {
+            setMemoryCachedResponse(cacheKey, cached);
+            return cloneJsonValue(cached);
+          }
+        }
         throw new Error(data.error || `So'rov bajarilmadi (${response.status})`);
       }
 
@@ -161,5 +218,7 @@ window.warehouseApi = {
    */
   numberFormat(value) {
     return new Intl.NumberFormat('ru-RU').format(Number(value || 0));
-  }
+  },
+
+  escapeHtml,
 };
