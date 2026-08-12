@@ -1,0 +1,93 @@
+name: Deploy
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_RESTART_CMD: ${{ secrets.DEPLOY_RESTART_CMD }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      VERIFY_PROD_BASE_URL: ${{ secrets.VERIFY_PROD_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          required=(DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_RESTART_CMD DEPLOY_SSH_PRIVATE_KEY VERIFY_PROD_BASE_URL)
+          for key in "${required[@]}"; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing required secret: $key"
+              exit 1
+            fi
+          done
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Prepare artifact
+        run: |
+          set -euo pipefail
+          tar --exclude=.git --exclude=node_modules --exclude=coverage --exclude='*.tgz' -czf deploy-src.tgz .
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload artifact
+        run: |
+          set -euo pipefail
+          scp -P "${DEPLOY_PORT:-22}" deploy-src.tgz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/syr-akbel-deploy-${GITHUB_SHA}.tgz"
+
+      - name: Deploy on server
+        run: |
+          set -euo pipefail
+          ssh -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST" "GITHUB_SHA='$GITHUB_SHA' APP_DIR='$DEPLOY_PATH' RESTART_CMD='$DEPLOY_RESTART_CMD' bash -s" <<'EOF'
+          set -euo pipefail
+          RELEASE_DIR="$APP_DIR/releases/$GITHUB_SHA"
+          CURRENT_LINK="$APP_DIR/current"
+
+          mkdir -p "$APP_DIR/releases"
+          rm -rf "$RELEASE_DIR"
+          mkdir -p "$RELEASE_DIR"
+
+          tar -xzf "/tmp/syr-akbel-deploy-${GITHUB_SHA}.tgz" -C "$RELEASE_DIR"
+          cd "$RELEASE_DIR"
+          npm ci --omit=dev
+          printf '%s' "$GITHUB_SHA" > .build-sha
+
+          ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
+
+          eval "$RESTART_CMD"
+
+          rm -f "/tmp/syr-akbel-deploy-${GITHUB_SHA}.tgz"
+          EOF
+
+      - name: Verify deployed commit
+        env:
+          EXPECTED_COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          node scripts/verify-release.mjs

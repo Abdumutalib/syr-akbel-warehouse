@@ -91,11 +91,7 @@ try {
 
 const PORT = Number(process.env.PORT) || 8787;
 const APP_VERSION = resolveAppVersion();
-const APP_BUILD =
-  process.env.GIT_COMMIT_SHA?.trim() ||
-  process.env.SOURCE_VERSION?.trim() ||
-  process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
-  "";
+const APP_BUILD = resolveAppBuild();
 const WAREHOUSE_COMPANY_NAME = process.env.WAREHOUSE_COMPANY_NAME?.trim() || "Сыр АКБЕЛ";
 const WAREHOUSE_ALLOWED_ORIGIN =
   process.env.WAREHOUSE_ALLOWED_ORIGIN?.trim() || `http://127.0.0.1:${PORT}`;
@@ -160,6 +156,27 @@ function resolveAppVersion() {
   } catch {
     return "0.0.0";
   }
+}
+
+function resolveAppBuild() {
+  const envBuild =
+    process.env.DEPLOY_COMMIT_SHA?.trim() ||
+    process.env.GIT_COMMIT_SHA?.trim() ||
+    process.env.SOURCE_VERSION?.trim() ||
+    process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
+    "";
+  if (envBuild) {
+    return envBuild;
+  }
+  try {
+    const buildFile = path.join(ROOT, ".build-sha");
+    if (fs.existsSync(buildFile)) {
+      return String(fs.readFileSync(buildFile, "utf8") || "").trim();
+    }
+  } catch {
+    // ignore build file read errors
+  }
+  return "";
 }
 
 function loadWarehouse() {
@@ -2045,7 +2062,17 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
 
   if (u.pathname === "/readyz" && req.method === "GET") {
     res.setHeader("X-App-Version", APP_BUILD ? `${APP_VERSION}+${APP_BUILD.slice(0, 7)}` : APP_VERSION);
-    sendApiJson(res, 200, { ok: true, ready: true }, req);
+    sendApiJson(
+      res,
+      200,
+      {
+        ok: true,
+        ready: true,
+        version: APP_VERSION,
+        build: APP_BUILD || null,
+      },
+      req
+    );
     return;
   }
 
