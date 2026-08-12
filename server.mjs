@@ -821,7 +821,21 @@ function requestOriginAllowed(req) {
   if (!origin) {
     return true;
   }
-  return Boolean(getAllowedOriginHeaderValue(origin, WAREHOUSE_ALLOWED_ORIGIN));
+  if (getAllowedOriginHeaderValue(origin, WAREHOUSE_ALLOWED_ORIGIN)) {
+    return true;
+  }
+  try {
+    const forwardedHostRaw = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
+    const directHostRaw = String(req.headers.host || "").trim();
+    const requestHost = (forwardedHostRaw || directHostRaw).toLocaleLowerCase("en-US");
+    const originHost = new URL(origin).host.toLocaleLowerCase("en-US");
+    if (requestHost && originHost && requestHost === originHost) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 function requiredWarehouseRoutePermissions(pathname) {

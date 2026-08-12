@@ -90,6 +90,7 @@ async function startServer(options = {}) {
     PORT: String(port),
     WAREHOUSE_STATE_FILE: statePath,
     WAREHOUSE_SITE_TOKEN: "test-site-token",
+    WAREHOUSE_ALLOWED_ORIGIN: options.allowedOrigin || "",
     WAREHOUSE_ADMIN_USERNAME: options.adminUsername || "admin1",
     WAREHOUSE_ADMIN_PASSWORD: options.adminPassword || "adminpass1",
   };
@@ -168,6 +169,30 @@ describe("warehouse auth gate", () => {
 
     assert.equal(failure.status, 302);
     assert.equal(failure.headers.get("location"), "/warehouse-register?error=missing_credentials");
+    assert.equal(server.getStderr(), "");
+  });
+
+  test("allows same-host browser origin even when allowed origin is configured for another domain", async () => {
+    const server = await startServer({
+      allowedOrigin: "https://akbelim.com",
+    });
+
+    const sameHostOrigin = `http://127.0.0.1:${server.port}`;
+    const sameHostResponse = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/staff`, {
+      headers: {
+        Origin: sameHostOrigin,
+      },
+    });
+
+    assert.equal(sameHostResponse.status, 401);
+
+    const foreignOriginResponse = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/staff`, {
+      headers: {
+        Origin: "http://evil.example",
+      },
+    });
+
+    assert.equal(foreignOriginResponse.status, 403);
     assert.equal(server.getStderr(), "");
   });
 
