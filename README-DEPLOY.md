@@ -47,12 +47,14 @@ GitHub push -> auto deploy (configured):
     .github/workflows/deploy.yml
 
   Required GitHub repository secrets:
+    DEPLOY_SSH_PRIVATE_KEY     # private key for DEPLOY_USER
+
+  Required GitHub repository variables:
     DEPLOY_HOST                # server IP or hostname
     DEPLOY_PORT                # optional, default 22
     DEPLOY_USER                # ssh user
     DEPLOY_PATH                # app root on server, e.g. /opt/syr-akbel-warehouse
     DEPLOY_RESTART_CMD         # restart command, e.g. systemctl restart syr-akbel-warehouse
-    DEPLOY_SSH_PRIVATE_KEY     # private key for DEPLOY_USER
     VERIFY_PROD_BASE_URL       # e.g. https://akbelim.com
 
   Deploy flow summary:

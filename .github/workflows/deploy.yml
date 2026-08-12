@@ -9,24 +9,24 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-      DEPLOY_RESTART_CMD: ${{ secrets.DEPLOY_RESTART_CMD }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      DEPLOY_RESTART_CMD: ${{ vars.DEPLOY_RESTART_CMD }}
       DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-      VERIFY_PROD_BASE_URL: ${{ secrets.VERIFY_PROD_BASE_URL }}
+      VERIFY_PROD_BASE_URL: ${{ vars.VERIFY_PROD_BASE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate required secrets
+      - name: Validate required configuration
         run: |
           set -euo pipefail
           required=(DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_RESTART_CMD DEPLOY_SSH_PRIVATE_KEY VERIFY_PROD_BASE_URL)
           for key in "${required[@]}"; do
             if [ -z "${!key:-}" ]; then
-              echo "Missing required secret: $key"
+              echo "Missing required config: $key"
               exit 1
             fi
           done
