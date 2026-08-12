@@ -856,9 +856,13 @@ function checkSiteGate(req, res, u) {
   }
   if (staffLinkAuth.reason === "pin-required") {
     const destination = "/warehouse-register";
+    const redirectParams = new URLSearchParams({ error: "pin_required" });
+    if (staffLinkAuth.token) {
+      redirectParams.set("access", staffLinkAuth.token);
+    }
     const clearStaffCookie = `${STAFF_LINK_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`;
     res.writeHead(302, {
-      Location: `${destination}?error=link_revoked`,
+      Location: `${destination}?${redirectParams.toString()}`,
       "Cache-Control": "no-store",
       "Set-Cookie": clearStaffCookie,
     });
@@ -901,6 +905,8 @@ function checkSiteGate(req, res, u) {
   const errorText =
     errorCode === "link_revoked"
       ? "Ruxsat havolasi bekor qilingan"
+      : errorCode === "pin_required"
+      ? "Kirish uchun PIN kodni tasdiqlang"
       : errorCode === "missing_credentials"
       ? "Login va parolni kiriting"
       : showError

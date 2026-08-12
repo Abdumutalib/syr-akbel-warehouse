@@ -2,8 +2,11 @@
  * Сайтнинг барча кнопкалари ва API endpoint'ларини тест қилиш скрипти
  */
 
-const BASE = 'http://127.0.0.1:8789';
-const AUTH = 'Basic ' + Buffer.from('admin:admin').toString('base64');
+const BASE = process.env.WAREHOUSE_TEST_BASE || 'http://127.0.0.1:8789';
+const ADMIN_USER = process.env.WAREHOUSE_TEST_ADMIN_USER || 'admin';
+const ADMIN_PASS = process.env.WAREHOUSE_TEST_ADMIN_PASS || 'admin';
+const AUTH = 'Basic ' + Buffer.from(`${ADMIN_USER}:${ADMIN_PASS}`).toString('base64');
+let SESSION_COOKIE = '';
 
 const results = [];
 let passed = 0;
@@ -19,7 +22,11 @@ function log(status, name, detail = '') {
 async function api(method, path, body = null) {
   const opts = {
     method,
-    headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
+    headers: {
+      'Authorization': AUTH,
+      'Content-Type': 'application/json',
+      ...(SESSION_COOKIE ? { 'Cookie': SESSION_COOKIE } : {}),
+    },
   };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(BASE + path, opts);
@@ -27,9 +34,39 @@ async function api(method, path, body = null) {
   return { status: res.status, ok: res.ok, data };
 }
 
+async function loginAdminSession() {
+  const body = new URLSearchParams({
+    username: ADMIN_USER,
+    password: ADMIN_PASS,
+  }).toString();
+
+  const res = await fetch(BASE + '/warehouse-register', {
+    method: 'POST',
+    redirect: 'manual',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body,
+  });
+
+  const setCookie = res.headers.get('set-cookie') || '';
+  const pair = setCookie.split(';')[0]?.trim() || '';
+  if (res.status === 302 && pair.includes('=')) {
+    SESSION_COOKIE = pair;
+    return true;
+  }
+  return false;
+}
+
 async function testPage(path, expectedTitle) {
   try {
-    const res = await fetch(BASE + path, { headers: { 'Authorization': AUTH }, redirect: 'manual' });
+    const res = await fetch(BASE + path, {
+      headers: {
+        'Authorization': AUTH,
+        ...(SESSION_COOKIE ? { 'Cookie': SESSION_COOKIE } : {}),
+      },
+      redirect: 'manual',
+    });
     if (res.status === 302) {
       log('OK', `Саҳифа ${path}`, `Redirect → ${res.headers.get('location')}`);
     } else if (res.ok) {
@@ -49,12 +86,15 @@ async function run() {
   console.log('  Сыр АКБЕЛ — БАРЧА КНОПКАЛАР ТЕСТИ');
   console.log('══════════════════════════════════════════════\n');
 
+  const loggedIn = await loginAdminSession();
+  log(loggedIn ? 'OK' : 'FAIL', '[Admin session login] → POST /warehouse-register', `base=${BASE}`);
+
   // ═══ 1. САҲИФАЛАР (HTML) ═══
   console.log('\n📄 САҲИФАЛАР ТЕСТИ\n');
   await testPage('/warehouse/admin', 'Сыр АКБЕЛ');
   await testPage('/warehouse/seller', 'Sotuvchi');
   await testPage('/warehouse/customers', 'Mijozlar');
-  await testPage('/warehouse/orders', 'Buyurtmalar');
+  await testPage('/warehouse/orders', 'Zakazlar');
   await testPage('/warehouse/ledger', 'Buxgalter');
   await testPage('/warehouse/dashboard', 'Dashboard');
   await testPage('/warehouse/admin/cash', 'Naqd');
@@ -77,7 +117,12 @@ async function run() {
 
   // CSV yuklab olish (export-csv button)
   try {
-    const csvRes = await fetch(BASE + '/warehouse/api/warehouse/export-csv', { headers: { 'Authorization': AUTH } });
+    const csvRes = await fetch(BASE + '/warehouse/api/warehouse/export-csv', {
+      headers: {
+        'Authorization': AUTH,
+        ...(SESSION_COOKIE ? { 'Cookie': SESSION_COOKIE } : {}),
+      },
+    });
     log(csvRes.ok ? 'OK' : 'FAIL', '[CSV yuklab olish] → GET /export-csv', `Status: ${csvRes.status}, Type: ${csvRes.headers.get('content-type')}`);
   } catch (e) {
     log('FAIL', '[CSV yuklab olish]', e.message);
@@ -159,6 +204,7 @@ async function run() {
   log(r.ok ? 'OK' : 'FAIL', '[Ходимни сақлаш] → POST /staff', `Status: ${r.status}`);
   const staffList = r.data?.allStaff || [];
   const testStaffId = staffList.length ? staffList[staffList.length - 1]?.id : null;
+  let testStaffAccessToken = '';
 
   // Ходимлар рўйхати
   r = await api('GET', '/warehouse/api/warehouse/staff');
@@ -178,6 +224,14 @@ async function run() {
       permission: 'seller'
     });
     log(r.ok ? 'OK' : 'FAIL', '[Линк яратиш] → POST /staff/:id/access-links', `Status: ${r.status}`);
+    testStaffAccessToken = r.data?.link?.token || '';
+
+    if (testStaffAccessToken) {
+      const authStatus = await api('GET', `/warehouse/api/warehouse/auth-status?access=${encodeURIComponent(testStaffAccessToken)}`);
+      log(authStatus.ok ? 'OK' : 'FAIL', '[Auth status] → GET /auth-status', `Status: ${authStatus.status}`);
+    } else {
+      log('FAIL', '[Auth status] → GET /auth-status', 'Staff access token yaratilmadi');
+    }
   }
 
   // Ходимни ўчириш (data-delete-staff button)
@@ -209,10 +263,6 @@ async function run() {
     // Payment endpoint test via approved sale flow
     log(r.ok ? 'OK' : 'FAIL', '[Тўлов ёзиш API] → POST /customers', `Status: ${r.status}`);
   }
-
-  // Auth status check
-  r = await api('GET', '/warehouse/api/warehouse/auth-status');
-  log(r.ok ? 'OK' : 'FAIL', '[Auth status] → GET /auth-status', `Status: ${r.status}`);
 
   // ═══ 8. DASHBOARD КНОПКАЛАРИ ═══
   console.log('\n📊 DASHBOARD (ANALYTICS) КНОПКАЛАРИ\n');

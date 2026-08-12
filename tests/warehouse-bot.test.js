@@ -449,7 +449,7 @@ describe("warehouse bot helpers", () => {
     const link = createStaffAccessLink(state, seller.id, "seller");
     const auth = authenticateStaffAccessToken(state, link.token, "seller");
 
-    assert.equal(link.permission, "seller");
+    assert.equal(link.permission, "all");
     assert.equal(auth?.username, "sellerlink");
     assert.equal(authenticateStaffAccessToken(state, link.token, "cash"), null);
 

@@ -340,7 +340,11 @@ describe("warehouse auth gate", () => {
     });
 
     assert.equal(pageResponse.status, 302);
-    assert.equal(pageResponse.headers.get("location"), "/warehouse-register?error=link_revoked");
+    const redirectLocation = pageResponse.headers.get("location") || "";
+    assert.match(redirectLocation, /^\/warehouse-register\?/);
+    const redirectUrl = new URL(`http://127.0.0.1:${server.port}${redirectLocation}`);
+    assert.equal(redirectUrl.searchParams.get("error"), "pin_required");
+    assert.equal(redirectUrl.searchParams.get("access"), token);
     assert.equal(server.getStderr(), "");
   });
 

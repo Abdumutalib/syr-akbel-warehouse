@@ -856,6 +856,7 @@
 
     function accessLinkUrl(permission, token) {
       const pathMap = {
+        all: '/warehouse/seller',
         seller: '/warehouse/seller',
         customers: '/warehouse/customers',
         orders: '/warehouse/orders',
@@ -927,12 +928,12 @@
           <div>Lavozim: ${window.escapeHtml(roleLabel)}</div>
           <div style="margin-top: 6px;">Ko'ra oladigan sahifalar: ${window.escapeHtml(permissionSummary(effectivePermissions))}</div>
           <div class="tx-actions">
-            ${effectivePermissions.map((permission) => `<button data-create-link="${window.escapeHtml(entry.id)}" data-link-permission="${window.escapeHtml(permission)}" class="secondary">${window.escapeHtml(STAFF_PERMISSION_LABELS[permission])} linki</button>`).join('')}
+            <button data-create-link="${window.escapeHtml(entry.id)}" class="secondary">Universal kirish linkini yaratish</button>
           </div>
           <div class="link-list">
             ${(entry.accessLinks || []).map((link) => `
               <article class="link-item">
-                <strong>${window.escapeHtml(STAFF_PERMISSION_LABELS[link.permission] || link.permission)}</strong>
+                <strong>${window.escapeHtml(link.permission === 'all' ? 'Universal kirish linki' : (STAFF_PERMISSION_LABELS[link.permission] || link.permission))}</strong>
                 <div class="link-url">${window.escapeHtml(accessLinkUrl(link.permission, link.token))}</div>
                 <div>${window.escapeHtml(link.revokedAt ? 'Holati: Bekor qilingan' : 'Holati: Faol')}</div>
                 <div class="tx-actions">
@@ -1373,13 +1374,12 @@
       if (createLinkButton) {
         try {
           const staffId = createLinkButton.getAttribute("data-create-link");
-          const permission = createLinkButton.getAttribute("data-link-permission");
           const data = await apiFetch(`/api/warehouse/staff/${staffId}/access-links`, {
             method: "POST",
-            body: JSON.stringify({ permission }),
+            body: JSON.stringify({ permission: "all" }),
           });
           renderStaff(data.allStaff || []);
-          setStatus("Xodim uchun kirish linki yaratildi.");
+          setStatus("Xodim uchun universal kirish linki yaratildi.");
         } catch (error) {
           setStatus(error.message, true);
         }
