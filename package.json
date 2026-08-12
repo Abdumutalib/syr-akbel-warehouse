@@ -8,11 +8,7 @@
     "start": "node server.mjs",
     "test": "node --test tests/*.test.js",
     "smoke:warehouse": "node scripts/smoke-warehouse.mjs",
-    "check:login:origins": "node scripts/check-login-origins.mjs",
-    "check:data:origins": "node scripts/compare-origins.mjs",
-    "check:origins": "npm run check:login:origins && npm run check:data:origins",
     "migrate:postgres": "node scripts/migrate-state-to-postgres.mjs",
-    "sync:postgres": "node scripts/sync-postgres-state.mjs",
     "verify:deploy": "node scripts/verify-deploy.mjs"
   },
   "engines": {

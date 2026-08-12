@@ -46,6 +46,7 @@ async function main() {
   const localPort = Number(process.env.PORT) || 8787;
   const localBaseUrl = normalizeBaseUrl(process.env.VERIFY_LOCAL_BASE_URL, `http://127.0.0.1:${localPort}`);
   const prodBaseUrl = normalizeBaseUrl(process.env.VERIFY_PROD_BASE_URL, 'https://akbelim.com');
+  const billingPanelUrl = 'https://my.tdc.uz/billmgr?startform=clientoption';
 
   console.log('');
   console.log(`Checking local HTTP endpoint (${localBaseUrl})...`);
@@ -63,11 +64,7 @@ async function main() {
   for (const route of prodChecks) {
     try {
       const response = await fetchUrl(`${prodBaseUrl}${route}`);
-      const details = response.cfRay ? ` cf-ray=${response.cfRay}` : '';
-      console.log(`${route} -> HTTP ${response.status} server=${response.server || 'unknown'}${details}`);
-      if (response.status === 523) {
-        console.log('  ! Cloudflare 523: origin server unavailable or unreachable from Cloudflare edge.');
-      }
+      console.log(`${route} -> HTTP ${response.status} server=${response.server || 'unknown'}`);
     } catch (error) {
       console.log(`${route} -> failed: ${error.message}`);
     }
@@ -78,7 +75,7 @@ async function main() {
   console.log('- Ensure .env contains real WAREHOUSE_ADMIN_USERNAME and WAREHOUSE_ADMIN_PASSWORD');
   console.log('- On hosting, set health check path to /healthz and keep start command as npm start');
   console.log('- Verify hosting instance is healthy and listening on PORT from environment');
-  console.log('- If production returns 523 with server=cloudflare, fix Cloudflare -> origin connectivity/SSL');
+  console.log(`- Keep billing operations on: ${billingPanelUrl}`);
   if (missing.length) {
     console.log(`- Missing files: ${missing.join(', ')}`);
   }

@@ -11,7 +11,7 @@ coverage.git
 .env
 node_modules
 
-# Runtime-only data lives in a mounted volume on Northflank
+# Runtime-only data lives in a mounted volume
 data/warehouse.json
 data/transaction-photos
 

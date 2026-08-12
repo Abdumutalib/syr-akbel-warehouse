@@ -56,12 +56,8 @@ import { executeTransaction } from "./lib/core.mjs";
 import { forecaster } from "./lib/ai-forecaster.mjs";
 import { resolveAllowedOrigins, getAllowedOriginHeaderValue } from "./lib/deployment-config.mjs";
 import {
-  applyWarehouseSyncEvent,
   createWarehousePostgresStore,
-  getWarehouseSyncPeerState,
-  listWarehouseSyncEvents,
   loadWarehouseStateFromPostgres,
-  updateWarehouseSyncPeerState,
   writeWarehouseStateToPostgres,
 } from "./lib/warehouse-postgres.mjs";
 
@@ -112,13 +108,6 @@ const WAREHOUSE_STATE_PATH = resolveWarehouseStatePath();
 const WAREHOUSE_TRANSACTION_PHOTO_DIR = path.join(path.dirname(WAREHOUSE_STATE_PATH), "transaction-photos");
 const SCHEDULER_STATE_PATH = path.join(path.dirname(WAREHOUSE_STATE_PATH), "scheduler.json");
 const WAREHOUSE_SITE_TOKEN = process.env.WAREHOUSE_SITE_TOKEN?.trim() || "";
-const WAREHOUSE_STATE_SYNC_TOKEN = String(process.env.WAREHOUSE_STATE_SYNC_TOKEN || process.env.WAREHOUSE_AUTH_SYNC_TOKEN || "").trim();
-const WAREHOUSE_STATE_SYNC_TARGETS = String(process.env.WAREHOUSE_STATE_SYNC_TARGETS || process.env.WAREHOUSE_AUTH_SYNC_TARGETS || "")
-  .split(/[\s,;]+/)
-  .map((entry) => entry.trim())
-  .filter(Boolean)
-  .map((entry) => entry.replace(/\/+$/, ""));
-const WAREHOUSE_STATE_SYNC_INTERVAL_MS = Math.max(5000, Number(process.env.WAREHOUSE_STATE_SYNC_INTERVAL_MS) || 15000);
 
 // --- Qarz eslatma scheduler holati ---
 const DEBT_REMINDER_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 kun
@@ -158,8 +147,6 @@ let warehouseWriteQueue = Promise.resolve();
 let yandexUploadTimer = null;
 let yandexUploadInFlight = false;
 let yandexUploadRequested = false;
-let warehouseStateSyncTimer = null;
-let warehouseStateSyncInFlight = false;
 
 function resolveWarehouseStatePath() {
   const configured = process.env.WAREHOUSE_STATE_FILE?.trim() || "data/warehouse.json";
@@ -208,55 +195,6 @@ function setConfiguredAdminCredentials(state, username, password) {
   state.adminCredentials.username = String(username || "").trim();
   state.adminCredentials.password = String(password || "").trim();
   state.adminCredentials.updatedAt = new Date().toISOString();
-}
-
-const WAREHOUSE_AUTH_SYNC_TOKEN = String(process.env.WAREHOUSE_AUTH_SYNC_TOKEN || "").trim();
-const WAREHOUSE_AUTH_SYNC_TARGETS = String(process.env.WAREHOUSE_AUTH_SYNC_TARGETS || "")
-  .split(/[\s,;]+/)
-  .map((entry) => entry.trim())
-  .filter(Boolean)
-  .map((entry) => entry.replace(/\/+$/, ""));
-
-async function propagateAdminCredentials({ username, password }) {
-  if (!WAREHOUSE_AUTH_SYNC_TOKEN || WAREHOUSE_AUTH_SYNC_TARGETS.length === 0) {
-    return {
-      enabled: false,
-      reason: "sync-not-configured",
-      targets: WAREHOUSE_AUTH_SYNC_TARGETS,
-      ok: [],
-      failed: [],
-    };
-  }
-
-  const ok = [];
-  const failed = [];
-  for (const base of WAREHOUSE_AUTH_SYNC_TARGETS) {
-    const url = `${base}/api/warehouse/admin-credentials/sync`;
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Warehouse-Sync-Token": WAREHOUSE_AUTH_SYNC_TOKEN,
-        },
-        body: JSON.stringify({ username, password }),
-      });
-      if (!response.ok) {
-        failed.push({ target: base, status: response.status });
-        continue;
-      }
-      ok.push(base);
-    } catch (error) {
-      failed.push({ target: base, error: error.message });
-    }
-  }
-
-  return {
-    enabled: true,
-    targets: WAREHOUSE_AUTH_SYNC_TARGETS,
-    ok,
-    failed,
-  };
 }
 
 function buildCsvContent(state, mode = "all") {
@@ -643,87 +581,6 @@ function withWarehouseWrite(handler) {
   warehouseWriteQueue = task.catch(() => {});
   return task;
 }
-
-async function pullWarehouseStateEventsFromPeer(baseUrl) {
-  if (!warehousePostgresStore || !WAREHOUSE_STATE_SYNC_TOKEN) {
-    return;
-  }
-
-  const peerState = await getWarehouseSyncPeerState(warehousePostgresStore, baseUrl);
-  const url = new URL(`${baseUrl}/api/warehouse/state-sync/events`);
-  url.searchParams.set("afterEventId", String(peerState.lastEventId || 0));
-  url.searchParams.set("limit", "100");
-
-  const response = await fetch(url, {
-    headers: {
-      "X-Warehouse-Sync-Token": WAREHOUSE_STATE_SYNC_TOKEN,
-      "Cache-Control": "no-cache",
-      Pragma: "no-cache",
-    },
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.error || `State sync xato (${response.status})`);
-  }
-
-  const events = Array.isArray(data.events) ? data.events : [];
-  let lastEventId = peerState.lastEventId || 0;
-  let conflicts = 0;
-
-  for (const event of events) {
-    lastEventId = Math.max(lastEventId, Number(event?.eventId || 0));
-    const result = await applyWarehouseSyncEvent(warehousePostgresStore, event);
-    if (result.applied && result.nextState) {
-      warehouseStateCache = result.nextState;
-      saveWarehouseState(WAREHOUSE_STATE_PATH, warehouseStateCache);
-      scheduleYandexCsvUpload();
-    } else if (result.conflict) {
-      conflicts += 1;
-    }
-  }
-
-  await updateWarehouseSyncPeerState(warehousePostgresStore, baseUrl, {
-    lastEventId,
-    lastSyncAt: new Date().toISOString(),
-    lastError: conflicts > 0 ? `conflicts=${conflicts}` : null,
-  });
-}
-
-async function syncWarehouseStateFromPeers() {
-  if (warehouseStateSyncInFlight || !warehousePostgresStore || !WAREHOUSE_STATE_SYNC_TOKEN || WAREHOUSE_STATE_SYNC_TARGETS.length === 0) {
-    return;
-  }
-  warehouseStateSyncInFlight = true;
-  try {
-    for (const baseUrl of WAREHOUSE_STATE_SYNC_TARGETS) {
-      try {
-        await pullWarehouseStateEventsFromPeer(baseUrl);
-      } catch (error) {
-        const peerState = await getWarehouseSyncPeerState(warehousePostgresStore, baseUrl);
-        await updateWarehouseSyncPeerState(warehousePostgresStore, baseUrl, {
-          lastEventId: peerState.lastEventId,
-          lastSyncAt: new Date().toISOString(),
-          lastError: error.message || String(error),
-        });
-      }
-    }
-  } finally {
-    warehouseStateSyncInFlight = false;
-  }
-}
-
-function startWarehouseStateSyncLoop() {
-  if (!warehousePostgresStore || !WAREHOUSE_STATE_SYNC_TOKEN || WAREHOUSE_STATE_SYNC_TARGETS.length === 0 || warehouseStateSyncTimer) {
-    return;
-  }
-  syncWarehouseStateFromPeers().catch(() => {});
-  warehouseStateSyncTimer = setInterval(() => {
-    syncWarehouseStateFromPeers().catch(() => {});
-  }, WAREHOUSE_STATE_SYNC_INTERVAL_MS);
-  warehouseStateSyncTimer.unref?.();
-}
-
-startWarehouseStateSyncLoop();
 
 function scheduleYandexCsvUpload() {
   yandexUploadRequested = true;
@@ -2215,26 +2072,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
       sendApiJson(res, 403, { error: "Bu origin uchun ruxsat yo'q" });
       return;
     }
-    if (apiPath === "/api/warehouse/state-sync/events" && req.method === "GET") {
-      const headerToken = String(req.headers["x-warehouse-sync-token"] || "").trim();
-      if (!warehousePostgresStore) {
-        sendApiJson(res, 503, { error: "Postgres sync sozlanmagan" });
-        return;
-      }
-      if (!WAREHOUSE_STATE_SYNC_TOKEN || !headerToken || headerToken !== WAREHOUSE_STATE_SYNC_TOKEN) {
-        sendApiJson(res, 401, { error: "Sync token noto'g'ri" });
-        return;
-      }
-      const afterEventId = Math.max(0, Number(u.searchParams.get("afterEventId") || 0));
-      const limit = Math.min(200, Math.max(1, Number(u.searchParams.get("limit") || 50)));
-      const events = await listWarehouseSyncEvents(warehousePostgresStore, { afterEventId, limit });
-      sendApiJson(res, 200, {
-        ok: true,
-        serverId: warehousePostgresStore.serverId,
-        events,
-      });
-      return;
-    }
+    
     // Analytics endpointlari
     if (apiPath.startsWith("/api/analytics")) {
       const handled = await handleAnalyticsRoute(req, res, apiPath, {
@@ -2251,7 +2089,6 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     try {
       if (await handleWarehouseApiRoute(req, res, u, apiPath, {
         approveTransaction,
-        authSyncToken: WAREHOUSE_AUTH_SYNC_TOKEN,
         assertWarehouseAdmin,
         assertWarehouseOperator,
         authenticateStaffAccessToken,
@@ -2323,7 +2160,6 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         deleteWarehouseOrder,
         upsertCustomer,
         verifyStaffPin,
-        propagateAdminCredentials,
         recordTelegramMessage: async ({ telegramId, text, type }) => {
           await withWarehouseWrite((state) => {
             // customerName ni telegramId bo'yicha topish
@@ -2665,7 +2501,7 @@ process.on("uncaughtException", (error) => {
   console.error("[FATAL][UNCAUGHT_EXCEPTION]", error);
 });
 
-// Northflank va Docker SIGTERM jo'natadi — graceful shutdown
+// SIGTERM/SIGINT signalida graceful shutdown
 function gracefulShutdown(signal) {
   if (isShuttingDown) return;
   isShuttingDown = true;
@@ -2688,7 +2524,7 @@ function gracefulShutdown(signal) {
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT",  () => gracefulShutdown("SIGINT"));
 
-// Keep connections alive longer than Northflank's LB (60s default) to avoid mid-request drops
+// Keep-alive va header timeout qiymatlari
 server.keepAliveTimeout = 65000;
 server.headersTimeout = 70000;
 
