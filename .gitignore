@@ -4,6 +4,9 @@ node_modules/
 # Runtime warehouse state and uploads
 data/warehouse.json
 data/transaction-photos/
+data/warehouse.install-test.json
+data/warehouse.test-buttons.json
+data/warehouse.test-universal-link.json
 
 # Python / editor / OS noise
 __pycache__/
