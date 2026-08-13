@@ -452,7 +452,18 @@
     installButton.addEventListener("click", () => {
       const installApi = window.warehouseInstallApp;
       if (installApi && typeof installApi.open === "function") {
-        installApi.open();
+        const outcome = installApi.open();
+        if (outcome && typeof outcome.then === "function") {
+          outcome.then((ok) => {
+            if (!ok) {
+              installHint.textContent = "Chrome/Safari'да очинг, кейин браузер менюсидан Install ёки Add to Home Screen'ни танланг.";
+            }
+          }).catch(() => {
+            installHint.textContent = "Ўрнатишни бошлаб бўлмади. Браузер менюсидан Install/Add to Home Screen'ни танланг.";
+          });
+        } else if (!outcome) {
+          installHint.textContent = "Chrome/Safari'да очинг, кейин браузер менюсидан Install ёки Add to Home Screen'ни танланг.";
+        }
         return;
       }
       installHint.textContent = "Brauzer menyusidan 'Add to Home Screen' ni tanlang.";

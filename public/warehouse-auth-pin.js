@@ -992,14 +992,17 @@
 
     async function openInstallFlow() {
       if (deferredPrompt) {
+        let opened = false;
         try {
           await deferredPrompt.prompt();
           await deferredPrompt.userChoice;
+          opened = true;
         } catch (error) {
+          opened = false;
         }
         deferredPrompt = null;
         setVisible(false);
-        return;
+        return opened;
       }
 
       if (isSafari) {
@@ -1007,7 +1010,8 @@
         return true;
       }
 
-      setVisible(false);
+      installApi.label = isAndroid ? 'Chrome orqali o\'rnating' : 'Brauzerdan o\'rnating';
+      publishInstallState();
       return false;
     }
 
