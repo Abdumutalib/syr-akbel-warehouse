@@ -1,4 +1,4 @@
-const CACHE_NAME = 'akbel-cache-v10001';
+const CACHE_NAME = 'akbel-cache-v10002';
 const MAX_CACHE_ITEMS = 120;
 const CORE_ASSETS = [
   '/warehouse/admin',
@@ -70,7 +70,7 @@ self.addEventListener('fetch', event => {
 
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
-    const cachedRes = await cache.match(req, { ignoreSearch: true });
+    const cachedRes = await cache.match(req, { ignoreSearch: req.mode === 'navigate' });
     const networkFetch = fetch(req).then(async (res) => {
       if (res && res.ok && req.url.startsWith('http')) {
         await cache.put(req, res.clone());
