@@ -29,7 +29,12 @@
   const encoder = typeof window.TextEncoder === 'function' ? new window.TextEncoder() : null;
   const decoder = typeof window.TextDecoder === 'function' ? new window.TextDecoder() : null;
 
-  const PERSISTENT_WAREHOUSE_KEYS = ['warehouse-access-token'];
+  const PERSISTENT_WAREHOUSE_KEYS = [
+    'warehouse-access-token',
+    VAULT_KEY,
+    LEGACY_VAULT_KEY,
+    OPERATOR_PROFILE_KEY,
+  ];
 
   function isWarehouseStorageKey(key) {
     const k = String(key || '');
