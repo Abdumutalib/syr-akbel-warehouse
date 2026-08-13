@@ -861,6 +861,7 @@ function checkSiteGate(req, res, u) {
     if (staffLinkAuth.token) {
       redirectParams.set("access", staffLinkAuth.token);
     }
+    redirectParams.set("next", `${u.pathname}${u.search}`);
     const clearStaffCookie = `${STAFF_LINK_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`;
     res.writeHead(302, {
       Location: `${destination}?${redirectParams.toString()}`,
@@ -903,6 +904,8 @@ function checkSiteGate(req, res, u) {
 
   const showError = u.searchParams.get("login_error") === "1";
   const errorCode = (u.searchParams.get("error") || "").trim();
+  const staffPinAccess = String(u.searchParams.get("access") || "").trim();
+  const staffPinNext = String(u.searchParams.get("next") || "").trim();
   const errorText =
     errorCode === "link_revoked"
       ? "Ruxsat havolasi bekor qilingan"
@@ -910,6 +913,8 @@ function checkSiteGate(req, res, u) {
       ? "Kirish uchun PIN kodni tasdiqlang"
       : errorCode === "missing_credentials"
       ? "Login va parolni kiriting"
+      : errorCode === "pin_invalid"
+      ? "PIN noto'g'ri"
       : showError
       ? "Login yoki parol noto'g'ri"
       : "";
@@ -1056,9 +1061,17 @@ function checkSiteGate(req, res, u) {
     </div>
     <div class="card">
       <div class="card-title">Tizimga kirish</div>
-      <div class="card-desc">Admin login va parolni kiriting</div>
+      <div class="card-desc">${staffPinAccess ? "Admin bergan havola orqali PIN bilan kiring" : "Admin login va parolni kiriting"}</div>
       ${errorText ? `<div class="err-box"><span>⚠️</span><span>${errorText}</span></div>` : ""}
-      <form method="post" action="/warehouse-register" autocomplete="off">
+      ${staffPinAccess ? `<form method="post" action="/warehouse-register" autocomplete="off">
+        <input type="hidden" name="access" value="${staffPinAccess}">
+        <input type="hidden" name="next" value="${staffPinNext}">
+        <div class="field">
+          <label for="gate-pin">PIN kod</label>
+          <input id="gate-pin" type="password" name="pin" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" placeholder="••••" autocomplete="one-time-code" required autofocus>
+        </div>
+        <button type="submit" class="btn">PIN билан кириш →</button>
+      </form>` : `<form method="post" action="/warehouse-register" autocomplete="off">
         <div class="field">
           <label for="gate-username">Login</label>
           <input id="gate-username" type="text" name="username" placeholder="Admin login" autocomplete="username" required autofocus>
@@ -1068,8 +1081,8 @@ function checkSiteGate(req, res, u) {
           <input id="gate-password" type="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
         </div>
         <button type="submit" class="btn">Kirish →</button>
-      </form>
-      <div class="hint">Xodimlar admin bergan maxsus havola orqali PIN bilan kiradi</div>
+      </form>`}
+      <div class="hint">${staffPinAccess ? "PIN tasdiqlangach, seller sahifasi ochiladi" : "Xodimlar admin bergan maxsus havola orqali PIN bilan kiradi"}</div>
     </div>
   </div>
   <script>
@@ -2234,12 +2247,32 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
 
-  // Admin login orqali kirish
+  // Admin login or staff access-link PIN verification
   if ((u.pathname === "/warehouse-register" || u.pathname === "/warehouse-login") && req.method === "POST") {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const body = Buffer.concat(chunks).toString("utf8");
     const params = new URLSearchParams(body);
+    const accessToken = String(params.get("access") || "").trim();
+    const pin = String(params.get("pin") || "").trim();
+    if (accessToken && pin) {
+      try {
+        verifyStaffPin(loadWarehouse(), accessToken, pin);
+        await saveWarehouse(loadWarehouse());
+        const next = String(params.get("next") || "/warehouse/seller").trim();
+        const safeNext = next.startsWith("/warehouse/") ? next : "/warehouse/seller";
+        res.writeHead(302, {
+          Location: safeNext,
+          "Set-Cookie": `${STAFF_LINK_COOKIE}=${accessToken}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
+          "Cache-Control": "no-store",
+        });
+        res.end();
+      } catch (error) {
+        const query = new URLSearchParams({ error: "pin_invalid", access: accessToken, next: String(params.get("next") || "") });
+        redirectTo(res, `/warehouse-register?${query.toString()}`);
+      }
+      return;
+    }
     const username = String(params.get("username") || "").trim();
     const password = String(params.get("password") || "").trim();
     const configuredAdmin = readConfiguredAdminCredentials(loadWarehouse());

@@ -394,4 +394,55 @@ describe("warehouse auth gate", () => {
     assert.equal(unlocked.role, "seller");
     assert.equal(server.getStderr(), "");
   });
+
+  test("opens seller link PIN form and redirects to seller after PIN login", async () => {
+    let token = "";
+    const server = await startServer({
+      seedState(state) {
+        const account = createStaffAccount(state, {
+          username: "pin-form-user",
+          password: "secret1",
+          fullName: "Pin Form User",
+          role: "seller",
+          permissions: ["seller"],
+          pin: "1234",
+        });
+        token = createStaffAccessLink(state, account.id, "seller").token;
+      },
+    });
+
+    const entry = await fetch(`http://127.0.0.1:${server.port}/warehouse/seller?access=${encodeURIComponent(token)}`, {
+      redirect: "manual",
+    });
+    const entryLocation = entry.headers.get("location") || "";
+    const entryUrl = new URL(`http://127.0.0.1:${server.port}${entryLocation}`);
+    const loginPage = await fetch(`http://127.0.0.1:${server.port}${entryLocation}`);
+    const loginHtml = await loginPage.text();
+
+    assert.equal(entry.status, 302);
+    assert.equal(entryUrl.searchParams.get("error"), "pin_required");
+    assert.match(loginHtml, /name="pin"/);
+    assert.match(loginHtml, /name="access"/);
+
+    const pinLogin = await fetch(`http://127.0.0.1:${server.port}/warehouse-register`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        access: token,
+        pin: "1234",
+        next: "/warehouse/seller?access=" + encodeURIComponent(token),
+      }),
+    });
+
+    assert.equal(pinLogin.status, 302);
+    assert.equal(pinLogin.headers.get("location"), "/warehouse/seller?access=" + encodeURIComponent(token));
+    assert.match(pinLogin.headers.get("set-cookie") || "", /warehouse-staff-link=/);
+
+    const sellerPage = await fetch(`http://127.0.0.1:${server.port}${pinLogin.headers.get("location")}`, {
+      redirect: "manual",
+    });
+    assert.equal(sellerPage.status, 200);
+    assert.equal(server.getStderr(), "");
+  });
 });
