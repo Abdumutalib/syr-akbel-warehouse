@@ -46,7 +46,7 @@ jobs:
       - name: Prepare artifact
         run: |
           set -euo pipefail
-          tar --exclude=.git --exclude=node_modules --exclude=coverage --exclude='*.tgz' -czf deploy-src.tgz .
+          git archive --format=tar.gz --output=deploy-src.tgz "$GITHUB_SHA"
 
       - name: Configure SSH
         run: |
