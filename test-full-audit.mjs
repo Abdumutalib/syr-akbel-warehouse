@@ -283,8 +283,8 @@ async function testHandoffFlow() {
   
   // Read handoffs
   const list = await api('/api/warehouse/seller-cash-handoffs');
-  // May return error if no operator context, that's ok for admin-only
-  assertTruthy('Handoffs list or response', list.ok || list.error);
+  assert('Handoffs list status', list.status, 200);
+  assertTruthy('Handoffs list', Array.isArray(list.handoffs));
 }
 
 // ─────────────────────────────────

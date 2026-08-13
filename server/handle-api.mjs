@@ -21,6 +21,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     listCustomerSummaries,
     listDeletedCustomers,
     listPendingTransactions,
+    listSellerCashHandoffs,
     listWarehouseOrders,
     listWarehouseReceipts,
     permanentlyDeleteCustomer,
@@ -1055,18 +1056,37 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     })) {
       return true;
     }
-    const { approved, pricing } = readWarehouse((state) => {
+    const { approved, pricing, handoffs } = readWarehouse((state) => {
       const pricing = currentWarehousePricing(state);
       return {
         approved: listApprovedTransactions(state, paymentType, pricing),
         pricing,
+        handoffs: listSellerCashHandoffs(state),
       };
     });
+    const handoffSummary = Object.values(handoffs.reduce((groups, handoff) => {
+      const sellerName = handoff.operatorFullName || handoff.operatorUsername || "Noma'lum sotuvchi";
+      const current = groups[sellerName] || {
+        sellerName,
+        count: 0,
+        totalAmount: 0,
+        lastReceivedAt: null,
+      };
+      current.count += 1;
+      current.totalAmount += Number(handoff.amount || 0);
+      if (!current.lastReceivedAt || new Date(handoff.receivedAt || 0) > new Date(current.lastReceivedAt)) {
+        current.lastReceivedAt = handoff.receivedAt || null;
+      }
+      groups[sellerName] = current;
+      return groups;
+    }, {}));
     sendApiJson(res, 200, {
       ok: true,
       paymentType,
       approved,
       summary: summarizeApprovedTransactions(approved),
+      handoffs,
+      handoffSummary,
       pricing,
     });
     return true;
@@ -1368,6 +1388,32 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     } catch (e) {
       sendApiJson(res, e.statusCode || 400, { error: e.message || "Qaytarishni yozib bo'lmadi" });
     }
+    return true;
+  }
+
+  if (apiPath === "/api/warehouse/seller-cash-handoffs" && req.method === "GET") {
+    const operator = assertWarehouseOperator(req, res, {
+      allowAdmin: true,
+      realm: "warehouse-accountant",
+      permission: "cash",
+      message: "Pul topshirish tarixini ko'rish uchun kassir ruxsati kerak",
+    });
+    if (!operator) {
+      return true;
+    }
+    const handoffs = readWarehouse((state) => listSellerCashHandoffs(state));
+    const handoffSummary = Object.values(handoffs.reduce((groups, handoff) => {
+      const sellerName = handoff.operatorFullName || handoff.operatorUsername || "Noma'lum sotuvchi";
+      const current = groups[sellerName] || { sellerName, count: 0, totalAmount: 0, lastReceivedAt: null };
+      current.count += 1;
+      current.totalAmount += Number(handoff.amount || 0);
+      if (!current.lastReceivedAt || new Date(handoff.receivedAt || 0) > new Date(current.lastReceivedAt)) {
+        current.lastReceivedAt = handoff.receivedAt || null;
+      }
+      groups[sellerName] = current;
+      return groups;
+    }, {}));
+    sendApiJson(res, 200, { ok: true, handoffs, handoffSummary });
     return true;
   }
 
