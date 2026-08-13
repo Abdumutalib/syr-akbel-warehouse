@@ -100,7 +100,10 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     if (!Number.isFinite(operatorId) || operatorId <= 0) {
       return false;
     }
-    return Number(customer?.ownerOperatorId) === operatorId;
+    const ownerOperatorId = Number(customer?.ownerOperatorId);
+    // Legacy customers created before seller ownership was introduced remain unassigned.
+    // Keep them visible to sellers while preserving isolation for assigned customers.
+    return !Number.isFinite(ownerOperatorId) || ownerOperatorId <= 0 || ownerOperatorId === operatorId;
   };
 
   const isStrongPassword = (value) => /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(String(value || ""));

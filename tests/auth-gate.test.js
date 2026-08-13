@@ -445,4 +445,30 @@ describe("warehouse auth gate", () => {
     assert.equal(sellerPage.status, 200);
     assert.equal(server.getStderr(), "");
   });
+
+  test("keeps legacy unassigned customers visible to sellers", async () => {
+    let token = "";
+    const server = await startServer({
+      seedState(state) {
+        upsertCustomer(state, { fullName: "Legacy unassigned customer" });
+        const account = createStaffAccount(state, {
+          username: "legacy-seller",
+          password: "secret1",
+          fullName: "Legacy Seller",
+          role: "seller",
+          permissions: ["seller", "customers"],
+        });
+        token = createStaffAccessLink(state, account.id, "seller").token;
+      },
+    });
+
+    const response = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/customers`, {
+      headers: { "X-Warehouse-Access": token },
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.customers.some((customer) => customer.fullName === "Legacy unassigned customer"), true);
+    assert.equal(server.getStderr(), "");
+  });
 });
