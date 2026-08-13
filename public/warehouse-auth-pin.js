@@ -866,11 +866,26 @@
       );
     }
 
-    if (isStandalone()) {
-      return;
+    const installApi = {
+      isAvailable: false,
+      label: 'Ilovani yuklab olish',
+      open: function () { return false; },
+    };
+
+    function publishInstallState() {
+      window.warehouseInstallApp = installApi;
+      try {
+        window.dispatchEvent(new window.CustomEvent('warehouse:install-state-changed', {
+          detail: {
+            isAvailable: installApi.isAvailable,
+            label: installApi.label,
+          },
+        }));
+      } catch (error) {}
     }
 
-    if (isWebView) {
+    if (isStandalone() || isWebView) {
+      publishInstallState();
       return;
     }
 
@@ -905,7 +920,10 @@
       if (text) {
         button.textContent = text;
       }
+      installApi.label = button.textContent;
+      installApi.isAvailable = Boolean(visible);
       button.hidden = !visible;
+      publishInstallState();
     }
 
     function closeInstallSheet() {
@@ -972,7 +990,7 @@
       setVisible(false);
     });
 
-    button.addEventListener('click', async function () {
+    async function openInstallFlow() {
       if (deferredPrompt) {
         try {
           await deferredPrompt.prompt();
@@ -986,11 +1004,20 @@
 
       if (isSafari) {
         openInstallSheet();
-        return;
+        return true;
       }
 
       setVisible(false);
-    });
+      return false;
+    }
+
+    button.addEventListener('click', openInstallFlow);
+
+    installApi.open = function () {
+      return openInstallFlow();
+    };
+
+    publishInstallState();
   }
 
   setupWarehouseInstallButton();

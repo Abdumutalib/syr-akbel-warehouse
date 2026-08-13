@@ -301,6 +301,18 @@
         flex-wrap: wrap;
       }
 
+      .warehouse-global-nav__install-wrap {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-end;
+      }
+
+      .warehouse-global-nav__hint {
+        font-size: 12px;
+        color: var(--muted, #6d665d);
+      }
+
       .warehouse-global-nav__search {
         min-width: min(320px, 100%);
         flex: 1 1 280px;
@@ -418,6 +430,39 @@
 
     const tools = document.createElement("div");
     tools.className = "warehouse-global-nav__tools";
+
+    const installWrap = document.createElement("div");
+    installWrap.className = "warehouse-global-nav__install-wrap";
+
+    const installButton = document.createElement("button");
+    installButton.type = "button";
+    installButton.className = "warehouse-global-nav__link";
+    installButton.textContent = "Ilovani yuklab olish";
+
+    const installHint = document.createElement("div");
+    installHint.className = "warehouse-global-nav__hint";
+    installHint.textContent = "Telefoningizga ilova sifatida o'rnating";
+
+    function updateInstallButtonState() {
+      const installApi = window.warehouseInstallApp;
+      const label = installApi && installApi.label ? installApi.label : "Ilovani yuklab olish";
+      installButton.textContent = label;
+    }
+
+    installButton.addEventListener("click", () => {
+      const installApi = window.warehouseInstallApp;
+      if (installApi && typeof installApi.open === "function") {
+        installApi.open();
+        return;
+      }
+      installHint.textContent = "Brauzer menyusidan 'Add to Home Screen' ni tanlang.";
+    });
+
+    updateInstallButtonState();
+
+    installWrap.appendChild(installButton);
+    installWrap.appendChild(installHint);
+    tools.appendChild(installWrap);
 
     const search = document.createElement("div");
     search.className = "warehouse-global-nav__search";
