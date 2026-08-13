@@ -959,8 +959,18 @@
 
     function syncCustomerState(customers) {
       customersState.length = 0;
-      customersState.push(...customers);
-      const options = customers.map((customer) => `<option value="${customer.id}">${customer.fullName}</option>`).join('');
+      // Filter customers by payment category matching the current sale mode
+      const filteredCustomers = customers.filter((customer) => {
+        const paymentCategories = customer.paymentCategories || [];
+        if (saleMode === 'transfer') {
+          return paymentCategories.includes('transfer');
+        } else {
+          // saleMode === 'cash'
+          return paymentCategories.includes('cash');
+        }
+      });
+      customersState.push(...filteredCustomers);
+      const options = filteredCustomers.map((customer) => `<option value="${customer.id}">${customer.fullName}</option>`).join('');
       saleCustomerEl.innerHTML = options;
       updateSelectedCustomerCard();
       restoreSaleDraft();

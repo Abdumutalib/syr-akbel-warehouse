@@ -551,4 +551,55 @@ describe("warehouse auth gate", () => {
     assert.equal(response.status, 201);
     assert.equal(server.getStderr(), "");
   });
+
+  test("returns customers with paymentCategories for frontend filtering", async () => {
+    let token = "";
+    const server = await startServer({
+      seedState(state) {
+        const cashCustomer = upsertCustomer(state, {
+          fullName: "Cash Only Customer",
+          paymentCategories: ["cash"],
+        });
+        const transferCustomer = upsertCustomer(state, {
+          fullName: "Transfer Only Customer",
+          paymentCategories: ["transfer"],
+        });
+        const dualCustomer = upsertCustomer(state, {
+          fullName: "Dual Payment Customer",
+          paymentCategories: ["cash", "transfer"],
+        });
+        const account = createStaffAccount(state, {
+          username: "payment-seller",
+          password: "secret1",
+          fullName: "Payment Filter Seller",
+          role: "seller",
+          permissions: ["seller"],
+        });
+        token = createStaffAccessLink(state, account.id, "seller").token;
+      },
+    });
+
+    const response = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/customers`, {
+      headers: { "X-Warehouse-Access": token },
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(Array.isArray(body.customers), true);
+
+    const cashCustomer = body.customers.find((c) => c.fullName === "Cash Only Customer");
+    const transferCustomer = body.customers.find((c) => c.fullName === "Transfer Only Customer");
+    const dualCustomer = body.customers.find((c) => c.fullName === "Dual Payment Customer");
+
+    assert.ok(cashCustomer, "Cash only customer should be in list");
+    assert.deepEqual(cashCustomer.paymentCategories, ["cash"], "Cash customer should have cash category");
+
+    assert.ok(transferCustomer, "Transfer only customer should be in list");
+    assert.deepEqual(transferCustomer.paymentCategories, ["transfer"], "Transfer customer should have transfer category");
+
+    assert.ok(dualCustomer, "Dual payment customer should be in list");
+    assert.deepEqual(dualCustomer.paymentCategories, ["cash", "transfer"], "Dual customer should have both categories");
+
+    assert.equal(server.getStderr(), "");
+  });
 });
