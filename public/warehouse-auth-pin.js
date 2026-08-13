@@ -3,7 +3,16 @@
   const LEGACY_VAULT_KEY = 'warehouse-pin-vault-v1';
   const OPERATOR_PROFILE_KEY = 'warehouse-operator-profile-v1';
   const WAREHOUSE_STORAGE_PREFIX = 'warehouse-';
-  const STAFF_PERMISSION_KEYS = ['seller', 'customers', 'cash', 'transfer'];
+  const STAFF_PERMISSION_KEYS = [
+    'seller',
+    'customers',
+    'cash',
+    'transfer',
+    'admin_panel',
+    'orders',
+    'write_cash_sale',
+    'write_transfer_sale',
+  ];
   const LEGACY_USERNAME_KEYS = [
     'warehouse-admin-username',
     'warehouse-seller-username',
