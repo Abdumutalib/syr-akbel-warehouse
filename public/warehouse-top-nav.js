@@ -441,7 +441,7 @@
 
     const installHint = document.createElement("div");
     installHint.className = "warehouse-global-nav__hint";
-    installHint.textContent = "Telefon ёки компьютерга ilova sifatida o'rnating";
+    installHint.textContent = "Telefon yoki kompyuterga ilova sifatida o'rnating";
 
     function updateInstallButtonState() {
       const installApi = window.warehouseInstallApp;

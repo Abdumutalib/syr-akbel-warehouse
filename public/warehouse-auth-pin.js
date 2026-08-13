@@ -995,13 +995,18 @@
         let opened = false;
         try {
           await deferredPrompt.prompt();
-          await deferredPrompt.userChoice;
-          opened = true;
+          const choice = await deferredPrompt.userChoice;
+          opened = Boolean(choice && choice.outcome === 'accepted');
         } catch (error) {
           opened = false;
         }
         deferredPrompt = null;
-        setVisible(false);
+        if (opened) {
+          setVisible(false);
+        } else {
+          // Keep install action visible so user can retry or use browser menu install.
+          setVisible(true, 'Ilovani o\'rnatish');
+        }
         return opened;
       }
 
@@ -1010,7 +1015,9 @@
         return true;
       }
 
-      installApi.label = isAndroid ? 'Chrome orqali o\'rnating' : 'Brauzerdan o\'rnating';
+      installApi.label = isAndroid
+        ? 'Chrome menyusidan o\'rnating'
+        : 'Brauzer menyusidan Install app ni tanlang';
       publishInstallState();
       return false;
     }
