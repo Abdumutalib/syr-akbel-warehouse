@@ -751,7 +751,8 @@ function parseCookies(req) {
 
 const SITE_GATE_COOKIE = "warehouse-site";
 const STAFF_LINK_COOKIE = "warehouse-staff-link";
-const SITE_GATE_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 kun
+const SITE_GATE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // trusted device: 1 yil
+const STAFF_LINK_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // staff link: 30 kun
 
 function siteGateCookieValue() {
   const base =
@@ -850,7 +851,7 @@ function checkSiteGate(req, res, u) {
     return {
       allowed: true,
       setStaffCookie: shouldSetCookie
-        ? `${STAFF_LINK_COOKIE}=${staffLinkAuth.token}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`
+        ? `${STAFF_LINK_COOKIE}=${staffLinkAuth.token}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`
         : null,
     };
   }
