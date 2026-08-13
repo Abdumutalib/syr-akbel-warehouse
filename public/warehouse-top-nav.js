@@ -441,7 +441,7 @@
 
     const installHint = document.createElement("div");
     installHint.className = "warehouse-global-nav__hint";
-    installHint.textContent = "Telefoningizga ilova sifatida o'rnating";
+    installHint.textContent = "Telefon ёки компьютерга ilova sifatida o'rnating";
 
     function updateInstallButtonState() {
       const installApi = window.warehouseInstallApp;
@@ -456,13 +456,13 @@
         if (outcome && typeof outcome.then === "function") {
           outcome.then((ok) => {
             if (!ok) {
-              installHint.textContent = "Chrome/Safari'да очинг, кейин браузер менюсидан Install ёки Add to Home Screen'ни танланг.";
+              installHint.textContent = "Chrome/Edge/Safari'да очинг. Компьютерда Install app, телефонда Add to Home Screen'ни танланг.";
             }
           }).catch(() => {
-            installHint.textContent = "Ўрнатишни бошлаб бўлмади. Браузер менюсидан Install/Add to Home Screen'ни танланг.";
+            installHint.textContent = "Ўрнатишни бошлаб бўлмади. Браузер менюсидан Install app ёки Add to Home Screen'ни танланг.";
           });
         } else if (!outcome) {
-          installHint.textContent = "Chrome/Safari'да очинг, кейин браузер менюсидан Install ёки Add to Home Screen'ни танланг.";
+          installHint.textContent = "Chrome/Edge/Safari'да очинг. Компьютерда Install app, телефонда Add to Home Screen'ни танланг.";
         }
         return;
       }
