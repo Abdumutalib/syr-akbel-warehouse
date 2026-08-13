@@ -459,6 +459,11 @@
     });
 
     updateInstallButtonState();
+    if (typeof window.__warehouseInstallStateListener === "function") {
+      window.removeEventListener("warehouse:install-state-changed", window.__warehouseInstallStateListener);
+    }
+    window.__warehouseInstallStateListener = updateInstallButtonState;
+    window.addEventListener("warehouse:install-state-changed", updateInstallButtonState);
 
     installWrap.appendChild(installButton);
     installWrap.appendChild(installHint);

@@ -2,9 +2,40 @@
  * Сайтнинг барча кнопкалари ва API endpoint'ларини тест қилиш скрипти
  */
 
-const BASE = process.env.WAREHOUSE_TEST_BASE || 'http://127.0.0.1:8789';
-const ADMIN_USER = process.env.WAREHOUSE_TEST_ADMIN_USER || 'admin';
-const ADMIN_PASS = process.env.WAREHOUSE_TEST_ADMIN_PASS || 'admin';
+import fs from 'node:fs';
+import path from 'node:path';
+
+function readDotEnv() {
+  try {
+    const file = fs.readFileSync(path.join(process.cwd(), '.env'), 'utf8');
+    const entries = {};
+    for (const rawLine of file.split(/\r?\n/u)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) {
+        continue;
+      }
+      const separator = line.indexOf('=');
+      if (separator <= 0) {
+        continue;
+      }
+      const key = line.slice(0, separator).trim();
+      let value = line.slice(separator + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      entries[key] = value;
+    }
+    return entries;
+  } catch {
+    return {};
+  }
+}
+
+const DOT_ENV = readDotEnv();
+const DEFAULT_PORT = process.env.WAREHOUSE_TEST_PORT || process.env.PORT || DOT_ENV.PORT || '8789';
+const BASE = process.env.WAREHOUSE_TEST_BASE || DOT_ENV.WAREHOUSE_ALLOWED_ORIGIN || `http://127.0.0.1:${DEFAULT_PORT}`;
+const ADMIN_USER = process.env.WAREHOUSE_TEST_ADMIN_USER || process.env.WAREHOUSE_ADMIN_USERNAME || DOT_ENV.WAREHOUSE_ADMIN_USERNAME || 'admin';
+const ADMIN_PASS = process.env.WAREHOUSE_TEST_ADMIN_PASS || process.env.WAREHOUSE_ADMIN_PASSWORD || DOT_ENV.WAREHOUSE_ADMIN_PASSWORD || 'change-me';
 const AUTH = 'Basic ' + Buffer.from(`${ADMIN_USER}:${ADMIN_PASS}`).toString('base64');
 let SESSION_COOKIE = '';
 
@@ -88,6 +119,11 @@ async function run() {
 
   const loggedIn = await loginAdminSession();
   log(loggedIn ? 'OK' : 'FAIL', '[Admin session login] → POST /warehouse-register', `base=${BASE}`);
+  if (!loggedIn) {
+    console.log('\nFATAL: Admin session login ishlamadi. WAREHOUSE_TEST_BASE / WAREHOUSE_TEST_ADMIN_USER / WAREHOUSE_TEST_ADMIN_PASS yoki .env qiymatlarini tekshiring.');
+    process.exitCode = 1;
+    return;
+  }
 
   // ═══ 1. САҲИФАЛАР (HTML) ═══
   console.log('\n📄 САҲИФАЛАР ТЕСТИ\n');
