@@ -717,7 +717,7 @@ function requiredWarehouseRoutePermissions(pathname) {
     return ["seller"];
   }
   if (pathname === "/warehouse/seller/sale/transfer") {
-    return ["transfer"];
+    return ["transfer", "write_transfer_sale"];
   }
   if (pathname === "/warehouse/customers" || pathname === "/warehouse/orders") {
     return ["customers", "seller", "cash", "transfer"];

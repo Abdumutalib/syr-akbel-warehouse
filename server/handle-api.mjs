@@ -216,7 +216,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   const assertSellerWriteOperator = (body, message) => assertWarehouseOperator(req, res, {
     allowAdmin: true,
     realm: usesTransferFlow(body) ? 'warehouse-accountant' : 'warehouse-seller',
-    permission: usesTransferFlow(body) ? 'transfer' : 'seller',
+    permission: usesTransferFlow(body) ? ['transfer', 'write_transfer_sale'] : 'seller',
     message,
   });
   if (apiPath === "/api/telegram/webhook" && req.method === "POST") {

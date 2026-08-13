@@ -471,4 +471,84 @@ describe("warehouse auth gate", () => {
     assert.equal(body.customers.some((customer) => customer.fullName === "Legacy unassigned customer"), true);
     assert.equal(server.getStderr(), "");
   });
+
+  test("opens PIN-protected transfer sale links for sellers with transfer permission", async () => {
+    let token = "";
+    const server = await startServer({
+      seedState(state) {
+        const account = createStaffAccount(state, {
+          username: "transfer-pin-seller",
+          password: "secret1",
+          fullName: "Transfer PIN Seller",
+          role: "seller",
+          permissions: ["seller", "transfer"],
+          pin: "1234",
+        });
+        token = createStaffAccessLink(state, account.id, "transfer").token;
+      },
+    });
+
+    const entry = await fetch(`http://127.0.0.1:${server.port}/warehouse/seller/sale/transfer?access=${encodeURIComponent(token)}`, {
+      redirect: "manual",
+    });
+    const entryLocation = entry.headers.get("location") || "";
+    const entryUrl = new URL(`http://127.0.0.1:${server.port}${entryLocation}`);
+    assert.equal(entry.status, 302);
+    assert.equal(entryUrl.searchParams.get("error"), "pin_required");
+    assert.equal(entryUrl.searchParams.get("access"), token);
+    assert.equal(entryUrl.searchParams.get("next"), `/warehouse/seller/sale/transfer?access=${token}`);
+
+    const pinLogin = await fetch(`http://127.0.0.1:${server.port}/warehouse-register`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        access: token,
+        pin: "1234",
+        next: `/warehouse/seller/sale/transfer?access=${token}`,
+      }),
+    });
+    assert.equal(pinLogin.status, 302);
+    assert.equal(pinLogin.headers.get("location"), `/warehouse/seller/sale/transfer?access=${token}`);
+
+    const transferPage = await fetch(`http://127.0.0.1:${server.port}${pinLogin.headers.get("location")}`, {
+      redirect: "manual",
+    });
+    assert.equal(transferPage.status, 200);
+    assert.match(await transferPage.text(), /Перечисление/);
+    assert.equal(server.getStderr(), "");
+  });
+
+  test("accepts write_transfer_sale as transfer-sale access for legacy seller permissions", async () => {
+    let token = "";
+    let customerId = 0;
+    const server = await startServer({
+      seedState(state) {
+        seedWarehouseStock(state, 100);
+        customerId = upsertCustomer(state, { fullName: "Write transfer customer" }).id;
+        const account = createStaffAccount(state, {
+          username: "write-transfer-seller",
+          password: "secret1",
+          fullName: "Write Transfer Seller",
+          role: "seller",
+          permissions: ["seller", "write_transfer_sale"],
+        });
+        token = createStaffAccessLink(state, account.id, "transfer").token;
+      },
+    });
+
+    const page = await fetch(`http://127.0.0.1:${server.port}/warehouse/seller/sale/transfer?access=${token}`);
+    assert.equal(page.status, 200);
+    const response = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/seller-sale`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": "write-transfer-sale-test",
+        "X-Warehouse-Access": token,
+      },
+      body: JSON.stringify({ userId: customerId, amountKg: 1, priceType: "transfer", transferPaidAmount: 0 }),
+    });
+    assert.equal(response.status, 201);
+    assert.equal(server.getStderr(), "");
+  });
 });
