@@ -1,16 +1,4 @@
-FROM node:20-bookworm-slim
-
-WORKDIR /app
-
-COPY package.json ./
-RUN npm install --omit=dev
-
-COPY . .
-
-ENV PORT=3000
-EXPOSE 3000
-
-CMD ["npm", "start"]FROM node:20-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
