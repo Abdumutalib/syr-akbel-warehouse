@@ -1150,8 +1150,8 @@ function staticResponseHeaders(contentType, filePath, etag = null) {
     // Images change rarely — cache 7 days
     cacheControl = "public, max-age=604800, immutable";
   } else if (isScript || isCss) {
-    // JS/CSS — cache 1 hour, revalidate with ETag
-    cacheControl = "public, max-age=3600, must-revalidate";
+    // Frontend code must refresh immediately after a deployment.
+    cacheControl = "no-store, no-cache, must-revalidate, max-age=0";
   } else if (isHtml) {
     // HTML — always revalidate (ETag), but can serve from cache if unchanged
     cacheControl = "no-cache";

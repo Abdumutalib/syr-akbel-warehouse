@@ -1,4 +1,4 @@
-const CACHE_NAME = 'akbel-cache-v10002';
+const CACHE_NAME = 'akbel-cache-v10003';
 const MAX_CACHE_ITEMS = 120;
 const CORE_ASSETS = [
   '/warehouse/admin',
@@ -8,7 +8,7 @@ const CORE_ASSETS = [
   '/warehouse/seller',
   '/warehouse/seller/sale/cash',
   '/warehouse/seller/sale/transfer',
-  '/warehouse/assets/warehouse-api.js',
+  '/warehouse/assets/warehouse-api.js?v=20260908-1',
   '/warehouse/assets/warehouse-auth-pin.js',
   '/warehouse/assets/warehouse-offline.js',
   '/warehouse-top-nav.js',
