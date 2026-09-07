@@ -7,6 +7,7 @@ import {
   authenticateStaffAccessToken,
   authenticateStaffAccount,
   approveTransaction,
+  clearCustomerHistory,
   createStaffAccessLink,
   createStaffAccount,
   deleteCustomer,
@@ -352,6 +353,37 @@ describe("warehouse bot helpers", () => {
     assert.equal(state.users.length, 1);
     assert.equal(state.transactions.length, 1);
     assert.equal(listDeletedCustomers(state).length, 0);
+  });
+
+  test("restores net stock when deleting a customer with a return", () => {
+    const state = loadWarehouseState(makeStatePath());
+    seedWarehouseStock(state, 100);
+
+    const user = upsertCustomer(state, { fullName: "Қайтаришли мижоз", paymentCategories: ["cash"] });
+    recordApprovedSale(state, { userId: user.id, amountKg: 10 });
+    recordCustomerReturn(state, { userId: user.id, amountKg: 2 });
+    assert.equal(state.warehouse.currentStockKg, 92);
+
+    const result = deleteCustomer(state, user.id);
+
+    assert.equal(result.restoredStockKg, 8);
+    assert.equal(state.warehouse.currentStockKg, 100);
+  });
+
+  test("restores net stock when clearing a customer history with a return", () => {
+    const state = loadWarehouseState(makeStatePath());
+    seedWarehouseStock(state, 100);
+
+    const user = upsertCustomer(state, { fullName: "Тарихи қайтаришли мижоз", paymentCategories: ["cash"] });
+    recordApprovedSale(state, { userId: user.id, amountKg: 10 });
+    recordCustomerReturn(state, { userId: user.id, amountKg: 2 });
+    assert.equal(state.warehouse.currentStockKg, 92);
+
+    const result = clearCustomerHistory(state, user.id);
+
+    assert.equal(result.restoredStockKg, 8);
+    assert.equal(state.warehouse.currentStockKg, 100);
+    assert.equal(state.transactions.length, 0);
   });
 
   test("builds grouped customer catalog and detail history", () => {
