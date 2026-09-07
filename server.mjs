@@ -573,8 +573,10 @@ async function persistWarehouseStateToPostgres(state, options = {}) {
 async function saveWarehouse(state, options = {}) {
   warehouseStateCache = state;
   warehouseSavePending = true;
+  // Persist before acknowledging a write so a restart cannot restore stale stock.
+  flushWarehouseSave();
   scheduleYandexCsvUpload();
-  
+
   if (!warehouseSaveTimer) {
     warehouseSaveTimer = setTimeout(flushWarehouseSave, 300);
   }
