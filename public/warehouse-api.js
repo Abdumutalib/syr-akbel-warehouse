@@ -41,6 +41,10 @@ function setMemoryCachedResponse(cacheKey, data) {
   });
 }
 
+function invalidateGetCacheAfterMutation() {
+  getRequestMemoryCache.clear();
+}
+
 async function getStaleCachedResponse(cacheKey) {
   const memoryCached = getMemoryCachedResponse(cacheKey);
   if (memoryCached) {
@@ -195,6 +199,8 @@ window.warehouseApi = {
         if (window.warehouseOfflineQueue?.setCachedGet) {
           window.warehouseOfflineQueue.setCachedGet(cacheKey, data).catch(() => {});
         }
+      } else {
+        invalidateGetCacheAfterMutation();
       }
 
       return data;
