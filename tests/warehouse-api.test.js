@@ -51,6 +51,7 @@ test('GET requests fall back to stale cached data when the server returns 5xx', 
 
 test('successful mutations invalidate cached GET responses', async () => {
   let getCalls = 0;
+  const requestCaches = [];
   const sandbox = {
     window: {
       warehouseOfflineQueue: {
@@ -60,6 +61,7 @@ test('successful mutations invalidate cached GET responses', async () => {
       },
     },
     fetch: async (_url, options = {}) => {
+      requestCaches.push(options.cache);
       if (String(options.method || 'GET').toUpperCase() === 'GET') {
         getCalls += 1;
         return new Response(JSON.stringify({ stockKg: getCalls === 1 ? 0 : 100 }), {
@@ -96,4 +98,5 @@ test('successful mutations invalidate cached GET responses', async () => {
   });
   assert.deepEqual(await api.fetch('/api/warehouse/pending'), { stockKg: 100 });
   assert.equal(getCalls, 2);
+  assert.deepEqual(requestCaches, ['no-store', 'no-store', 'no-store']);
 });

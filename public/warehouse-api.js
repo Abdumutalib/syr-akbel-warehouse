@@ -121,6 +121,7 @@ window.warehouseApi = {
 
         const res = await fetch(normalizedUrl, {
           ...options,
+          cache: 'no-store',
           headers: requestHeaders,
           signal: controller.signal,
         });
