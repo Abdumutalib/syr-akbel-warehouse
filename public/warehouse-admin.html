@@ -970,7 +970,7 @@
           <div>Telegram: ${window.escapeHtml(entry.telegramId || "-")}</div>
           <div>O'chirilgan yozuvlar: ${window.escapeHtml(entry.deletedTransactions)}</div>
           <div>Qaytadigan kg: ${window.escapeHtml(entry.restoredStockKg)}</div>
-          <div>O'chirilgan vaqti: ${window.escapeHtml(entry.deletedAt ? new Intl.DateTimeFormat('ru-RU').format(new Date(entry.deletedAt)) : '-')}</div>
+          <div>O'chirilgan vaqti: ${window.escapeHtml(window.warehouseApi.formatDate(entry.deletedAt))}</div>
           <div class="tx-actions">
             <button data-restore-customer="${window.escapeHtml(entry.id)}" class="secondary">Mijozni tiklash</button>
             <button data-permanent-delete-customer="${window.escapeHtml(entry.id)}" style="background: #9f1239;">Butunlay o'chirish</button>
@@ -1069,7 +1069,7 @@
           </div>
           <p class="raw" style="margin: 0; font-size: 15px; color: var(--ink);">${window.escapeHtml(m.text || "")}</p>
           <p style="margin: 6px 0 0; color: var(--muted); font-size: 12px;">
-            ${m.telegramId ? `ID: ${window.escapeHtml(m.telegramId)} · ` : ""}${window.escapeHtml(new Date(m.receivedAt).toLocaleString("uz-UZ"))}
+            ${m.telegramId ? `ID: ${window.escapeHtml(m.telegramId)} · ` : ""}${window.escapeHtml(window.warehouseApi.formatDate(m.receivedAt, true))}
           </p>
         </article>
       `).join("");
@@ -1220,7 +1220,7 @@
          <article class="staff-item" style="${isReturn ? 'border-color: #fca5a5; background: #fff5f5;' : ''}">
            <div style="display: flex; justify-content: space-between;">
              <strong>${sign}${item.amountKg} kg</strong>
-             <span style="font-size: 12px; color: var(--muted);">${item.receivedAt ? new Date(item.receivedAt).toLocaleDateString() : ''}</span>
+             <span style="font-size: 12px; color: var(--muted);">${item.receivedAt ? window.warehouseApi.formatDate(item.receivedAt) : ''}</span>
            </div>
            <div style="font-size: 14px;">
              <span style="font-weight: bold; color: ${isReturn ? '#b91c1c' : 'var(--ok)'};">${title}</span>

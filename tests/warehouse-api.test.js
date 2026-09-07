@@ -100,3 +100,12 @@ test('successful mutations invalidate cached GET responses', async () => {
   assert.equal(getCalls, 2);
   assert.deepEqual(requestCaches, ['no-store', 'no-store', 'no-store']);
 });
+
+test('formatDate renders day, month, and year in that order', () => {
+  const api = loadWarehouseApiHarness();
+  const localDate = new Date('2026-09-08T14:05:00Z');
+  const localHour = String(localDate.getHours()).padStart(2, '0');
+  const localMinute = String(localDate.getMinutes()).padStart(2, '0');
+  assert.equal(api.formatDate('2026-09-08T14:05:00Z'), '08.09.2026');
+  assert.equal(api.formatDate('2026-09-08T14:05:00Z', true), `08.09.2026 ${localHour}:${localMinute}`);
+});

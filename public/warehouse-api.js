@@ -227,5 +227,17 @@ window.warehouseApi = {
     return new Intl.NumberFormat('ru-RU').format(Number(value || 0));
   },
 
+  formatDate(value, includeTime = false) {
+    const date = value ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) return '-';
+    const parts = [
+      String(date.getDate()).padStart(2, '0'),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getFullYear()),
+    ];
+    if (!includeTime) return parts.join('.');
+    return `${parts.join('.')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  },
+
   escapeHtml,
 };

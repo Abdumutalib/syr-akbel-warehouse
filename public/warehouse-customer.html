@@ -559,7 +559,7 @@
       if (!value) return '-';
       const date = new Date(value);
       if (Number.isNaN(date.getTime())) return String(value);
-      return new Intl.DateTimeFormat('ru-RU').format(date);
+      return window.warehouseApi.formatDate(date);
     }
     function kindLabel(entry) {
       if (entry.kind === 'payment') return 'To\'lov';
