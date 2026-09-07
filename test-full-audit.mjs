@@ -4,11 +4,17 @@
  */
 
 const BASE = 'http://127.0.0.1:8789';
-const AUTH = 'Basic ' + Buffer.from('admin:admin').toString('base64');
+const ADMIN_USER = process.env.WAREHOUSE_TEST_ADMIN_USER || 'admin';
+const ADMIN_PASS = process.env.WAREHOUSE_TEST_ADMIN_PASS || 'admin';
+const AUTH = 'Basic ' + Buffer.from(`${ADMIN_USER}:${ADMIN_PASS}`).toString('base64');
 
 let passed = 0;
 let failed = 0;
 const errors = [];
+
+function resolveApiPath(pathname) {
+  return pathname.startsWith('/api/') ? `/warehouse${pathname}` : pathname;
+}
 
 function assert(label, actual, expected) {
   if (actual === expected) {
@@ -49,7 +55,7 @@ async function api(path, method = 'GET', body = null) {
     headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
   };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(BASE + path, opts);
+  const res = await fetch(BASE + resolveApiPath(path), opts);
   const data = await res.json().catch(() => ({}));
   return { status: res.status, ...data };
 }
@@ -60,7 +66,7 @@ async function apiRaw(path, method = 'GET', body = null) {
     headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
   };
   if (body) opts.body = JSON.stringify(body);
-  return fetch(BASE + path, opts);
+  return fetch(BASE + resolveApiPath(path), opts);
 }
 
 // ─────────────────────────────────
@@ -462,7 +468,7 @@ async function testStaffManagement() {
   if (!accessToken) { console.log('  ⚠️ No token, skipping auth tests'); return; }
   
   // Test auth-status with token (via query param like frontend does)
-  const authStatusRes = await fetch(`${BASE}/api/warehouse/auth-status?access=${accessToken}`, {
+  const authStatusRes = await fetch(`${BASE}/warehouse/api/warehouse/auth-status?access=${accessToken}`, {
     headers: { 'Content-Type': 'application/json' },
   });
   const authStatus = await authStatusRes.json();
@@ -471,7 +477,7 @@ async function testStaffManagement() {
   assertTruthy('Auth has fullName', authStatus.fullName);
   
   // Test verify-pin with token
-  const pinRes = await fetch(`${BASE}/api/warehouse/verify-pin?access=${accessToken}`, {
+  const pinRes = await fetch(`${BASE}/warehouse/api/warehouse/verify-pin?access=${accessToken}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pin: '1234' }),
