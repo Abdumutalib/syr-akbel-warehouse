@@ -3,7 +3,7 @@
  * Tests every button/action across all pages via API calls
  */
 
-const BASE = 'http://127.0.0.1:8789';
+const BASE = process.env.WAREHOUSE_TEST_BASE || 'http://127.0.0.1:8789';
 const ADMIN_USER = process.env.WAREHOUSE_TEST_ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.WAREHOUSE_TEST_ADMIN_PASS || 'admin';
 const AUTH = 'Basic ' + Buffer.from(`${ADMIN_USER}:${ADMIN_PASS}`).toString('base64');
