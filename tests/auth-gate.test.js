@@ -389,6 +389,25 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 
+  test("keeps access-link permissions scoped to the granted permission", () => {
+    const state = loadWarehouseState();
+    const seller = createStaffAccount(state, {
+      username: "scoped-seller",
+      password: "secret1",
+      fullName: "Scoped Seller",
+      role: "seller",
+      permissions: ["seller", "transfer"],
+    });
+
+    const sellerLink = createStaffAccessLink(state, seller.id, "seller");
+    const transferLink = createStaffAccessLink(state, seller.id, "transfer");
+
+    assert.equal(sellerLink.permission, "seller");
+    assert.equal(transferLink.permission, "transfer");
+    assert.notEqual(sellerLink.token, transferLink.token);
+    assert.equal(transferLink.permission, "transfer");
+  });
+
   test("rejects seller-only access links for transfer sales", async () => {
     let token = "";
     let customerId = 0;
@@ -801,4 +820,3 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 });
-
