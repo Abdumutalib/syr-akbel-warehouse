@@ -2,6 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { isIP } from "node:net";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import {
@@ -96,6 +97,7 @@ const WAREHOUSE_COMPANY_NAME = process.env.WAREHOUSE_COMPANY_NAME?.trim() || "С
 const WAREHOUSE_ALLOWED_ORIGIN =
   process.env.WAREHOUSE_ALLOWED_ORIGIN?.trim() || `http://127.0.0.1:${PORT}`;
 const WAREHOUSE_ALLOWED_ORIGINS = resolveAllowedOrigins(WAREHOUSE_ALLOWED_ORIGIN);
+const WAREHOUSE_CANONICAL_ORIGIN = resolveCanonicalOrigin();
 const WAREHOUSE_MAX_REQUEST_BYTES = Math.max(
   256 * 1024,
   Number(process.env.WAREHOUSE_MAX_REQUEST_BYTES) || 6 * 1024 * 1024
@@ -1981,6 +1983,36 @@ function redirectTo(res, target) {
   res.end();
 }
 
+function resolveCanonicalOrigin() {
+  const configured = process.env.WAREHOUSE_CANONICAL_ORIGIN?.trim();
+  const candidates = configured ? [configured] : WAREHOUSE_ALLOWED_ORIGINS;
+  for (const candidate of candidates) {
+    try {
+      const origin = new URL(candidate);
+      if (!["http:", "https:"].includes(origin.protocol)) continue;
+      if (origin.hostname === "localhost" || isIP(origin.hostname)) continue;
+      return origin.origin;
+    } catch {}
+  }
+  return "";
+}
+
+function shouldRedirectToCanonicalHost(req, url) {
+  if (!WAREHOUSE_CANONICAL_ORIGIN || !["GET", "HEAD"].includes(req.method || "")) return false;
+  if (url.pathname === "/healthz" || url.pathname === "/readyz") return false;
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/warehouse/api/")) return false;
+  if (url.pathname.startsWith("/telegram/")) return false;
+
+  const hostHeader = String(req.headers.host || "").trim();
+  if (!hostHeader) return false;
+  try {
+    const hostname = new URL(`http://${hostHeader}`).hostname;
+    return isIP(hostname) > 0 && hostname !== "127.0.0.1" && hostname !== "::1";
+  } catch {
+    return false;
+  }
+}
+
 let isShuttingDown = false;
 
 function withSafeRequestHandling(handler) {
@@ -2029,6 +2061,11 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   // Security headers va rate limiting (healthz ni chetlab o'tamiz)
   securityHeaders(res);
   if (u.pathname !== "/healthz" && rateLimiter(req, res)) return;
+
+  if (shouldRedirectToCanonicalHost(req, u)) {
+    redirectTo(res, `${WAREHOUSE_CANONICAL_ORIGIN}${u.pathname}${u.search}`);
+    return;
+  }
 
   if (u.pathname === "/telegram/webhook-extended" && req.method === "POST") {
     if (extendedBotHandler) {

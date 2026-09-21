@@ -2,6 +2,7 @@ import { afterEach, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -58,6 +59,24 @@ function getFreePort() {
       });
     });
     server.on("error", reject);
+  });
+}
+
+function requestWithHost(port, requestPath, host) {
+  return new Promise((resolve, reject) => {
+    const request = http.get(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path: requestPath,
+        headers: { Host: host },
+      },
+      (response) => {
+        response.resume();
+        response.once("end", () => resolve(response));
+      }
+    );
+    request.once("error", reject);
   });
 }
 
@@ -120,6 +139,28 @@ async function startServer(options = {}) {
 }
 
 describe("warehouse auth gate", () => {
+  test("redirects public IP page requests to the configured domain", async () => {
+    const server = await startServer({
+      allowedOrigin: "https://akbelim.com",
+    });
+
+    const pageResponse = await requestWithHost(
+      server.port,
+      "/warehouse/seller/sale/cash?access=test-token",
+      "178.218.207.161"
+    );
+
+    assert.equal(pageResponse.statusCode, 302);
+    assert.equal(
+      pageResponse.headers.location,
+      "https://akbelim.com/warehouse/seller/sale/cash?access=test-token"
+    );
+
+    const healthResponse = await requestWithHost(server.port, "/healthz", "178.218.207.161");
+    assert.equal(healthResponse.statusCode, 200);
+    assert.equal(server.getStderr(), "");
+  });
+
   test("renders admin login form and guidance text", async () => {
     const server = await startServer();
     const firstResponse = await fetch(`http://127.0.0.1:${server.port}/warehouse-register`, {
