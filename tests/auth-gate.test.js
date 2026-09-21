@@ -420,6 +420,61 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 
+  test("keeps staff device access for one year and blocks it after admin revokes the link", async () => {
+    let token = "";
+    let linkId = "";
+    let staffId = 0;
+    const server = await startServer({
+      seedState(state) {
+        const account = createStaffAccount(state, {
+          username: "persistent-device-seller",
+          password: "secret1",
+          fullName: "Persistent Device Seller",
+          role: "seller",
+          permissions: ["seller"],
+        });
+        staffId = account.id;
+        const link = createStaffAccessLink(state, account.id, "seller");
+        token = link.token;
+        linkId = link.id;
+      },
+    });
+
+    const firstOpen = await fetch(`http://127.0.0.1:${server.port}/warehouse/seller?access=${encodeURIComponent(token)}`, {
+      redirect: "manual",
+    });
+    const staffCookie = firstOpen.headers.get("set-cookie") || "";
+
+    assert.equal(firstOpen.status, 200);
+    assert.match(staffCookie, /warehouse-staff-link=/);
+    assert.match(staffCookie, /Max-Age=31536000/);
+
+    const loginBody = new URLSearchParams({ username: "admin1", password: "adminpass1" });
+    const login = await fetch(`http://127.0.0.1:${server.port}/warehouse-register`, {
+      method: "POST",
+      body: loginBody,
+      redirect: "manual",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+    const adminCookie = (login.headers.get("set-cookie") || "").split(";")[0];
+    assert.equal(login.status, 302);
+
+    const revoke = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/staff/${staffId}/access-links/${linkId}`, {
+      method: "DELETE",
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(revoke.status, 200);
+
+    const staleCookieOpen = await fetch(`http://127.0.0.1:${server.port}/warehouse/seller`, {
+      redirect: "manual",
+      headers: { Cookie: `warehouse-staff-link=${token}` },
+    });
+
+    assert.equal(staleCookieOpen.status, 302);
+    assert.equal(staleCookieOpen.headers.get("location"), "/warehouse-register?error=link_revoked");
+    assert.match(staleCookieOpen.headers.get("set-cookie") || "", /warehouse-staff-link=; Path=\/; Max-Age=0/);
+    assert.equal(server.getStderr(), "");
+  });
   test("blocks route access until a staff PIN is verified", async () => {
     let token = "";
     const server = await startServer({
@@ -705,3 +760,4 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 });
+

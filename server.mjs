@@ -754,7 +754,7 @@ function parseCookies(req) {
 const SITE_GATE_COOKIE = "warehouse-site";
 const STAFF_LINK_COOKIE = "warehouse-staff-link";
 const SITE_GATE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // trusted device: 1 yil
-const STAFF_LINK_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // staff link: 30 kun
+const STAFF_LINK_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // trusted staff device: 1 yil
 
 function siteGateCookieValue() {
   const base =
@@ -2603,3 +2603,4 @@ server.listen(PORT, "0.0.0.0", () => {
   startDebtReminderScheduler();
   startAutoReports();
 });
+
