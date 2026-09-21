@@ -246,6 +246,108 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 
+  test("persists stock after admin receipt and staff access-link sale", async () => {
+    let customerId = 0;
+    const server = await startServer({
+      seedState(state) {
+        seedWarehouseStock(state, 100);
+        const customer = upsertCustomer(state, { fullName: "API zanjir mijozi" });
+        customerId = customer.id;
+      },
+    });
+
+    const loginBody = new URLSearchParams({
+      username: "admin1",
+      password: "adminpass1",
+    });
+    const login = await fetch(`http://127.0.0.1:${server.port}/warehouse-register`, {
+      method: "POST",
+      body: loginBody,
+      redirect: "manual",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+    const adminCookie = (login.headers.get("set-cookie") || "").split(";")[0];
+    assert.equal(login.status, 302);
+    assert.match(adminCookie, /warehouse-site=/);
+
+    const receipt = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/receipts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": adminCookie,
+        "Idempotency-Key": "api-chain-receipt",
+      },
+      body: JSON.stringify({ amountKg: 25, blockCount: 2, kind: "receipt", note: "api chain" }),
+    });
+    const receiptBody = await receipt.json();
+    const afterReceiptState = loadWarehouseState(server.statePath);
+
+    assert.equal(receipt.status, 201);
+    assert.equal(receiptBody.stockKg, 125);
+    assert.equal(afterReceiptState.warehouse.currentStockKg, 125);
+    assert.equal(afterReceiptState.stock.find((item) => item.id === "cheese").quantity, 125);
+
+    const staffResponse = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/staff`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": adminCookie,
+      },
+      body: JSON.stringify({
+        username: "api-chain-seller",
+        password: "secret1",
+        fullName: "API Chain Seller",
+        role: "seller",
+        permissions: ["seller"],
+      }),
+    });
+    const staffBody = await staffResponse.json();
+    assert.equal(staffResponse.status, 201);
+
+    const linkResponse = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/staff/${staffBody.staff.id}/access-links`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": adminCookie,
+      },
+      body: JSON.stringify({ permission: "seller" }),
+    });
+    const linkBody = await linkResponse.json();
+    const token = linkBody.link?.token || "";
+    assert.equal(linkResponse.status, 201);
+    assert.ok(token);
+
+    const staffPage = await fetch(`http://127.0.0.1:${server.port}/warehouse/seller?access=${encodeURIComponent(token)}`, {
+      redirect: "manual",
+    });
+    assert.equal(staffPage.status, 200);
+    assert.match(staffPage.headers.get("set-cookie") || "", /warehouse-staff-link=/);
+
+    const sale = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/seller-sale`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": "api-chain-sale",
+        "X-Warehouse-Access": token,
+      },
+      body: JSON.stringify({
+        userId: customerId,
+        amountKg: 7,
+        blockCount: 1,
+        priceType: "cash",
+        cashPaidAmount: 0,
+      }),
+    });
+    const saleBody = await sale.json();
+    const afterSaleState = loadWarehouseState(server.statePath);
+
+    assert.equal(sale.status, 201);
+    assert.equal(saleBody.stockKg, 118);
+    assert.equal(afterSaleState.warehouse.currentStockKg, 118);
+    assert.equal(afterSaleState.stock.find((item) => item.id === "cheese").quantity, 118);
+    assert.equal(server.getStderr(), "");
+  });
+
   test("rejects seller-only access links for transfer sales", async () => {
     let token = "";
     let customerId = 0;
