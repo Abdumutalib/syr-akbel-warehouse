@@ -33,6 +33,7 @@ import {
   recordCustomerPayment,
   recordCustomerReturn,
   recordSellerCashHandoff,
+  recordTelegramMessage,
   recordWarehouseReceipt,
   restoreDeletedCustomer,
   revokeStaffAccessLink,
