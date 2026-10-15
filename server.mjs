@@ -1322,6 +1322,37 @@ function assertWarehouseAdmin(req, res) {
   return true;
 }
 
+function verifyConfiguredRequestSecret(req, headerName, secretEnvName) {
+  const expected = String(process.env[secretEnvName] || "").trim();
+  if (!expected) {
+    return 503;
+  }
+  const provided = String(req.headers[String(headerName).toLocaleLowerCase("en-US")] || "").trim();
+  if (!provided) {
+    return 401;
+  }
+  const expectedBuffer = Buffer.from(expected);
+  const providedBuffer = Buffer.from(provided);
+  if (expectedBuffer.length !== providedBuffer.length || !crypto.timingSafeEqual(expectedBuffer, providedBuffer)) {
+    return 401;
+  }
+  return true;
+}
+
+function authorizeTelegramWebhook(req) {
+  return verifyConfiguredRequestSecret(req, "x-telegram-bot-api-secret-token", "TELEGRAM_WEBHOOK_SECRET");
+}
+
+function authorizeBusinessMessage(req) {
+  return verifyConfiguredRequestSecret(req, "x-warehouse-business-token", "WAREHOUSE_BUSINESS_MESSAGE_TOKEN");
+}
+
+function isConfiguredTelegramAdmin(payload) {
+  const adminUserId = String(process.env.TELEGRAM_ADMIN_USER_ID || "").trim();
+  const senderId = String(payload?.telegramUserId ?? "").trim();
+  return Boolean(adminUserId && senderId && senderId === adminUserId);
+}
+
 function authenticateWarehouseOperator(req, options = {}) {
   const state = loadWarehouse();
   const accessToken = extractWarehouseAccessToken(req);
@@ -1440,6 +1471,7 @@ function extractTelegramMessage(update) {
   return {
     text,
     telegramId: message.chat?.id ?? from.id ?? null,
+    telegramUserId: from.id ?? null,
     telegramUsername: from.username ?? null,
     telegramFirstName: from.first_name ?? null,
     businessConnectionId: message.business_connection_id ?? null,
@@ -2076,6 +2108,11 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   }
 
   if (u.pathname === "/api/sales" && req.method === "POST") {
+    if (!requestOriginAllowed(req)) {
+      sendApiJson(res, 403, { error: "Bu origin uchun ruxsat yo'q" }, req);
+      return;
+    }
+    if (!assertWarehouseAdmin(req, res)) return;
     try {
       const body = await readPostJson(req);
       if (body === null) {
@@ -2089,17 +2126,6 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     }
     return;
   }
-
-  if (u.pathname === "/api/forecast" && req.method === "GET") {
-    try {
-      const f = await forecaster.forecast();
-      sendApiJson(res, 200, { success: true, forecast: f }, req);
-    } catch (e) {
-      sendApiJson(res, 400, { success: false, error: e.message }, req);
-    }
-    return;
-  }
-
 
   if (u.pathname === "/healthz" && req.method === "GET") {
     res.setHeader("X-App-Version", APP_BUILD ? `${APP_VERSION}+${APP_BUILD.slice(0, 7)}` : APP_VERSION);
@@ -2178,6 +2204,8 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         approveTransaction,
         assertWarehouseAdmin,
         assertWarehouseOperator,
+        authorizeBusinessMessage,
+        authorizeTelegramWebhook,
         authenticateStaffAccessToken,
         buildDebtReply,
         buildPendingReply,
@@ -2190,6 +2218,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         deleteCustomer,
         deleteStaffAccount,
         extractTelegramMessage,
+        isTelegramAdmin: isConfiguredTelegramAdmin,
         getCustomerDetail,
         groupCustomersByPaymentType,
         listApprovedTransactions,

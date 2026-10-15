@@ -112,6 +112,9 @@ async function startServer(options = {}) {
     WAREHOUSE_ALLOWED_ORIGIN: options.allowedOrigin || "",
     WAREHOUSE_ADMIN_USERNAME: options.adminUsername || "admin1",
     WAREHOUSE_ADMIN_PASSWORD: options.adminPassword || "adminpass1",
+    TELEGRAM_WEBHOOK_SECRET: options.telegramWebhookSecret || "",
+    TELEGRAM_ADMIN_USER_ID: options.telegramAdminUserId || "",
+    WAREHOUSE_BUSINESS_MESSAGE_TOKEN: options.businessMessageToken || "",
   };
 
   const child = spawn(process.execPath, ["server.mjs"], {
@@ -234,6 +237,76 @@ describe("warehouse auth gate", () => {
     });
 
     assert.equal(foreignOriginResponse.status, 403);
+    assert.equal(server.getStderr(), "");
+  });
+
+  test("protects legacy sales, forecast, webhook and business-message routes", async () => {
+    const server = await startServer();
+
+    const salesResponse = await fetch(`http://127.0.0.1:${server.port}/api/sales`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const salesForeignOriginResponse = await fetch(`http://127.0.0.1:${server.port}/api/sales`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://evil.example",
+      },
+      body: JSON.stringify({}),
+    });
+    const forecastResponse = await fetch(`http://127.0.0.1:${server.port}/api/forecast`);
+    const webhookResponse = await fetch(`http://127.0.0.1:${server.port}/api/telegram/webhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: { text: "/ha", chat: { id: 1 }, from: { id: 1 } } }),
+    });
+    const businessMessageResponse = await fetch(`http://127.0.0.1:${server.port}/api/warehouse/business-message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "Ali 12 kg" }),
+    });
+
+    assert.equal(salesResponse.status, 401);
+    assert.equal(salesForeignOriginResponse.status, 403);
+    assert.equal(forecastResponse.status, 401);
+    assert.equal(webhookResponse.status, 503);
+    assert.equal(businessMessageResponse.status, 503);
+    assert.equal(server.getStderr(), "");
+  });
+
+  test("requires the configured Telegram webhook secret and admin sender ID", async () => {
+    const server = await startServer({
+      telegramWebhookSecret: "a-test-telegram-secret",
+      telegramAdminUserId: "12345",
+    });
+    const url = `http://127.0.0.1:${server.port}/api/telegram/webhook`;
+    const requestBody = JSON.stringify({
+      message: { text: "/ha", chat: { id: 67890 }, from: { id: 67890 } },
+    });
+    const unauthorizedSender = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Telegram-Bot-Api-Secret-Token": "a-test-telegram-secret",
+      },
+      body: requestBody,
+    });
+
+    assert.equal(unauthorizedSender.status, 403, server.getStderr());
+
+    const configuredAdmin = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Telegram-Bot-Api-Secret-Token": "a-test-telegram-secret",
+      },
+      body: JSON.stringify({
+        message: { text: "/ha", chat: { id: 67890 }, from: { id: 12345 } },
+      }),
+    });
+    assert.equal(configuredAdmin.status, 200, server.getStderr());
     assert.equal(server.getStderr(), "");
   });
 

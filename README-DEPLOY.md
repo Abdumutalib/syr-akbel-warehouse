@@ -36,6 +36,22 @@ Suggested environment variables:
   WAREHOUSE_ALLOWED_ORIGIN=https://akbelim.com
   WAREHOUSE_MAX_REQUEST_BYTES=6291456
   TELEGRAM_BOT_TOKEN=
+  TELEGRAM_WEBHOOK_SECRET=...
+  TELEGRAM_ADMIN_USER_ID=...
+  WAREHOUSE_BUSINESS_MESSAGE_TOKEN=...
+
+Telegram/API security:
+  - Configure Telegram's webhook `secret_token` to the same value as
+    `TELEGRAM_WEBHOOK_SECRET`. Telegram sends it in the
+    `X-Telegram-Bot-Api-Secret-Token` request header. The webhook is rejected
+    until this secret is configured.
+  - Set `TELEGRAM_ADMIN_USER_ID` to the numeric Telegram user ID allowed to run
+    `/ha`, `/yoq`, and `/eslatma`. This is the message sender ID, not the chat ID.
+  - Calls to `/api/warehouse/business-message` must include
+    `X-Warehouse-Business-Token` matching `WAREHOUSE_BUSINESS_MESSAGE_TOKEN`.
+    The endpoint is unavailable until a token is configured.
+  - The legacy `/api/sales` and `/api/forecast` routes require warehouse admin
+    authentication.
 
 Single-server notes:
   - Loyiha bitta server rejimida ishlaydi.

@@ -220,6 +220,15 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     message,
   });
   if (apiPath === "/api/telegram/webhook" && req.method === "POST") {
+    const webhookAuth = deps.authorizeTelegramWebhook?.(req) ?? 503;
+    if (webhookAuth !== true) {
+      sendApiJson(
+        res,
+        webhookAuth === 503 ? 503 : 401,
+        { error: webhookAuth === 503 ? "Telegram webhook secret sozlanmagan" : "Telegram webhook ruxsati yo'q" }
+      );
+      return true;
+    }
     const body = await readPostJson(req);
     if (body === null) {
       sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
@@ -242,6 +251,16 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return true;
     }
 
+    const txt = payload.text.toLowerCase();
+    const isAdminCommand =
+      txt === "/ha" || txt === "ha" ||
+      txt === "/yoq" || txt === "yoq" ||
+      txt === "/eslatma";
+    if (isAdminCommand && !deps.isTelegramAdmin?.(payload)) {
+      sendApiJson(res, 403, { error: "Telegram admin buyrug'i uchun ruxsat yo'q" });
+      return true;
+    }
+
     // Kiruvchi xabarni saqlash (admin panel uchun)
     if (deps.recordTelegramMessage) {
       const msgType =
@@ -260,7 +279,6 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     }
 
     // /start yoki /yordam — botni tanishtirish
-    const txt = payload.text.toLowerCase();
     if (
       txt === "/start" ||
       txt.startsWith("/start ") ||
@@ -393,6 +411,15 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (apiPath === "/api/warehouse/business-message" && req.method === "POST") {
+    const businessMessageAuth = deps.authorizeBusinessMessage?.(req) ?? 503;
+    if (businessMessageAuth !== true) {
+      sendApiJson(
+        res,
+        businessMessageAuth === 503 ? 503 : 401,
+        { error: businessMessageAuth === 503 ? "Business message token sozlanmagan" : "Business message ruxsati yo'q" }
+      );
+      return true;
+    }
     const body = await readPostJson(req);
     if (body === null) {
       sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });

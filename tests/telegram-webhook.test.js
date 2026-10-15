@@ -45,6 +45,9 @@ function makeDeps(state, dbPath, overrides = {}) {
   const deps = {
     assertWarehouseAdmin: () => true,
     assertWarehouseOperator: () => true,
+    authorizeBusinessMessage: () => true,
+    authorizeTelegramWebhook: () => true,
+    isTelegramAdmin: () => true,
     buildDebtReply: (name, debt) => `QARZI: ${name} ${debt}`,
     buildPendingReply: (r) => `KUTMOQDA: ${r.user.fullName} ${r.transaction.amountKg}kg`,
     buildAdminNewOrderMsg: (name, kg, price, username) => `ADMIN: ${name}${username ? ` (@${username})` : ""} ${kg}kg`,
@@ -120,6 +123,7 @@ function makeDeps(state, dbPath, overrides = {}) {
       return {
         text: typeof message.text === "string" ? message.text.trim() : "",
         telegramId: message.chat?.id ?? from.id ?? null,
+        telegramUserId: from.id ?? null,
         telegramUsername: from.username ?? null,
         telegramFirstName: from.first_name ?? null,
         type: "message",
@@ -170,12 +174,37 @@ function makeDeps(state, dbPath, overrides = {}) {
       deps._schedulerState.pendingDebtReminderApproval = false;
     },
   };
-  return deps;
+  return Object.assign(deps, overrides);
 }
 
 // --- Testlar ---
 
 describe("Telegram webhook handleri", () => {
+  test("business message endpoint token yo'q so'rovni rad etadi", async () => {
+    const { dbPath, state } = makeTempState();
+    const deps = makeDeps(state, dbPath, { authorizeBusinessMessage: () => false });
+    deps._postBody = { text: "Ali 12 kg" };
+
+    const res = makeRes();
+    await handleWarehouseApiRoute(makeReq("POST", deps._postBody), res, null, "/api/warehouse/business-message", deps);
+
+    assert.equal(res.statusCode, 401);
+    assert.equal(loadWarehouseState(dbPath).transactions.length, 0);
+  });
+
+  test("webhook secret tekshiruvidan o'tmagan so'rovlarni rad etadi", async () => {
+    const { dbPath, state } = makeTempState();
+    const deps = makeDeps(state, dbPath, { authorizeTelegramWebhook: () => false });
+    deps._postBody = { message: { text: "/ha", chat: { id: 999 } } };
+
+    const res = makeRes();
+    await handleWarehouseApiRoute(makeReq("POST", deps._postBody), res, null, "/api/telegram/webhook", deps);
+
+    assert.equal(res.statusCode, 401);
+    assert.equal(deps._sentToUser.length, 0);
+    assert.equal(deps._sentToAdmin.length, 0);
+  });
+
   test("1. Business bot ulanganda admin DM oladi", async () => {
     const { dbPath, state } = makeTempState();
     const deps = makeDeps(state, dbPath);
@@ -313,6 +342,23 @@ describe("Telegram webhook handleri", () => {
 });
 
 describe("Qarz eslatma scheduler (admin ruxsati)", () => {
+  test("admin bo'lmagan Telegram foydalanuvchi eslatma buyrug'ini bajara olmaydi", async () => {
+    const { dbPath, state } = makeTempState();
+    const deps = makeDeps(state, dbPath, { isTelegramAdmin: () => false });
+    deps._schedulerState.pendingDebtReminderApproval = true;
+    deps._postBody = {
+      message: { text: "/ha", chat: { id: 999 }, from: { id: 999 } },
+    };
+
+    const res = makeRes();
+    await handleWarehouseApiRoute(makeReq("POST", deps._postBody), res, null, "/api/telegram/webhook", deps);
+
+    assert.equal(res.statusCode, 403);
+    assert.equal(deps._schedulerState.pendingDebtReminderApproval, true);
+    assert.equal(deps._sentToUser.length, 0);
+    assert.equal(deps._sentToAdmin.length, 0);
+  });
+
   test("5. /eslatma — admin qarzdorlar ro'yxatini oladi", async () => {
     const { dbPath, state } = makeTempState();
     // 2 ta qarzdor mijoz qo'shamiz (approved transaction kerak)
