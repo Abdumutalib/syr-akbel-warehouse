@@ -1,5 +1,5 @@
 const DB_NAME = 'akbel-offline-db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = 'sync-queue';
 const API_CACHE_STORE = 'api-cache';
 
@@ -16,6 +16,9 @@ function openOfflineDb() {
       }
       if (!db.objectStoreNames.contains(API_CACHE_STORE)) {
         db.createObjectStore(API_CACHE_STORE, { keyPath: 'key' });
+      } else if (e.oldVersion < 3) {
+        // Remove responses saved before cache keys were bound to an account.
+        req.transaction.objectStore(API_CACHE_STORE).clear();
       }
     };
     req.onsuccess = () => resolve(req.result);

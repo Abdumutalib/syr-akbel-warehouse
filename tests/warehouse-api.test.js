@@ -1,3 +1,4 @@
+import { webcrypto } from "node:crypto";
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -10,7 +11,9 @@ const apiPath = path.join(__dirname, '../public/warehouse-api.js');
 
 function loadWarehouseApiHarness({ cachedGetValue = { ok: true, items: [{ id: 1 }] } } = {}) {
   const sandbox = {
+    TextEncoder,
     window: {
+      crypto: webcrypto,
       warehouseOfflineQueue: {
         async getCachedGet(key) {
           return cachedGetValue;
@@ -45,7 +48,7 @@ function loadWarehouseApiHarness({ cachedGetValue = { ok: true, items: [{ id: 1 
 
 test('GET requests fall back to stale cached data when the server returns 5xx', async () => {
   const api = loadWarehouseApiHarness();
-  const result = await api.fetch('/api/warehouse/customers', { method: 'GET' });
+  const result = await api.fetch('/api/warehouse/customers', { method: 'GET' }, '', 'test-account');
   assert.deepEqual(result, { ok: true, items: [{ id: 1 }] });
 });
 
@@ -53,7 +56,9 @@ test('successful mutations invalidate cached GET responses', async () => {
   let getCalls = 0;
   const requestCaches = [];
   const sandbox = {
+    TextEncoder,
     window: {
+      crypto: webcrypto,
       warehouseOfflineQueue: {
         async getCachedGet() { return null; },
         async setCachedGet() {},

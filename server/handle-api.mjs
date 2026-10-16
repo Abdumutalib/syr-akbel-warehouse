@@ -70,6 +70,8 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     upsertCustomer,
     verifyStaffPin,
     authenticateStaffAccessToken,
+    authenticateRequestStaff,
+    issueStaffSession,
   } = deps;
 
   const readWarehouse =
@@ -105,6 +107,21 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     // Legacy customers created before seller ownership was introduced remain unassigned.
     // Keep them visible to sellers while preserving isolation for assigned customers.
     return !Number.isFinite(ownerOperatorId) || ownerOperatorId <= 0 || ownerOperatorId === operatorId;
+  };
+
+  const financialKeys = ["cashSales", "transferSales", "totalSales", "cashPaid", "transferPaid", "totalPaid", "cashDebt", "transferDebt", "currentDebt", "totalTakenKg"];
+  const canViewBalance = (operator, customer) => isAdminOperator(operator) || (operator?.role !== "seller") || customer?.sellerCanViewBalance === true;
+  const safeCustomer = (customer, operator) => {
+    if (!customer) return customer;
+    const { _debtCache, ...result } = customer;
+    if (!canViewBalance(operator, customer)) financialKeys.forEach(key => { result[key] = null; });
+    return result;
+  };
+  const assertCustomerWriteAccess = (state, body, operator) => {
+    const id = Number(body.userId ?? body.customerId ?? 0);
+    if (id > 0 && !canAccessCustomer(operator, getCustomerDetail(state, id).customer)) {
+      const error = new Error("Bu mijozga ruxsat yo'q"); error.statusCode = 403; throw error;
+    }
   };
 
   const isStrongPassword = (value) => /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(String(value || ""));
@@ -218,8 +235,8 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     allowAdmin: true,
     realm: usesTransferFlow(body) ? 'warehouse-accountant' : 'warehouse-seller',
     permission: usesTransferFlow(body)
-      ? ['transfer', 'write_transfer_sale']
-      : ['seller', 'write_cash_sale'],
+      ? 'write_transfer_sale'
+      : 'write_cash_sale',
     message,
   });
   if (apiPath === "/api/telegram/webhook" && req.method === "POST") {
@@ -477,7 +494,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   if (apiPath === "/api/warehouse/customers" && req.method === "GET") {
     const operator = assertWarehouseOperator(req, res, {
       realm: "warehouse-seller",
-      permission: ["seller", "write_cash_sale", "write_transfer_sale"],
+      permission: ["seller", "customers", "write_cash_sale", "write_transfer_sale"],
       message: "Mijoz qo'shish uchun sotuvchi ruxsati kerak",
     });
     if (!operator) {
@@ -487,7 +504,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       const pricing = currentWarehousePricing(state);
       const allCustomers = listCustomerSummaries(state, pricing);
       return {
-        customers: allCustomers.filter((customer) => canAccessCustomer(operator, customer)),
+        customers: allCustomers.filter((customer) => canAccessCustomer(operator, customer)).map(customer => safeCustomer(customer, operator)),
         stockKg: state.warehouse.currentStockKg,
         pricing,
       };
@@ -495,7 +512,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     sendApiJson(res, 200, {
       ok: true,
       customers,
-      summary: summarizeCustomers(customers),
+      summary: isAdminOperator(operator) ? summarizeCustomers(customers) : { count: customers.length },
       stockKg,
       pricing,
       operator: {
@@ -520,7 +537,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     }
     const catalog = readWarehouse((state) => {
       const grouped = groupCustomersByPaymentType(state, currentWarehousePricing(state));
-      const filterCustomers = (list) => list.filter((customer) => canAccessCustomer(operator, customer));
+      const filterCustomers = (list) => list.filter((customer) => canAccessCustomer(operator, customer)).map(customer => safeCustomer(customer, operator));
       return {
         cashCustomers: filterCustomers(grouped.cashCustomers || []),
         transferCustomers: filterCustomers(grouped.transferCustomers || []),
@@ -548,7 +565,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const customers = readWarehouse((state) => {
       const pricing = currentWarehousePricing(state);
       const allCustomers = listCustomerSummaries(state, pricing);
-      return allCustomers.filter((customer) => canAccessCustomer(operator, customer));
+      return allCustomers.filter((customer) => canAccessCustomer(operator, customer)).map(customer => safeCustomer(customer, operator));
     });
     sendApiJson(res, 200, {
       ok: true,
@@ -631,7 +648,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: "customers",
+      permission: "orders",
       message: "Zakazni tahrirlash uchun ruxsat kerak",
     });
     if (!operator) {
@@ -669,7 +686,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: "customers",
+      permission: "orders",
       message: "Zakazni o'chirish uchun ruxsat kerak",
     });
     if (!operator) {
@@ -700,7 +717,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
 
   if (apiPath === "/api/warehouse/customers" && req.method === "POST") {
     const operator = assertWarehouseOperator(req, res, {
-      roles: ["seller"],
+      permission: "customers",
       allowAdmin: true,
       realm: "warehouse-seller",
       message: "Mijoz qo'shish учун sotuvchi yoki admin ruxsati kerak",
@@ -726,8 +743,9 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         if (hit.type === "replay") {
           return { replay: true, statusCode: hit.statusCode, responseBody: hit.responseBody };
         }
+        assertCustomerWriteAccess(state, body, operator);
         const customer = upsertCustomer(state, body, { actor: operator });
-        const responseBody = { ok: true, customer };
+        const responseBody = { ok: true, customer: safeCustomer(customer, operator) };
         saveIdempotencyResult(state, idempotencyKey, idempotencyFingerprint, 201, responseBody);
         return { replay: false, statusCode: 201, responseBody };
       });
@@ -741,7 +759,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   const customerDetailMatch = apiPath.match(/^\/api\/warehouse\/customers\/(\d+)$/);
   if (customerDetailMatch && req.method === "PUT") {
     const operator = assertWarehouseOperator(req, res, {
-      roles: ["seller"],
+      permission: "customers",
       allowAdmin: true,
       realm: "warehouse-seller",
       message: "Mijozni tahrirlash учун sotuvchi yoki admin ruxsati kerak",
@@ -764,7 +782,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
           throw err;
         }
         const customer = upsertCustomer(state, { ...body, userId: customerId }, { actor: operator });
-        return { ok: true, customer };
+        return { ok: true, customer: safeCustomer(customer, operator) };
       });
       sendApiJson(res, 200, outcome);
     } catch (e) {
@@ -775,7 +793,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
 
   if (customerDetailMatch && req.method === "DELETE") {
     const operator = assertWarehouseOperator(req, res, {
-      roles: ["seller"],
+      permission: "customers",
       allowAdmin: true,
       realm: "warehouse-seller",
       message: "Mijozni o'chirish учун sotuvchi yoki admin ruxsati kerak",
@@ -837,6 +855,10 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       sendApiJson(res, 200, {
         ok: true,
         ...detail,
+        operator,
+        balanceVisible: canViewBalance(operator, detail.customer),
+        summary: safeCustomer(detail.summary, operator),
+        history: canViewBalance(operator, detail.customer) ? detail.history : [],
       });
     } catch (e) {
       sendApiJson(res, 404, { error: e.message || "Mijoz topilmadi" });
@@ -878,7 +900,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       sendApiJson(res, 401, { error: "Token topilmadi" });
       return true;
     }
-    const operator = readWarehouse((state) => authenticateStaffAccessToken(state, token));
+    const operator = authenticateRequestStaff(req, token);
     if (!operator) {
       sendApiJson(res, 401, { error: "Token noto'g'ri" });
       return true;
@@ -888,7 +910,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       username: operator.username,
       fullName: operator.fullName,
       role: operator.role,
-      permissions: operator.permissions || [],
+      permissions: operator.hasPin && !operator.isUnlocked ? [] : operator.permissions || [],
       hasPin: operator.hasPin,
       isUnlocked: operator.isUnlocked,
       isWaitingForPin: operator.hasPin && !operator.isUnlocked,
@@ -897,7 +919,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (apiPath === "/api/warehouse/verify-pin" && req.method === "POST") {
-    const token = (new URL(req.url || "/", "http://x").searchParams.get("access") || "").trim() || (req.headers["x-warehouse-access"] || "").trim();
+    const token = extractWarehouseAccessToken(req) || (new URL(req.url || "/", "http://x").searchParams.get("access") || "").trim();
     if (!token) {
       sendApiJson(res, 401, { error: "Token topilmadi" });
       return true;
@@ -910,6 +932,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     try {
       await writeWarehouse((state) => verifyStaffPin(state, token, body.pin));
       // After verification, look up the now-unlocked operator to return full profile
+      issueStaffSession(req, res, token);
       const unlockedOperator = readWarehouse((state) => authenticateStaffAccessToken(state, token));
       sendApiJson(res, 200, {
         ok: true,
@@ -920,6 +943,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         isUnlocked: true,
       });
     } catch (e) {
+      deps.recordFailedStaffAuth?.();
       sendApiJson(res, 401, { error: e.message || "PIN noto'g'ri" });
     }
     return true;
@@ -1087,6 +1111,8 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
 
   if (apiPath === "/api/warehouse/approved" && req.method === "GET") {
     const paymentType = u.searchParams.get("paymentType") || "all";
+    if (!["cash", "transfer", "all"].includes(paymentType)) { sendApiJson(res, 400, { error: "Hisobot turi noto'g'ri" }); return true; }
+    if (paymentType === "all" && !assertWarehouseAdmin(req, res)) return true;
     const requiredPermission = paymentType === "transfer" ? "transfer" : "cash";
     if (!assertWarehouseOperator(req, res, {
       allowAdmin: true,
@@ -1223,14 +1249,15 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
           };
         }
         const pricing = currentWarehousePricing(state);
+        assertCustomerWriteAccess(state, body, operator);
         const result = recordApprovedSale(state, body, {
           pricing,
           actor: operator,
         });
         const responseBody = {
           ok: true,
-          customer: result.user,
-          debt: result.debt,
+          customer: safeCustomer(result.user, operator),
+          debt: canViewBalance(operator, result.user) ? result.debt : null,
           totalPaid: result.totalPaid,
           transaction: result.transaction,
           stockKg: state.warehouse.currentStockKg,
@@ -1307,14 +1334,15 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
           };
         }
         const pricing = currentWarehousePricing(state);
+        assertCustomerWriteAccess(state, body, operator);
         const result = recordCustomerPayment(state, body, {
           pricing,
           actor: operator,
         });
         const responseBody = {
           ok: true,
-          customer: result.user,
-          debt: result.debt,
+          customer: safeCustomer(result.user, operator),
+          debt: canViewBalance(operator, result.user) ? result.debt : null,
           totalPaid: result.totalPaid,
           transaction: result.transaction,
           pricing,
@@ -1388,14 +1416,15 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
           };
         }
         const pricing = currentWarehousePricing(state);
+        assertCustomerWriteAccess(state, body, operator);
         const result = recordCustomerReturn(state, body, {
           pricing,
           actor: operator,
         });
         const responseBody = {
           ok: true,
-          customer: result.user,
-          debt: result.debt,
+          customer: safeCustomer(result.user, operator),
+          debt: canViewBalance(operator, result.user) ? result.debt : null,
           totalPaid: result.totalPaid,
           transaction: result.transaction,
           stockKg: state.warehouse.currentStockKg,
@@ -1688,7 +1717,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
         );
         const responseBody = {
           ok: true,
-          debt: result.debt,
+          debt: canViewBalance(operator, result.user) ? result.debt : null,
           totalPaid: result.totalPaid,
           cashPaidAmount: result.transaction.cashPaidAmount,
           transferPaidAmount: result.transaction.transferPaidAmount,

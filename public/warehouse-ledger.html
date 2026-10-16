@@ -298,7 +298,7 @@
     </section>
   </div>
 
-  <script src="/warehouse/assets/warehouse-api.js?v=20260908-1"></script>
+  <script src="/warehouse/assets/warehouse-api.js?v=audit-fixes"></script>
   <script src="/warehouse/assets/warehouse-auth-pin.js?v=10fa103"></script>
   <script>
     const mode = location.pathname.includes('/transfer') ? 'transfer' : 'cash';
@@ -460,14 +460,14 @@
         return `
         <article class="entry">
           <div class="entry-top">
-            <strong>${entry.user && entry.user.fullName ? entry.user.fullName : 'Noma\'lum'}</strong>
+            <strong>${window.escapeHtml(entry.user && entry.user.fullName ? entry.user.fullName : 'Noma\'lum')}</strong>
             <span>#${entry.id}</span>
           </div>
           <p>${entry.amountKg} kg · ${numberFormat(entry.totalPrice)} so'm</p>
           <p>Naqd: ${numberFormat(entry.cashPaidAmount)} so'm · O'tkazma: ${numberFormat(entry.transferPaidAmount)} so'm</p>
           <p>Jami tushum: ${numberFormat(entry.paidAmount)} so'm · Qolgan qarz: <span class="${debtClass(remainingDebt)}">${numberFormat(remainingDebt)} so'm</span></p>
-          ${photos.length ? `<p><a href="${photos[0].url}" target="_blank" rel="noopener">${photos.length === 1 ? 'Savdo rasmi' : `${photos.length} ta savdo rasmi`}</a></p>` : ''}
-          <p class="muted">${entry.extractedText || ''}</p>
+          ${photos.length ? `<p><a href="${window.escapeHtml(photos[0].url)}" target="_blank" rel="noopener">${photos.length === 1 ? 'Savdo rasmi' : `${photos.length} ta savdo rasmi`}</a></p>` : ''}
+          <p class="muted">${window.escapeHtml(entry.extractedText || '')}</p>
         </article>
       `;
       }).join('');
@@ -486,7 +486,7 @@
       handoffSummaryListEl.innerHTML = entries.map((entry) => `
         <article class="entry">
           <div class="entry-top">
-            <strong>${entry.sellerName || 'Noma\'lum sotuvchi'}</strong>
+            <strong>${window.escapeHtml(entry.sellerName || 'Noma\'lum sotuvchi')}</strong>
             <span>${entry.count || 0} marta</span>
           </div>
           <p>Jami topshirgan pul: ${numberFormat(entry.totalAmount || 0)} so'm</p>
@@ -507,12 +507,12 @@
       handoffListEl.innerHTML = entries.map((entry) => `
         <article class="entry">
           <div class="entry-top">
-            <strong>${entry.operatorFullName || entry.operatorUsername || 'Noma\'lum sotuvchi'}</strong>
+            <strong>${window.escapeHtml(entry.operatorFullName || entry.operatorUsername || 'Noma\'lum sotuvchi')}</strong>
             <span>#${entry.id}</span>
           </div>
           <p>${numberFormat(entry.amount || 0)} so'm topshirildi</p>
           <p class="muted">${formatDateTime(entry.receivedAt)}</p>
-          <p class="muted">${entry.note || ''}</p>
+          <p class="muted">${window.escapeHtml(entry.note || '')}</p>
         </article>
       `).join('');
     }

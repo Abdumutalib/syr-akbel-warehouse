@@ -681,7 +681,7 @@
     </section>
   </div>
 
-  <script src="/warehouse/assets/warehouse-api.js?v=20260908-1"></script>
+  <script src="/warehouse/assets/warehouse-api.js?v=audit-fixes"></script>
   <script src="/warehouse/assets/warehouse-auth-pin.js?v=10fa103"></script>
   <script src="/warehouse/assets/calc-logic.js"></script>
   <script>
@@ -980,7 +980,7 @@
         }
       });
       customersState.push(...filteredCustomers);
-      const options = filteredCustomers.map((customer) => `<option value="${customer.id}">${customer.fullName}</option>`).join('');
+      const options = filteredCustomers.map((customer) => `<option value="${customer.id}">${window.escapeHtml(customer.fullName)}</option>`).join('');
       saleCustomerEl.innerHTML = options;
       updateSelectedCustomerCard();
       restoreSaleDraft();
@@ -1003,7 +1003,7 @@
         return;
       }
       nameEl.textContent = customer.fullName;
-      metaEl.textContent = `Tashkilot: ${customer.organizationName || '-'} · INN: ${customer.taxId || '-'}`;
+      metaEl.textContent = `Tashkilot: ${window.escapeHtml(customer.organizationName || '-')} · INN: ${window.escapeHtml(customer.taxId || '-')}`;
       const priceValue = saleMode === 'transfer' ? (customer.transferPricePerKg || currentPricing.transferPricePerKg) : (customer.cashPricePerKg || currentPricing.cashPricePerKg);
       priceEl.textContent = `Narx: ${numberFormat(priceValue)} so'm/kg`;
       if (customer.currentDebt != null) {
@@ -1333,7 +1333,7 @@
       clearSalePhotoButtonEl.classList.remove('hidden');
       salePhotoPreviewGridEl.innerHTML = salePhotoState.map((entry) => `
         <div class="photo-preview-item">
-          <img src="${entry.dataUrl}" alt="${entry.originalName}">
+          <img src="${entry.dataUrl}" alt="${window.escapeHtml(entry.originalName)}">
           <button type="button" class="secondary" data-remove-sale-photo="${entry.id}">O'chirish</button>
         </div>
       `).join('');

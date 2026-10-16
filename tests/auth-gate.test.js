@@ -460,7 +460,7 @@ describe("warehouse auth gate", () => {
         password: "secret1",
         fullName: "API Chain Seller",
         role: "seller",
-        permissions: ["seller"],
+        permissions: ["seller", "write_cash_sale"],
       }),
     });
     const staffBody = await staffResponse.json();
@@ -472,7 +472,7 @@ describe("warehouse auth gate", () => {
         "Content-Type": "application/json",
         "Cookie": adminCookie,
       },
-      body: JSON.stringify({ permission: "seller" }),
+      body: JSON.stringify({ permission: "all" }),
     });
     const linkBody = await linkResponse.json();
     const token = linkBody.link?.token || "";
@@ -601,7 +601,7 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 
-  test("keeps staff device access for one year and blocks it after admin revokes the link", async () => {
+  test("keeps staff device access for eight hours and blocks it after admin revokes the link", async () => {
     let token = "";
     let linkId = "";
     let staffId = 0;
@@ -628,7 +628,7 @@ describe("warehouse auth gate", () => {
 
     assert.equal(firstOpen.status, 200);
     assert.match(staffCookie, /warehouse-staff-link=/);
-    assert.match(staffCookie, /Max-Age=31536000/);
+    assert.match(staffCookie, /Max-Age=28800/);
 
     const loginBody = new URLSearchParams({ username: "admin1", password: "adminpass1" });
     const login = await fetch(`http://127.0.0.1:${server.port}/warehouse-register`, {
@@ -648,7 +648,7 @@ describe("warehouse auth gate", () => {
 
     const staleCookieOpen = await fetch(`http://127.0.0.1:${server.port}/warehouse/seller`, {
       redirect: "manual",
-      headers: { Cookie: `warehouse-staff-link=${token}` },
+      headers: { Cookie: staffCookie.split(";")[0] },
     });
 
     assert.equal(staleCookieOpen.status, 302);
@@ -681,7 +681,7 @@ describe("warehouse auth gate", () => {
     assert.match(setCookie, /HttpOnly/);
     assert.match(setCookie, /SameSite=Strict/);
     assert.match(setCookie, /Secure/);
-    assert.match(setCookie, /Max-Age=31536000/);
+    assert.match(setCookie, /Max-Age=28800/);
     assert.equal(pageResponse.headers.get("referrer-policy"), "no-referrer");
     assert.match(pageResponse.headers.get("cache-control") || "", /no-store/);
 
