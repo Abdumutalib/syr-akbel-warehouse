@@ -237,6 +237,20 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 
+  test("blocks unauthed forecast and legacy sales APIs", async () => {
+    const server = await startServer();
+    const forecast = await fetch(`http://127.0.0.1:${server.port}/api/forecast`);
+    const sales = await fetch(`http://127.0.0.1:${server.port}/api/sales`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: 1, amountKg: 1 }),
+    });
+
+    assert.equal(forecast.status, 401);
+    assert.equal(sales.status, 401);
+    assert.equal(server.getStderr(), "");
+  });
+
   test("allows transfer access links to write transfer sales", async () => {
     let token = "";
     let customerId = 0;
@@ -253,9 +267,9 @@ describe("warehouse auth gate", () => {
           password: "secret1",
           fullName: "Transfer One",
           role: "seller",
-          permissions: ["seller", "transfer"],
+          permissions: ["seller", "write_transfer_sale"],
         });
-        const link = createStaffAccessLink(state, account.id, "transfer");
+        const link = createStaffAccessLink(state, account.id, "write_transfer_sale");
         token = link.token;
       },
     });
@@ -461,7 +475,7 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 
-  test("keeps staff device access for one year and blocks it after admin revokes the link", async () => {
+  test("keeps staff link cookies for 30 days and blocks access after admin revokes the link", async () => {
     let token = "";
     let linkId = "";
     let staffId = 0;
@@ -488,7 +502,7 @@ describe("warehouse auth gate", () => {
 
     assert.equal(firstOpen.status, 200);
     assert.match(staffCookie, /warehouse-staff-link=/);
-    assert.match(staffCookie, /Max-Age=31536000/);
+    assert.match(staffCookie, /Max-Age=2592000/);
 
     const loginBody = new URLSearchParams({ username: "admin1", password: "adminpass1" });
     const login = await fetch(`http://127.0.0.1:${server.port}/warehouse-register`, {
@@ -644,7 +658,7 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 
-  test("keeps legacy unassigned customers visible to sellers", async () => {
+  test("hides legacy unassigned customers from sellers", async () => {
     let token = "";
     const server = await startServer({
       seedState(state) {
@@ -666,7 +680,7 @@ describe("warehouse auth gate", () => {
     const body = await response.json();
 
     assert.equal(response.status, 200);
-    assert.equal(body.customers.some((customer) => customer.fullName === "Legacy unassigned customer"), true);
+    assert.equal(body.customers.some((customer) => customer.fullName === "Legacy unassigned customer"), false);
     assert.equal(server.getStderr(), "");
   });
 
@@ -679,10 +693,10 @@ describe("warehouse auth gate", () => {
           password: "secret1",
           fullName: "Transfer PIN Seller",
           role: "seller",
-          permissions: ["seller", "transfer"],
+          permissions: ["seller", "write_transfer_sale"],
           pin: "1234",
         });
-        token = createStaffAccessLink(state, account.id, "transfer").token;
+        token = createStaffAccessLink(state, account.id, "write_transfer_sale").token;
       },
     });
 
@@ -731,7 +745,7 @@ describe("warehouse auth gate", () => {
           role: "seller",
           permissions: ["seller", "write_transfer_sale"],
         });
-        token = createStaffAccessLink(state, account.id, "transfer").token;
+        token = createStaffAccessLink(state, account.id, "write_transfer_sale").token;
       },
     });
 

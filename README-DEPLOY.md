@@ -36,6 +36,12 @@ Suggested environment variables:
   WAREHOUSE_ALLOWED_ORIGIN=https://akbelim.com
   WAREHOUSE_MAX_REQUEST_BYTES=6291456
   TELEGRAM_BOT_TOKEN=
+  TELEGRAM_WEBHOOK_SECRET=<random secret, 1-256 chars from A-Z a-z 0-9 _ ->
+
+Telegram webhook security:
+  - Set TELEGRAM_WEBHOOK_SECRET in the runtime environment and configure Telegram's webhook with the same `secret_token`.
+  - Use `https://akbelim.com/warehouse/api/telegram/webhook` as the webhook URL.
+  - Without the secret, webhook requests return 503; an incorrect secret returns 401.
 
 Single-server notes:
   - Loyiha bitta server rejimida ishlaydi.

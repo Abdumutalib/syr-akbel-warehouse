@@ -527,11 +527,11 @@
     function applyOperatorPermissions(profile) {
       const currentProfile = profile || (window.getWarehouseOperatorProfile ? window.getWarehouseOperatorProfile() : null);
       const isAdmin = Boolean(currentProfile && currentProfile.role === 'admin');
-      const isSellerProfile = Boolean(currentProfile && !isAdmin && currentProfile.username);
-      const canSeeCustomers = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'customers') : true;
-      const canSeeCashSale = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'seller') : true;
-      const canSeeTransferSale = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, ['seller', 'transfer']) : true;
-      const canSeeCashReport = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'cash') : true;
+      const isSellerProfile = Boolean(currentProfile && !isAdmin && currentProfile.username && window.warehouseOperatorHasPermission && window.warehouseOperatorHasPermission(currentProfile, 'seller'));
+      const canSeeCustomers = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'customers') : false;
+      const canSeeCashSale = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'write_cash_sale') : false;
+      const canSeeTransferSale = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'write_transfer_sale') : false;
+      const canSeeCashReport = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'cash') : false;
 
       if (sellerPageEyebrowEl) {
         sellerPageEyebrowEl.textContent = isSellerProfile ? 'Sotuvchi sahifasi' : 'Sotuvchi oynasi';

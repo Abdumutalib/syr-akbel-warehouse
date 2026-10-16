@@ -101,9 +101,8 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       return false;
     }
     const ownerOperatorId = Number(customer?.ownerOperatorId);
-    // Legacy customers created before seller ownership was introduced remain unassigned.
-    // Keep them visible to sellers while preserving isolation for assigned customers.
-    return !Number.isFinite(ownerOperatorId) || ownerOperatorId <= 0 || ownerOperatorId === operatorId;
+    // Unassigned legacy records must be assigned by an admin before any seller can see them.
+    return Number.isFinite(ownerOperatorId) && ownerOperatorId > 0 && ownerOperatorId === operatorId;
   };
 
   const isStrongPassword = (value) => /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(String(value || ""));
@@ -216,10 +215,30 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   const assertSellerWriteOperator = (body, message) => assertWarehouseOperator(req, res, {
     allowAdmin: true,
     realm: usesTransferFlow(body) ? 'warehouse-accountant' : 'warehouse-seller',
-    permission: usesTransferFlow(body) ? ['transfer', 'write_transfer_sale'] : 'seller',
+    permission: usesTransferFlow(body) ? 'write_transfer_sale' : 'write_cash_sale',
     message,
   });
+  const assertCustomerWriteAccess = (state, body, operator) => {
+    if (isAdminOperator(operator)) return;
+    const customerId = Number(body?.userId ?? body?.customerId ?? 0);
+    const detail = customerId > 0 ? getCustomerDetail(state, customerId, currentWarehousePricing(state)) : null;
+    if (!canAccessCustomer(operator, detail?.customer || null)) {
+      const error = new Error("Бу мижозга ёки унинг маълумотларига рухсат йўқ");
+      error.statusCode = 403;
+      throw error;
+    }
+  };
   if (apiPath === "/api/telegram/webhook" && req.method === "POST") {
+    const webhookSecret = String(deps.telegramWebhookSecret || process.env.TELEGRAM_WEBHOOK_SECRET || "").trim();
+    const providedSecret = String(req.headers["x-telegram-bot-api-secret-token"] || "").trim();
+    if (!webhookSecret) {
+      sendApiJson(res, 503, { error: "Telegram webhook siri sozlanmagan" });
+      return true;
+    }
+    if (!providedSecret || providedSecret !== webhookSecret) {
+      sendApiJson(res, 401, { error: "Telegram webhook ruxsati yo'q" });
+      return true;
+    }
     const body = await readPostJson(req);
     if (body === null) {
       sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
@@ -393,6 +412,12 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (apiPath === "/api/warehouse/business-message" && req.method === "POST") {
+    const webhookSecret = String(deps.telegramWebhookSecret || process.env.TELEGRAM_WEBHOOK_SECRET || "").trim();
+    const providedSecret = String(req.headers["x-telegram-bot-api-secret-token"] || "").trim();
+    if (!webhookSecret || !providedSecret || providedSecret !== webhookSecret) {
+      sendApiJson(res, webhookSecret ? 401 : 503, { error: "Business webhook ruxsati yo'q" });
+      return true;
+    }
     const body = await readPostJson(req);
     if (body === null) {
       sendApiJson(res, 400, { error: "JSON formati noto'g'ri" });
@@ -447,7 +472,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   if (apiPath === "/api/warehouse/customers" && req.method === "GET") {
     const operator = assertWarehouseOperator(req, res, {
       realm: "warehouse-seller",
-      permission: "seller",
+      permission: ["seller", "customers"],
       message: "Mijoz qo'shish uchun sotuvchi ruxsati kerak",
     });
     if (!operator) {
@@ -503,7 +528,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: ["customers", "seller"],
+      permission: ["orders", "seller"],
       message: "Zakaz sahifasi uchun ruxsat kerak",
     });
     if (!operator) {
@@ -525,7 +550,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: ["customers", "seller"],
+      permission: "orders",
       message: "Zakazlar sahifasi uchun ruxsat kerak",
     });
     if (!operator) {
@@ -554,7 +579,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: "customers",
+      permission: "orders",
       message: "Zakaz yozish uchun ruxsat kerak",
     });
     if (!operator) {
@@ -595,7 +620,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: "customers",
+      permission: "orders",
       message: "Zakazni tahrirlash uchun ruxsat kerak",
     });
     if (!operator) {
@@ -633,7 +658,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: "customers",
+      permission: "orders",
       message: "Zakazni o'chirish uchun ruxsat kerak",
     });
     if (!operator) {
@@ -666,6 +691,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       roles: ["seller"],
       allowAdmin: true,
+      permission: "customers",
       realm: "warehouse-seller",
       message: "Mijoz qo'shish учун sotuvchi yoki admin ruxsati kerak",
     });
@@ -707,6 +733,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       roles: ["seller"],
       allowAdmin: true,
+      permission: "customers",
       realm: "warehouse-seller",
       message: "Mijozni tahrirlash учун sotuvchi yoki admin ruxsati kerak",
     });
@@ -741,6 +768,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       roles: ["seller"],
       allowAdmin: true,
+      permission: "customers",
       realm: "warehouse-seller",
       message: "Mijozni o'chirish учун sotuvchi yoki admin ruxsati kerak",
     });
@@ -1186,6 +1214,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
           };
         }
         const pricing = currentWarehousePricing(state);
+        assertCustomerWriteAccess(state, body, operator);
         const result = recordApprovedSale(state, body, {
           pricing,
           actor: operator,
@@ -1270,6 +1299,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
           };
         }
         const pricing = currentWarehousePricing(state);
+        assertCustomerWriteAccess(state, body, operator);
         const result = recordCustomerPayment(state, body, {
           pricing,
           actor: operator,
@@ -1351,6 +1381,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
           };
         }
         const pricing = currentWarehousePricing(state);
+        assertCustomerWriteAccess(state, body, operator);
         const result = recordCustomerReturn(state, body, {
           pricing,
           actor: operator,

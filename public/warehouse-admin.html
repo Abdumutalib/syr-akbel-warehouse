@@ -928,13 +928,18 @@
           <div>Lavozim: ${window.escapeHtml(roleLabel)}</div>
           <div style="margin-top: 6px;">Ko'ra oladigan sahifalar: ${window.escapeHtml(permissionSummary(effectivePermissions))}</div>
           <div class="tx-actions">
-            <button data-create-link="${window.escapeHtml(entry.id)}" class="secondary">Universal kirish linkini yaratish</button>
+            <select data-link-permission="${window.escapeHtml(entry.id)}" aria-label="Link uchun sahifa ruxsati">
+              <option value="">Sahifani tanlang</option>
+              ${effectivePermissions.map((permission) => `<option value="${window.escapeHtml(permission)}">${window.escapeHtml(STAFF_PERMISSION_LABELS[permission] || permission)}</option>`).join("")}
+            </select>
+            <button data-create-link="${window.escapeHtml(entry.id)}" class="secondary">Ruxsat linkini yaratish</button>
           </div>
           <div class="link-list">
             ${(entry.accessLinks || []).map((link) => `
               <article class="link-item">
                 <strong>${window.escapeHtml(link.permission === 'all' ? 'Universal kirish linki' : (STAFF_PERMISSION_LABELS[link.permission] || link.permission))}</strong>
                 <div class="link-url">${window.escapeHtml(accessLinkUrl(link.permission, link.token))}</div>
+                <div>${window.escapeHtml(link.expiresAt ? `Amal qilish muddati: ${new Date(link.expiresAt).toLocaleDateString('uz-UZ')}` : 'Muddati ko‘rsatilmagan eski havola')}</div>
                 <div>${window.escapeHtml(link.revokedAt ? 'Holati: Bekor qilingan' : 'Holati: Faol')}</div>
                 <div class="tx-actions">
                   ${link.revokedAt ? '' : `<button data-revoke-link="${window.escapeHtml(entry.id)}" data-link-id="${window.escapeHtml(link.id)}">Linkni bekor qilish</button>`}
@@ -1374,12 +1379,19 @@
       if (createLinkButton) {
         try {
           const staffId = createLinkButton.getAttribute("data-create-link");
+          const linkPermissionSelect = Array.from(staffListEl.querySelectorAll("[data-link-permission]"))
+            .find((select) => select.getAttribute("data-link-permission") === staffId);
+          const permission = linkPermissionSelect?.value || "";
+          if (!permission) {
+            setStatus("Avval link uchun sahifani tanlang.", true);
+            return;
+          }
           const data = await apiFetch(`/api/warehouse/staff/${staffId}/access-links`, {
             method: "POST",
-            body: JSON.stringify({ permission: "all" }),
+            body: JSON.stringify({ permission }),
           });
           renderStaff(data.allStaff || []);
-          setStatus("Xodim uchun universal kirish linki yaratildi.");
+          setStatus("Tanlangan sahifa uchun 30 kunlik link yaratildi.");
         } catch (error) {
           setStatus(error.message, true);
         }

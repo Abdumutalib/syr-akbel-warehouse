@@ -481,15 +481,17 @@ describe("warehouse bot helpers", () => {
     const link = createStaffAccessLink(state, seller.id, "seller");
     const auth = authenticateStaffAccessToken(state, link.token, "seller");
 
-    assert.equal(link.permission, "all");
+    assert.equal(link.permission, "seller");
+    assert.ok(link.expiresAt);
     assert.equal(auth?.username, "sellerlink");
     assert.equal(authenticateStaffAccessToken(state, link.token, "cash"), null);
+    assert.equal(authenticateStaffAccessToken(state, link.token, "customers"), null);
 
     revokeStaffAccessLink(state, seller.id, link.id);
     assert.equal(authenticateStaffAccessToken(state, link.token, "seller"), null);
   });
 
-  test("keeps verified staff links unlocked for a trusted device window", () => {
+  test("expires staff links after 30 days even when PIN was previously unlocked", () => {
     const state = loadWarehouseState(makeStatePath());
     const seller = createStaffAccount(state, {
       fullName: "PINli sotuvchi",
@@ -502,11 +504,11 @@ describe("warehouse bot helpers", () => {
     const link = createStaffAccessLink(state, seller.id, "seller");
     const realLink = state.staffAccounts[0].accessLinks.find((entry) => entry.id === link.id);
 
-    realLink.unlockedAt = new Date(Date.now() - 300 * 24 * 60 * 60 * 1000).toISOString();
+    realLink.unlockedAt = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
     assert.equal(authenticateStaffAccessToken(state, link.token, "seller")?.isUnlocked, true);
 
-    realLink.unlockedAt = new Date(Date.now() - 366 * 24 * 60 * 60 * 1000).toISOString();
-    assert.equal(authenticateStaffAccessToken(state, link.token, "seller")?.isUnlocked, false);
+    realLink.expiresAt = new Date(Date.now() - 1 * 60 * 1000).toISOString();
+    assert.equal(authenticateStaffAccessToken(state, link.token, "seller"), null);
   });
   test("handles warehouse receipts returns and updates stock/summary correctly", () => {
     const state = loadWarehouseState(makeStatePath());

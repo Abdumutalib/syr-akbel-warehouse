@@ -25,7 +25,7 @@ function makeTempState() {
 function makeReq(method, body) {
   return {
     method,
-    headers: {},
+    headers: { "x-telegram-bot-api-secret-token": "test-telegram-secret" },
     _body: body,
   };
 }
@@ -43,6 +43,7 @@ function makeDeps(state, dbPath, overrides = {}) {
   const sentToChannel = [];
 
   const deps = {
+    telegramWebhookSecret: "test-telegram-secret",
     assertWarehouseAdmin: () => true,
     assertWarehouseOperator: () => true,
     buildDebtReply: (name, debt) => `QARZI: ${name} ${debt}`,
@@ -176,6 +177,21 @@ function makeDeps(state, dbPath, overrides = {}) {
 // --- Testlar ---
 
 describe("Telegram webhook handleri", () => {
+  test("rejects Telegram webhook calls with a missing or incorrect secret", async () => {
+    const { dbPath, state } = makeTempState();
+    const deps = makeDeps(state, dbPath);
+    deps._postBody = { message: { text: "Ali 5 kg", chat: { id: 123 } } };
+
+    const req = makeReq("POST", deps._postBody);
+    req.headers = {};
+    const res = makeRes();
+    await handleWarehouseApiRoute(req, res, null, "/api/telegram/webhook", deps);
+
+    assert.equal(res.statusCode, 401);
+    assert.equal(deps._sentToUser.length, 0);
+    assert.equal(deps._sentToChannel.length, 0);
+  });
+
   test("1. Business bot ulanganda admin DM oladi", async () => {
     const { dbPath, state } = makeTempState();
     const deps = makeDeps(state, dbPath);

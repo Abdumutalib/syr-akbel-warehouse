@@ -15,55 +15,55 @@
     {
       label: "Admin panel",
       href: "/warehouse/admin",
-      isVisible(profile) { return true; },
+      permission: "admin_panel",
       isActive(pathname) { return pathname === "/warehouse/admin"; },
     },
     {
       label: "Admin naqd",
       href: "/warehouse/admin/cash",
-      isVisible(profile) { return true; },
+      permission: "cash",
       isActive(pathname) { return pathname === "/warehouse/admin/cash"; },
     },
     {
       label: "Admin o'tkazma",
       href: "/warehouse/admin/transfer",
-      isVisible(profile) { return true; },
+      permission: "transfer",
       isActive(pathname) { return pathname === "/warehouse/admin/transfer"; },
     },
     {
       label: "Umumiy hisobot",
       href: "/warehouse/ledger",
-      isVisible(profile) { return true; },
+      permission: "admin_panel",
       isActive(pathname) { return pathname === "/warehouse/ledger"; },
     },
     {
       label: "Sotuvchi",
       href: "/warehouse/seller",
-      isVisible(profile) { return true; },
+      permission: "seller",
       isActive(pathname) { return pathname === "/warehouse/seller"; },
     },
     {
       label: "Mijozlar",
       href: "/warehouse/customers",
-      isVisible(profile) { return true; },
+      permission: "customers",
       isActive(pathname) { return pathname === "/warehouse/customers" || pathname.startsWith("/warehouse/customers/"); },
     },
     {
       label: "Buyurtmalar",
       href: "/warehouse/orders",
-      isVisible(profile) { return true; },
+      permission: "orders",
       isActive(pathname) { return pathname === "/warehouse/orders"; },
     },
     {
       label: "Naqd savdo yozish",
       href: "/warehouse/seller/sale/cash",
-      isVisible(profile) { return true; },
+      permission: "write_cash_sale",
       isActive(pathname) { return pathname === "/warehouse/seller/sale/cash"; },
     },
     {
       label: "O'tkazma savdo yozish",
       href: "/warehouse/seller/sale/transfer",
-      isVisible(profile) { return true; },
+      permission: "write_transfer_sale",
       isActive(pathname) { return pathname === "/warehouse/seller/sale/transfer"; },
     },
   ];
@@ -231,6 +231,12 @@
   async function loadCustomerDirectory() {
     if (customerDirectoryLoading) {
       return customerDirectoryLoading;
+    }
+    const profile = getOperatorProfile();
+    if (!hasPermission(profile, "customers")) {
+      customerDirectoryLoaded = false;
+      customerDirectoryState = [];
+      return [];
     }
     const headers = buildCustomerDirectoryHeaders();
     if (!headers) {
@@ -404,6 +410,9 @@
     }
 
     const profile = getOperatorProfile();
+    if (!profile) {
+      return;
+    }
 
     const nav = document.createElement("section");
     nav.className = "warehouse-global-nav";
@@ -415,7 +424,7 @@
     list.className = "warehouse-global-nav__list";
 
     for (const item of NAV_ITEMS) {
-      if (typeof item.isVisible === "function" && !item.isVisible(profile)) {
+      if (!hasPermission(profile, item.permission)) {
         continue;
       }
       const link = document.createElement("a");
@@ -433,6 +442,7 @@
 
     const installWrap = document.createElement("div");
     installWrap.className = "warehouse-global-nav__install-wrap";
+    installWrap.hidden = !profile;
 
     const installButton = document.createElement("button");
     installButton.type = "button";
@@ -482,6 +492,7 @@
 
     const search = document.createElement("div");
     search.className = "warehouse-global-nav__search";
+    search.hidden = !hasPermission(profile, "customers");
 
     const searchLabel = document.createElement("label");
     searchLabel.htmlFor = "warehouse-global-customer-search";

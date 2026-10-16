@@ -686,11 +686,11 @@ function baseApiJsonHeaders(req = null) {
     "Access-Control-Allow-Origin": originValue || WAREHOUSE_ALLOWED_ORIGINS[0],
     Vary: "Origin",
     "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Referrer-Policy": "no-referrer",
     "Cross-Origin-Resource-Policy": "same-origin",
     "X-Frame-Options": "SAMEORIGIN",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
     "X-Robots-Tag": "noindex, nofollow"
   };
 }
@@ -718,23 +718,35 @@ function requestOriginAllowed(req) {
 }
 
 function requiredWarehouseRoutePermissions(pathname) {
-  if (pathname === "/warehouse/seller" || pathname === "/warehouse/seller/sale/cash") {
+  if (pathname === "/warehouse/seller") {
     return ["seller"];
   }
+  if (pathname === "/warehouse/seller/sale/cash") {
+    return ["write_cash_sale"];
+  }
   if (pathname === "/warehouse/seller/sale/transfer") {
-    return ["transfer", "write_transfer_sale"];
+    return ["write_transfer_sale"];
   }
-  if (pathname === "/warehouse/customers" || pathname === "/warehouse/orders") {
-    return ["customers", "seller", "cash", "transfer"];
+  if (pathname === "/warehouse/customers") {
+    return ["customers"];
   }
-  if (/^\/warehouse\/customers\/\d+$/.test(pathname)) {
-    return ["customers", "seller", "cash", "transfer"];
+  if (/^\/warehouse\/(?:customers|customer)\/\d+$/.test(pathname)) {
+    return ["customers"];
+  }
+  if (pathname === "/warehouse/orders") {
+    return ["orders"];
   }
   if (pathname === "/warehouse/admin/cash") {
     return ["cash"];
   }
   if (pathname === "/warehouse/admin/transfer") {
     return ["transfer"];
+  }
+  if (pathname === "/warehouse/admin" || pathname === "/warehouse/ledger" || pathname === "/warehouse/dashboard") {
+    return ["admin_panel"];
+  }
+  if (pathname.startsWith("/warehouse/uploads/")) {
+    return ["seller", "customers", "orders", "write_cash_sale", "write_transfer_sale", "cash", "transfer", "admin_panel"];
   }
   return null;
 }
@@ -756,8 +768,13 @@ function parseCookies(req) {
 
 const SITE_GATE_COOKIE = "warehouse-site";
 const STAFF_LINK_COOKIE = "warehouse-staff-link";
-const SITE_GATE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // trusted device: 1 yil
-const STAFF_LINK_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // trusted staff device: 1 yil
+const SITE_GATE_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // trusted device: 30 days
+const STAFF_LINK_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // staff access session: 30 kun
+
+function secureCookieAttribute(req) {
+  const forwardedProto = String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
+  return forwardedProto === "https" || Boolean(req?.socket?.encrypted) ? "; Secure" : "";
+}
 
 function siteGateCookieValue() {
   const base =
@@ -831,7 +848,7 @@ function authenticateStaffLinkForRoute(req, u) {
 
 function checkSiteGate(req, res, u) {
   // API, healthz, SW, manifest, rasm — tekshirilmaydi
-  const skipPrefixes = ["/warehouse/api/", "/api/", "/warehouse/sw.js", "/warehouse/manifest.json", "/warehouse/assets/", "/warehouse/uploads/", "/warehouse/leaflet.js", "/warehouse/leaflet.css", "/warehouse/maplibre-gl.js", "/warehouse/maplibre-gl.css", "/warehouse-top-nav.js", "/favicon", "/icon-"];
+  const skipPrefixes = ["/warehouse/api/", "/api/", "/warehouse/sw.js", "/warehouse/manifest.json", "/warehouse/assets/", "/warehouse/leaflet.js", "/warehouse/leaflet.css", "/warehouse/maplibre-gl.js", "/warehouse/maplibre-gl.css", "/warehouse-top-nav.js", "/favicon", "/icon-"];
   
   if (skipPrefixes.some((p) => u.pathname.startsWith(p))) return { allowed: true };
   
@@ -856,7 +873,7 @@ function checkSiteGate(req, res, u) {
     return {
       allowed: true,
       setStaffCookie: shouldSetCookie
-        ? `${STAFF_LINK_COOKIE}=${staffLinkAuth.token}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`
+        ? `${STAFF_LINK_COOKIE}=${staffLinkAuth.token}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax${secureCookieAttribute(req)}`
         : null,
     };
   }
@@ -1113,7 +1130,7 @@ function checkSiteGate(req, res, u) {
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
     "X-Frame-Options": "SAMEORIGIN",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
     "X-Robots-Tag": "noindex, nofollow",
     Pragma: "no-cache",
     Expires: "0",
@@ -1127,10 +1144,10 @@ function hasWarehouseRouteAccess(req, u) {
   if (!requiredPermissions) {
     return true;
   }
-  const accessToken = (u.searchParams.get("access") || extractWarehouseAccessToken(req) || "").trim();
+  if (isGateAuthenticatedByCookie(req)) return true;
+  const accessToken = (u.searchParams.get("access") || getStaffLinkTokenFromRequest(req, u).fromCookie || extractWarehouseAccessToken(req) || "").trim();
   if (!accessToken) {
-    // Allow opening protected pages directly; actual data access is still enforced by API auth checks.
-    return true;
+    return false;
   }
   const state = loadWarehouse();
   for (const permission of requiredPermissions) {
@@ -1168,11 +1185,11 @@ function staticResponseHeaders(contentType, filePath, etag = null) {
     "Cache-Control": cacheControl,
     "Vary": "Accept-Encoding",
     "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Referrer-Policy": "no-referrer",
     "Cross-Origin-Resource-Policy": "same-origin",
     "X-Frame-Options": "SAMEORIGIN",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
     "X-Robots-Tag": "noindex, nofollow"
   };
   if (etag) headers["ETag"] = etag;
@@ -2069,6 +2086,12 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   }
 
   if (u.pathname === "/telegram/webhook-extended" && req.method === "POST") {
+    const webhookSecret = String(process.env.TELEGRAM_WEBHOOK_SECRET || "").trim();
+    const providedSecret = String(req.headers["x-telegram-bot-api-secret-token"] || "").trim();
+    if (!webhookSecret || !providedSecret || providedSecret !== webhookSecret) {
+      sendApiJson(res, webhookSecret ? 401 : 503, { error: "Telegram webhook ruxsati yo'q" }, req);
+      return;
+    }
     if (extendedBotHandler) {
       await extendedBotHandler(req, res);
       return;
@@ -2076,6 +2099,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   }
 
   if (u.pathname === "/api/sales" && req.method === "POST") {
+    if (!assertWarehouseOperator(req, res, { permission: "write_cash_sale", message: "Savdo yozish uchun ruxsat yo'q" })) return;
     try {
       const body = await readPostJson(req);
       if (body === null) {
@@ -2091,6 +2115,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   }
 
   if (u.pathname === "/api/forecast" && req.method === "GET") {
+    if (!assertWarehouseOperator(req, res, { permission: "admin_panel", message: "Prognoz faqat admin uchun" })) return;
     try {
       const f = await forecaster.forecast();
       sendApiJson(res, 200, { success: true, forecast: f }, req);
@@ -2225,6 +2250,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         sendTelegramTransferChannelMessage,
         sendTransactionPhotosToChannels,
         sendTelegramMessage,
+        telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || "",
         buildChannelSaleMsg,
         buildChannelPaymentMsg,
         buildChannelApprovalMsg,
@@ -2303,7 +2329,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         const safeNext = next.startsWith("/warehouse/") ? next : "/warehouse/seller";
         res.writeHead(302, {
           Location: safeNext,
-          "Set-Cookie": `${STAFF_LINK_COOKIE}=${accessToken}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
+          "Set-Cookie": `${STAFF_LINK_COOKIE}=${accessToken}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax${secureCookieAttribute(req)}`,
           "Cache-Control": "no-store",
         });
         res.end();
@@ -2341,7 +2367,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
 
     res.writeHead(302, {
       Location: "/warehouse/admin",
-      "Set-Cookie": `${SITE_GATE_COOKIE}=${siteGateCookieValue()}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
+      "Set-Cookie": `${SITE_GATE_COOKIE}=${siteGateCookieValue()}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax${secureCookieAttribute(req)}`,
       "Cache-Control": "no-store",
     });
     res.end();
