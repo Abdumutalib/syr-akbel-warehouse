@@ -832,10 +832,12 @@
 
     function applyOperatorPermissions(profile) {
       const currentProfile = profile || (window.getWarehouseOperatorProfile ? window.getWarehouseOperatorProfile() : null);
+      const isSellerProfile = Boolean(currentProfile && currentProfile.role === 'seller');
       const hasPermission = (permission) => Boolean(
         window.warehouseOperatorHasPermission &&
         window.warehouseOperatorHasPermission(currentProfile, permission)
       );
+      document.getElementById('salePageShortcuts').classList.toggle('hidden', isSellerProfile);
       document.getElementById('sellerLink').classList.toggle('hidden', !hasPermission('seller'));
       document.getElementById('customersLink').classList.toggle('hidden', !hasPermission('customers'));
       document.getElementById('cashLink').classList.toggle('hidden', !hasPermission('cash'));

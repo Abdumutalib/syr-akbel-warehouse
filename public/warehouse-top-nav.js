@@ -369,6 +369,11 @@
     }
 
     const profile = getOperatorProfile();
+    const isSellerOnSalePage = Boolean(
+      profile &&
+      profile.role === "seller" &&
+      /^\/warehouse\/seller\/sale\/(?:cash|transfer)$/.test(window.location.pathname)
+    );
 
     const nav = document.createElement("section");
     nav.className = "warehouse-global-nav";
@@ -380,6 +385,12 @@
     list.className = "warehouse-global-nav__list";
 
     for (const item of NAV_ITEMS) {
+      if (isSellerOnSalePage && ![
+        "/warehouse/seller/sale/cash",
+        "/warehouse/seller/sale/transfer",
+      ].includes(item.href)) {
+        continue;
+      }
       if (!hasPermission(profile, item.permissions)) {
         continue;
       }
