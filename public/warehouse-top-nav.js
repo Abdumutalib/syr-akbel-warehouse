@@ -33,7 +33,7 @@
     {
       label: "Umumiy hisobot",
       href: "/warehouse/ledger",
-      permissions: ["cash"],
+      permissions: ["admin_panel"],
       isActive(pathname) { return pathname === "/warehouse/ledger"; },
     },
     {

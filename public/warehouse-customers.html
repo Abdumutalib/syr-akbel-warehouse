@@ -177,7 +177,7 @@
       </div>
       <div id="customersPageShortcuts" class="hero-links" style="margin-top: 14px; width: 100%;">
         <a class="button-link secondary hidden" id="sellerLink" href="/warehouse/seller">Sotuvchi sahifasi</a>
-        <a class="button-link secondary hidden" id="saleLink" href="/warehouse/sale/cash">Savdo yozish</a>
+        <a class="button-link secondary hidden" id="saleLink" href="/warehouse/seller/sale/cash">Savdo yozish</a>
         <a class="button-link secondary hidden" id="adminLink" href="/warehouse/admin">Admin sahifasi</a>
       </div>
     </section>
@@ -279,7 +279,7 @@
     </section>
   </div>
 
-  <script src="/warehouse/assets/warehouse-api.js?v=20260908-1"></script>
+  <script src="/warehouse/assets/warehouse-api.js?v=audit-fixes"></script>
   <script src="/warehouse/assets/warehouse-auth-pin.js?v=10fa103"></script>
   <script>
     const usernameGroupEl = document.getElementById('usernameGroup');
@@ -626,7 +626,7 @@
         document.getElementById('delete-customer').disabled = true;
         return;
       }
-      select.innerHTML = customers.map((customer) => `<option value="${customer.id}">${customer.fullName}</option>`).join('');
+      select.innerHTML = customers.map((customer) => `<option value="${customer.id}">${window.escapeHtml(customer.fullName)}</option>`).join('');
       select.disabled = false;
       document.getElementById('delete-customer').disabled = false;
     }
@@ -650,8 +650,8 @@
       host.innerHTML = customers.map((customer) => `
         <div class="customer-card" style="display: flex; flex-direction: column;">
           <a class="customer-link" href="${withAccess(`/warehouse/customers/${customer.id}`)}" style="width: 100%;">
-            <strong>${customer.fullName}</strong>
-            <span class="muted">Tashkilot: ${customer.organizationName || '-'} · Telefonlar: ${(customer.phones || []).join(', ') || '-'} · Lokatsiya: ${customer.location ? (customer.location.length > 20 ? 'Kiritilgan' : customer.location) : '-'}</span>
+            <strong>${window.escapeHtml(customer.fullName)}</strong>
+            <span class="muted">Tashkilot: ${window.escapeHtml(customer.organizationName || '-')} · Telefonlar: ${window.escapeHtml((customer.phones || []).join(', ') || '-')} · Lokatsiya: ${window.escapeHtml(customer.location ? (customer.location.length > 20 ? 'Kiritilgan' : customer.location) : '-')}</span>
           </a>
           <div style="display: flex; gap: 8px; width: 100%; justify-content: flex-end; margin-top: 10px;">
             ${renderMapLinksList(customer.location)}

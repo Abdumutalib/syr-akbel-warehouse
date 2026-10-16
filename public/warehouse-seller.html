@@ -269,7 +269,7 @@
         <h1 id="sellerPageTitle">Sotuvchi sahifasi</h1>
       </div>
       <div id="sellerPageShortcuts" class="hero-links" style="margin-top: 14px;">
-        <a class="button-link secondary hidden" id="saleLink" href="/warehouse/sale/cash">Savdo yozish</a>
+        <a class="button-link secondary hidden" id="saleLink" href="/warehouse/seller/sale/cash">Savdo yozish</a>
         <a class="button-link secondary hidden" id="customersLink" href="/warehouse/customers">Mijozlar mundarijasi</a>
         <a class="button-link secondary hidden" id="adminLink" href="/warehouse/admin">Admin sahifasi</a>
       </div>
@@ -433,7 +433,7 @@
     </section>
   </div>
 
-  <script src="/warehouse/assets/warehouse-api.js?v=20260908-1"></script>
+  <script src="/warehouse/assets/warehouse-api.js?v=audit-fixes"></script>
   <script src="/warehouse/assets/warehouse-auth-pin.js?v=10fa103"></script>
   <script>
     const usernameGroupEl = document.getElementById('usernameGroup');
@@ -758,7 +758,7 @@
     }
 
     function setCustomerOptions(customers) {
-      const options = customers.map((customer) => `<option value="${customer.id}">${customer.fullName}</option>`).join('');
+      const options = customers.map((customer) => `<option value="${customer.id}">${window.escapeHtml(customer.fullName)}</option>`).join('');
       paymentCustomerEl.innerHTML = options;
       document.getElementById('deleteCustomerSelect').innerHTML = options;
     }
@@ -771,16 +771,16 @@
       customerListEl.innerHTML = customers.map((customer) => `
         <article class="customer">
           <div class="customer-head">
-            <strong>${customer.fullName}</strong>
+            <strong>${window.escapeHtml(customer.fullName)}</strong>
             <span>#${customer.id}</span>
           </div>
-          <p class="muted">Tashkilot: ${customer.organizationName || '-'} · INN: ${customer.taxId || '-'}</p>
+          <p class="muted">Tashkilot: ${window.escapeHtml(customer.organizationName || '-')} · INN: ${window.escapeHtml(customer.taxId || '-')}</p>
           <p>${customer.totalTakenKg} kg olingan${customer.currentDebt == null ? '' : ` · Naqd savdo: ${numberFormat(customer.cashSales || 0)} so'm | O'tkazma savdo: ${numberFormat(customer.transferSales || 0)} so'm`}</p>
           ${customer.currentDebt != null
             ? `<p>Naqd to'lov: ${numberFormat(customer.cashPaid || 0)} so'm | O'tkazma to'lov: ${numberFormat(customer.transferPaid || 0)} so'm</p>
           <p>Naqd balans: <span class="${debtClass(customer.cashDebt)}">${balanceText(customer.cashDebt || 0)}</span> · O'tkazma balans: <span class="${debtClass(customer.transferDebt)}">${balanceText(customer.transferDebt || 0)}</span> · Jami balans: <span class="${debtClass(customer.currentDebt)}">${balanceText(customer.currentDebt)}</span></p>`
             : '<p class="muted">Umumiy qarz yoki haqdorlik sotuvchidan yopilgan.</p>'}
-          <p class="muted">Telefonlar: ${(customer.phones || []).join(', ') || '-'} · Telegram: ${(customer.telegramIds || []).join(', ') || '-'} · Lokatsiya: ${customer.location || '-'}</p>
+          <p class="muted">Telefonlar: ${window.escapeHtml((customer.phones || []).join(', ') || '-')} · Telegram: ${window.escapeHtml((customer.telegramIds || []).join(', ') || '-')} · Lokatsiya: ${window.escapeHtml(customer.location || '-')}</p>
           <p><a href="${withAccess(`/warehouse/customers/${customer.id}`)}">Mijoz sahifasini ochish</a></p>
         </article>
       `).join('');

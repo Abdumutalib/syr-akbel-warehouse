@@ -5,13 +5,13 @@ import { fileURLToPath } from 'url';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const STATE_PATH = path.join(ROOT, '../data/warehouse.json');
 
-export async function generateAndSendDailyReport() {
+export async function generateAndSendDailyReport(loadState) {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID?.trim();
   if (!token || !chatId) return;
 
   try {
-    const state = loadWarehouseState(STATE_PATH);
+    const state = loadState ? loadState() : loadWarehouseState(process.env.WAREHOUSE_STATE_FILE || STATE_PATH);
     const pricing = getWarehousePricing(state);
     const today = new Date().toISOString().split('T')[0];
     
@@ -51,11 +51,11 @@ export async function generateAndSendDailyReport() {
   }
 }
 
-export function startAutoReports() {
+export function startAutoReports(loadState) {
   setInterval(async () => {
     const now = new Date();
     if (now.getHours() === 23 && now.getMinutes() === 59) {
-      await generateAndSendDailyReport();
+      await generateAndSendDailyReport(loadState);
     }
   }, 60000);
   console.log('[REPORTS] ✅ Avtomatik hisobotlar scheduler ishga tushdi');

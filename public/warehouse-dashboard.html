@@ -88,6 +88,7 @@
   <div class="refresh-time" id="lastUpdate">Yuklanmoqda...</div>
 </div>
 
+<script src="/warehouse/assets/warehouse-api.js?v=audit-fixes"></script>
 <script>
   let refreshTimer = null;
 
@@ -124,7 +125,7 @@
         debtorList.innerHTML = '<li style="color:#94a3b8">Qarzdor yo\'q</li>';
       } else {
         debtorList.innerHTML = debtors
-          .map(d => `<li><span>${d.name}</span><span class="badge">${Number(d.debt).toLocaleString('uz-UZ')} so'm</span></li>`)
+          .map(d => `<li><span>${window.escapeHtml(d.name)}</span><span class="badge">${Number(d.debt).toLocaleString('uz-UZ')} so'm</span></li>`)
           .join('');
       }
 
@@ -189,7 +190,6 @@
 </script>
   <script src="/warehouse/assets/warehouse-auth-pin.js?v=10fa103"></script>
   <script src="/warehouse/assets/warehouse-offline.js"></script>
-  <script src="/warehouse/assets/warehouse-api.js?v=20260908-1"></script>
   <script src="/warehouse-top-nav.js"></script>
 </body>
 </html>

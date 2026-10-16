@@ -54,6 +54,14 @@ Telegram/API security:
     authentication.
 
 Single-server notes:
+  - Admin and PIN sessions expire after eight hours. The signing key is generated
+    on startup, so a restart requires users to sign in again. Old static cookies
+    and global link unlock timestamps are no longer accepted.
+  - Keep the app in a single Node.js process. Sessions are intentionally invalid
+    in another process; multiple replicas require a shared session design.
+  - Forward X-Forwarded-Proto: https through the trusted HTTPS proxy so login
+    cookies receive Secure. Both Telegram webhook routes require the configured
+    TELEGRAM_WEBHOOK_SECRET.
   - Loyiha bitta server rejimida ishlaydi.
   - Tashqi peer sync endpointlari olib tashlangan.
   - Barcha boshqaruv jarayoni yuqoridagi billing panel orqali yuritiladi.

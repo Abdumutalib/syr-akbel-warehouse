@@ -318,7 +318,7 @@
     </div>
   </div>
 
-  <script src="/warehouse/assets/warehouse-api.js?v=20260908-1"></script>
+  <script src="/warehouse/assets/warehouse-api.js?v=audit-fixes"></script>
   <script src="/warehouse/assets/warehouse-auth-pin.js?v=10fa103"></script>
   <script>
     const usernameGroupEl = document.getElementById('usernameGroup');
@@ -606,7 +606,7 @@
       historyPhotoModalImageEl.src = activePhoto.url;
       historyPhotoModalThumbsEl.innerHTML = currentModalPhotos.map((photo, index) => `
         <button type="button" class="photo-thumb ${index === currentModalIndex ? 'is-active' : ''}" data-history-modal-index="${index}">
-          <img src="${photo.url}" alt="Savdo rasmi ${index + 1}">
+          <img src="${window.escapeHtml(photo.url)}" alt="Savdo rasmi ${index + 1}">
         </button>
       `).join('');
       historyPhotoModalEl.classList.remove('hidden');
@@ -640,7 +640,7 @@
           </div>
         `;
       } else if (locStr.startsWith('http')) {
-        document.getElementById('locationValue').innerHTML = `<a href="${locStr}" target="_blank" style="margin-left: 8px;">Havola</a>`;
+        document.getElementById('locationValue').innerHTML = `<a href="${window.escapeHtml(locStr)}" target="_blank" style="margin-left: 8px;">Havola</a>`;
       } else {
         document.getElementById('locationValue').textContent = locStr || '-';
       }
@@ -726,7 +726,7 @@
                    <td data-label="Jami to'lov">${numberFormat(entry.paidAmount)} so'm</td>
                    <td data-label="Qarz"><span class="${debtClass(remainingDebt)}">${numberFormat(Math.abs(remainingDebt))} so'm${remainingDebt < 0 ? ' (kredit)' : ''}</span></td>
                    <td data-label="Rasm">${photos.length ? `<button type="button" class="photo-link-button" data-history-photo-entry="${entry.id}">${photos.length === 1 ? 'Rasmni ko\'rish' : `${photos.length} ta rasmni ko\'rish`}</button>` : '-'}</td>
-                   <td data-label="Izoh" class="muted">${entry.note || 'Izoh yo\'q'}</td>
+                   <td data-label="Izoh" class="muted">${window.escapeHtml(entry.note || 'Izoh yo\'q')}</td>
                  </tr>
                `;
               }).join('')}

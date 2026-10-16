@@ -489,7 +489,7 @@ describe("warehouse bot helpers", () => {
     assert.equal(authenticateStaffAccessToken(state, link.token, "seller"), null);
   });
 
-  test("keeps verified staff links unlocked for a trusted device window", () => {
+  test("ignores legacy global unlock timestamps for PIN-protected links", () => {
     const state = loadWarehouseState(makeStatePath());
     const seller = createStaffAccount(state, {
       fullName: "PINli sotuvchi",
@@ -503,7 +503,7 @@ describe("warehouse bot helpers", () => {
     const realLink = state.staffAccounts[0].accessLinks.find((entry) => entry.id === link.id);
 
     realLink.unlockedAt = new Date(Date.now() - 300 * 24 * 60 * 60 * 1000).toISOString();
-    assert.equal(authenticateStaffAccessToken(state, link.token, "seller")?.isUnlocked, true);
+    assert.equal(authenticateStaffAccessToken(state, link.token, "seller")?.isUnlocked, false);
 
     realLink.unlockedAt = new Date(Date.now() - 366 * 24 * 60 * 60 * 1000).toISOString();
     assert.equal(authenticateStaffAccessToken(state, link.token, "seller")?.isUnlocked, false);

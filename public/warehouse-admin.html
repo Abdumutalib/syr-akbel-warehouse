@@ -627,7 +627,7 @@
     </section>
   </div>
 
-  <script src="/warehouse/assets/warehouse-api.js?v=20260908-1"></script>
+  <script src="/warehouse/assets/warehouse-api.js?v=audit-fixes"></script>
   <script src="/warehouse/assets/warehouse-auth-pin.js?v=10fa103"></script>
   <script src="/warehouse-top-nav.js"></script>
   <script>
@@ -854,7 +854,7 @@
       return list.length ? list.join(", ") : "Ruxsat berilmagan";
     }
 
-    function accessLinkUrl(permission, token) {
+    function accessLinkUrl(permission, token, permissions = []) {
       const pathMap = {
         all: '/warehouse/seller',
         seller: '/warehouse/seller',
@@ -866,7 +866,10 @@
         transfer: '/warehouse/admin/transfer',
         admin_panel: '/warehouse/admin',
       };
-      return `${location.origin}${pathMap[permission] || '/warehouse/customers'}?access=${encodeURIComponent(token)}`;
+      const targetPermission = permission === 'all'
+        ? ['admin_panel', 'seller', 'write_cash_sale', 'write_transfer_sale', 'customers', 'orders', 'cash', 'transfer'].find(key => permissions.includes(key))
+        : permission;
+      return `${location.origin}${pathMap[targetPermission] || '/warehouse/customers'}?access=${encodeURIComponent(token)}`;
     }
 
     function selectedInlineCustomerCategories() {
@@ -929,6 +932,7 @@
           <div style="margin-top: 6px;">Ko'ra oladigan sahifalar: ${window.escapeHtml(permissionSummary(effectivePermissions))}</div>
           <div class="tx-actions">
             <select data-link-permission aria-label="Kirish havolasi uchun ruxsat" ${effectivePermissions.length ? "" : "disabled"}>
+              <option value="all">Ruxsat berilgan barcha sahifalar</option>
               ${effectivePermissions.map((permission) => `<option value="${window.escapeHtml(permission)}">${window.escapeHtml(STAFF_PERMISSION_LABELS[permission] || permission)}</option>`).join("")}
             </select>
             <button data-create-link="${window.escapeHtml(entry.id)}" class="secondary" ${effectivePermissions.length ? "" : "disabled"}>Tanlangan sahifa uchun link yaratish</button>
@@ -937,7 +941,7 @@
             ${(entry.accessLinks || []).map((link) => `
               <article class="link-item">
                 <strong>${window.escapeHtml(link.permission === 'all' ? 'Universal kirish linki' : (STAFF_PERMISSION_LABELS[link.permission] || link.permission))}</strong>
-                <div class="link-url">${window.escapeHtml(accessLinkUrl(link.permission, link.token))}</div>
+                <div class="link-url">${window.escapeHtml(accessLinkUrl(link.permission, link.token, effectivePermissions))}</div>
                 <div>${window.escapeHtml(link.revokedAt ? 'Holati: Bekor qilingan' : 'Holati: Faol')}</div>
                 <div class="tx-actions">
                   ${link.revokedAt ? '' : `<button data-revoke-link="${window.escapeHtml(entry.id)}" data-link-id="${window.escapeHtml(link.id)}">Linkni bekor qilish</button>`}
@@ -996,7 +1000,7 @@
 
     function renderCustomerOptions(list) {
       const options = list
-        .map((c) => `<option value="${c.id}">${c.fullName || "Noma'lum"}${c.phone ? ` (${c.phone})` : ""}</option>`)
+        .map((c) => `<option value="${c.id}">${window.escapeHtml(c.fullName || "Noma'lum")}${c.phone ? ` (${window.escapeHtml(c.phone)})` : ""}</option>`)
         .join("");
       customerQuickSelectEl.innerHTML = `<option value="">Avval mijozni tanlang</option>${options}`;
     }
@@ -1240,7 +1244,7 @@
              ${item.blockCount ? `<span> · Blok: ${sign}${item.blockCount} ta</span>` : ''}
              ${item.pricePerKg ? `<span> · Narx: ${numberFormat(item.pricePerKg)}</span>` : ''}
            </div>
-           ${item.note ? `<div style="font-size: 13px; color: var(--muted); margin-top: 4px;">${item.note}</div>` : ''}
+           ${item.note ? `<div style="font-size: 13px; color: var(--muted); margin-top: 4px;">${window.escapeHtml(item.note)}</div>` : ''}
          </article>
        `}).join("");
      }
@@ -1648,6 +1652,5 @@
     });
   </script>
   <script src="/warehouse/assets/warehouse-offline.js"></script>
-  <script src="/warehouse-top-nav.js"></script>
 </body>
 </html>

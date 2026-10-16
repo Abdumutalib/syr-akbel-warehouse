@@ -54,7 +54,7 @@ import { handleWarehouseApiRoute } from "./server/handle-api.mjs";
 import { getClientIp, rateLimiter, recordFailedAuth, securityHeaders } from "./lib/rate-limiter.mjs";
 import { startAutoReports } from "./scripts/auto-reports.mjs";
 import { setupExtendedBot } from "./app/telegram-bot-extended.mjs";
-import { executeTransaction } from "./lib/core.mjs";
+import { createWarehouseSessions } from "./lib/warehouse-sessions.mjs";
 import { forecaster } from "./lib/ai-forecaster.mjs";
 import { resolveAllowedOrigins, getAllowedOriginHeaderValue } from "./lib/deployment-config.mjs";
 import {
@@ -106,7 +106,6 @@ const WAREHOUSE_MAX_REQUEST_BYTES = Math.max(
 const WAREHOUSE_STATE_PATH = resolveWarehouseStatePath();
 const WAREHOUSE_TRANSACTION_PHOTO_DIR = path.join(path.dirname(WAREHOUSE_STATE_PATH), "transaction-photos");
 const SCHEDULER_STATE_PATH = path.join(path.dirname(WAREHOUSE_STATE_PATH), "scheduler.json");
-const WAREHOUSE_SITE_TOKEN = process.env.WAREHOUSE_SITE_TOKEN?.trim() || "";
 
 // --- Qarz eslatma scheduler holati ---
 const DEBT_REMINDER_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 kun
@@ -142,6 +141,7 @@ const warehousePostgresStore = await createWarehousePostgresStore();
 let warehouseStateCache = warehousePostgresStore
   ? await loadWarehouseStateFromPostgres(warehousePostgresStore, warehouseFileSeedState)
   : warehouseFileSeedState;
+forecaster.loadState = loadWarehouse;
 let warehouseWriteQueue = Promise.resolve();
 let yandexUploadTimer = null;
 let yandexUploadInFlight = false;
@@ -574,16 +574,15 @@ async function persistWarehouseStateToPostgres(state, options = {}) {
 }
 
 async function saveWarehouse(state, options = {}) {
-  warehouseStateCache = state;
-  warehouseSavePending = true;
-  // Persist before acknowledging a write so a restart cannot restore stale stock.
-  flushWarehouseSave();
-  scheduleYandexCsvUpload();
-
-  if (!warehouseSaveTimer) {
-    warehouseSaveTimer = setTimeout(flushWarehouseSave, 300);
+  await persistWarehouseStateToPostgres(state, options);
+  if (warehousePostgresStore) {
+    try { saveWarehouseState(WAREHOUSE_STATE_PATH, state); }
+    catch (error) { console.error("[I/O] PostgreSQL persisted; local backup failed:", error); }
+  } else {
+    saveWarehouseState(WAREHOUSE_STATE_PATH, state);
   }
-  return persistWarehouseStateToPostgres(state, options);
+  warehouseStateCache = state;
+  scheduleYandexCsvUpload();
 }
 
 // Graceful shutdown flush
@@ -596,8 +595,9 @@ function withWarehouseRead(handler) {
 
 function withWarehouseWrite(handler) {
   const task = warehouseWriteQueue.then(async () => {
-    const result = await handler(warehouseStateCache);
-    await saveWarehouse(warehouseStateCache);
+    const draft = structuredClone(warehouseStateCache);
+    const result = await handler(draft);
+    await saveWarehouse(draft);
     return result;
   });
   warehouseWriteQueue = task.catch(() => {});
@@ -676,7 +676,7 @@ function extractWarehouseAccessToken(req) {
   if (typeof headerValue === "string" && headerValue.trim()) {
     return headerValue.trim();
   }
-  return String(parseCookies(req)[STAFF_LINK_COOKIE] || "").trim();
+  return staffSessionToken(req);
 }
 
 function baseApiJsonHeaders(req = null) {
@@ -686,11 +686,11 @@ function baseApiJsonHeaders(req = null) {
     "Access-Control-Allow-Origin": originValue || WAREHOUSE_ALLOWED_ORIGINS[0],
     Vary: "Origin",
     "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Referrer-Policy": "no-referrer",
     "Cross-Origin-Resource-Policy": "same-origin",
     "X-Frame-Options": "SAMEORIGIN",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; script-src-attr 'none'; base-uri 'self'; form-action 'self'",
     "X-Robots-Tag": "noindex, nofollow"
   };
 }
@@ -718,6 +718,7 @@ function requestOriginAllowed(req) {
 }
 
 function requiredWarehouseRoutePermissions(pathname) {
+  if (pathname.startsWith("/warehouse/uploads/")) return ["seller", "customers", "orders", "write_cash_sale", "write_transfer_sale", "cash", "transfer", "admin_panel"];
   if (pathname === "/warehouse/seller") {
     return ["seller"];
   }
@@ -731,8 +732,8 @@ function requiredWarehouseRoutePermissions(pathname) {
   if (pathname === "/warehouse/orders") {
     return ["orders"];
   }
-  if (pathname === "/warehouse/ledger") {
-    return ["cash"];
+  if (pathname === "/warehouse/ledger" || pathname === "/warehouse/dashboard") {
+    return ["admin_panel"];
   }
   if (pathname === "/warehouse/admin") {
     return ["admin_panel"];
@@ -747,7 +748,7 @@ function requiredWarehouseRoutePermissions(pathname) {
 }
 
 // Site-wide gate: warehouse sahifalarini ochish uchun admin login yoki staff link kerak.
-// WAREHOUSE_SITE_TOKEN bo'lsa, ?access=TOKEN yoki Cookie: warehouse-site=TOKEN ham ishlaydi.
+// Admin and PIN cookies carry signed, expiring browser sessions.
 // Token to'g'ri bo'lsa, cookie o'rnatilib, keyingi tashrif uchun URL kerak bo'lmaydi.
 function parseCookies(req) {
   const raw = req.headers.cookie || "";
@@ -770,8 +771,9 @@ function warehouseRedirectSearch(u) {
 
 const SITE_GATE_COOKIE = "warehouse-site";
 const STAFF_LINK_COOKIE = "warehouse-staff-link";
-const SITE_GATE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // trusted device: 1 yil
-const STAFF_LINK_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // trusted staff device: 1 yil
+const SITE_GATE_COOKIE_MAX_AGE = 8 * 60 * 60;
+const STAFF_LINK_COOKIE_MAX_AGE = 8 * 60 * 60;
+const sessions = createWarehouseSessions();
 
 function isSecureRequest(req) {
   return Boolean(
@@ -780,24 +782,48 @@ function isSecureRequest(req) {
   );
 }
 
+function adminSessionVersion() {
+  return crypto.createHash("sha256").update(JSON.stringify(readConfiguredAdminCredentials(loadWarehouse()))).digest("hex");
+}
+
 function siteGateCookieValue() {
-  const base =
-    WAREHOUSE_SITE_TOKEN ||
-    process.env.WAREHOUSE_ADMIN_PASSWORD?.trim() ||
-    process.env.WAREHOUSE_ADMIN_USERNAME?.trim() ||
-    "warehouse";
-  return crypto.createHash("sha256").update(`${base}|warehouse-gate|v1`).digest("hex");
+  return sessions.issue("admin", readConfiguredAdminCredentials(loadWarehouse()).username, adminSessionVersion());
 }
 
 function isGateAuthenticatedByCookie(req) {
-  const cookies = parseCookies(req);
-  return cookies[SITE_GATE_COOKIE] === siteGateCookieValue();
+  const session = sessions.read(parseCookies(req)[SITE_GATE_COOKIE], "admin");
+  return Boolean(session && session.version === adminSessionVersion());
+}
+
+function staffSessionVersion(token) {
+  const account = (loadWarehouse().staffAccounts || []).find(a => (a.accessLinks || []).some(l => l.token === token && !l.revokedAt));
+  return account ? crypto.createHash("sha256").update(JSON.stringify([account.id, account.pin, account.password])).digest("hex") : null;
+}
+
+function staffSessionToken(req) {
+  const session = sessions.read(parseCookies(req)[STAFF_LINK_COOKIE], "staff");
+  return session && session.version === staffSessionVersion(session.subject) ? session.subject : "";
+}
+
+function staffSessionCookie(req, token) {
+  const value = sessions.issue("staff", token, staffSessionVersion(token));
+  return `${STAFF_LINK_COOKIE}=${value}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Strict${isSecureRequest(req) ? "; Secure" : ""}`;
+}
+
+function issueStaffSession(req, res, token) {
+  res.setHeader("Set-Cookie", staffSessionCookie(req, token));
+}
+
+function authenticateRequestStaff(req, token, permission = null) {
+  const operator = authenticateStaffAccessToken(loadWarehouse(), token, permission);
+  if (!operator) return null;
+  return { ...operator, isUnlocked: !operator.hasPin || staffSessionToken(req) === token };
 }
 
 function getStaffLinkTokenFromRequest(req, u) {
   const fromQuery = String(u.searchParams.get("access") || "").trim();
   const cookies = parseCookies(req);
-  const fromCookie = String(cookies[STAFF_LINK_COOKIE] || "").trim();
+  const fromCookie = staffSessionToken(req);
   return {
     fromQuery,
     fromCookie,
@@ -805,8 +831,8 @@ function getStaffLinkTokenFromRequest(req, u) {
   };
 }
 
-function authenticateStaffPageToken(state, token, permission) {
-  const operator = authenticateStaffAccessToken(state, token, permission);
+function authenticateStaffPageToken(req, state, token, permission) {
+  const operator = authenticateRequestStaff(req, token, permission);
   if (!operator) return null;
   if (operator.role === "admin") return operator;
 
@@ -842,7 +868,7 @@ function authenticateStaffLinkForRoute(req, u) {
   }
   const state = loadWarehouse();
   for (const permission of routePermissions) {
-    const operator = authenticateStaffPageToken(state, tokenInfo.token, permission);
+    const operator = authenticateStaffPageToken(req, state, tokenInfo.token, permission);
     if (!operator) {
       continue;
     }
@@ -867,7 +893,7 @@ function authenticateStaffLinkForRoute(req, u) {
 
 function checkSiteGate(req, res, u) {
   // API, healthz, SW, manifest, rasm — tekshirilmaydi
-  const skipPrefixes = ["/warehouse/api/", "/api/", "/warehouse/sw.js", "/warehouse/manifest.json", "/warehouse/assets/", "/warehouse/uploads/", "/warehouse/leaflet.js", "/warehouse/leaflet.css", "/warehouse/maplibre-gl.js", "/warehouse/maplibre-gl.css", "/warehouse-top-nav.js", "/favicon", "/icon-"];
+  const skipPrefixes = ["/warehouse/api/", "/api/", "/warehouse/sw.js", "/warehouse/manifest.json", "/warehouse/assets/", "/warehouse/leaflet.js", "/warehouse/leaflet.css", "/warehouse/maplibre-gl.js", "/warehouse/maplibre-gl.css", "/warehouse-top-nav.js", "/favicon", "/icon-"];
   
   if (skipPrefixes.some((p) => u.pathname.startsWith(p))) return { allowed: true };
   
@@ -892,7 +918,7 @@ function checkSiteGate(req, res, u) {
     return {
       allowed: true,
       setStaffCookie: shouldSetCookie
-        ? `${STAFF_LINK_COOKIE}=${staffLinkAuth.token}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Strict${isSecureRequest(req) ? "; Secure" : ""}`
+        ? staffSessionCookie(req, staffLinkAuth.token)
         : null,
     };
   }
@@ -916,7 +942,7 @@ function checkSiteGate(req, res, u) {
   // Login qilinmagan bo'lsa, har doim registration sahifasiga yo'naltir
   const destination = "/warehouse-register";
   if (u.pathname !== destination) {
-    const hasStaffToken = Boolean(getStaffLinkTokenFromRequest(req, u).token);
+    const hasStaffToken = Boolean(getStaffLinkTokenFromRequest(req, u).token || parseCookies(req)[STAFF_LINK_COOKIE]);
     const redirectLocation = hasStaffToken ? `${destination}?error=link_revoked` : destination;
     const clearStaffCookie = `${STAFF_LINK_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict${isSecureRequest(req) ? "; Secure" : ""}`;
     res.writeHead(302, {
@@ -1149,7 +1175,7 @@ function checkSiteGate(req, res, u) {
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
     "X-Frame-Options": "SAMEORIGIN",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; script-src-attr 'none'; base-uri 'self'; form-action 'self'",
     "X-Robots-Tag": "noindex, nofollow",
     Pragma: "no-cache",
     Expires: "0",
@@ -1163,15 +1189,13 @@ function hasWarehouseRouteAccess(req, u) {
   if (!requiredPermissions) {
     return true;
   }
-  const accessToken = extractWarehouseAccessToken(req);
+  const accessToken = String(u.searchParams.get("access") || "").trim() || extractWarehouseAccessToken(req);
   if (isGateAuthenticatedByCookie(req)) return true;
-  if (!accessToken) {
-    // Allow opening protected pages directly; actual data access is still enforced by API auth checks.
-    return true;
-  }
+  if (!accessToken) return false;
   const state = loadWarehouse();
   for (const permission of requiredPermissions) {
-    if (authenticateStaffPageToken(state, accessToken, permission)) {
+    const operator = authenticateStaffPageToken(req, state, accessToken, permission);
+    if (operator && operator.isUnlocked) {
       return true;
     }
   }
@@ -1208,7 +1232,7 @@ function staticResponseHeaders(contentType, filePath, etag = null) {
     "Cross-Origin-Resource-Policy": "same-origin",
     "X-Frame-Options": "SAMEORIGIN",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; script-src-attr 'none'; base-uri 'self'; form-action 'self'",
     "X-Robots-Tag": "noindex, nofollow"
   };
   if (etag) headers["ETag"] = etag;
@@ -1344,7 +1368,8 @@ function assertWarehouseAdmin(req, res) {
     });
     return false;
   }
-  if (isGateAuthenticatedByCookie(req)) {
+  const staffAdmin = authenticateRequestStaff(req, extractWarehouseAccessToken(req));
+  if (isGateAuthenticatedByCookie(req) || (staffAdmin?.role === "admin" && staffAdmin.isUnlocked)) {
     return true;
   }
   const auth = parseBasicAuthHeader(extractWarehouseBasicAuthHeader(req));
@@ -1400,29 +1425,28 @@ function authenticateWarehouseOperator(req, options = {}) {
   if (accessToken) {
     if (permissions.length) {
       for (const permission of permissions) {
-        const byToken = authenticateStaffAccessToken(state, accessToken, permission);
+        const byToken = authenticateRequestStaff(req, accessToken, permission);
         if (byToken) {
           // If the account has a PIN, it must be unlocked
           if (byToken.hasPin && !byToken.isUnlocked) {
             continue;
           }
+          if (options.roles?.length && !options.roles.includes(byToken.role)) continue;
           return byToken;
         }
       }
     } else {
-      const byToken = authenticateStaffAccessToken(state, accessToken, null);
+      const byToken = authenticateRequestStaff(req, accessToken, null);
       if (byToken) {
         if (byToken.hasPin && !byToken.isUnlocked) {
           return null; // Token exists but needs PIN
         }
+        if (options.roles?.length && !options.roles.includes(byToken.role)) return null;
         return byToken;
       }
     }
   }
   const auth = parseBasicAuthHeader(extractWarehouseBasicAuthHeader(req));
-  if (!auth) {
-    return null;
-  }
   const allowAdmin = options.allowAdmin !== false;
   const { username: expectedUser, password: expectedPassword } = readConfiguredAdminCredentials(state);
   if (allowAdmin && isGateAuthenticatedByCookie(req) && expectedUser) {
@@ -1433,6 +1457,7 @@ function authenticateWarehouseOperator(req, options = {}) {
       fullName: "Admin",
     };
   }
+  if (!auth) return null;
   if (
     allowAdmin &&
     expectedUser &&
@@ -2122,7 +2147,7 @@ function withSafeRequestHandling(handler) {
   };
 }
 
-const extendedBotHandler = setupExtendedBot();
+const extendedBotHandler = setupExtendedBot({ loadState: loadWarehouse, readJson: readPostJson, authorize: authorizeTelegramWebhook });
 
 const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   const u = new URL(req.url || "/", "http://127.0.0.1");
@@ -2137,6 +2162,8 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   }
 
   if (u.pathname === "/telegram/webhook-extended" && req.method === "POST") {
+    const auth = authorizeTelegramWebhook(req);
+    if (auth !== true) { sendApiJson(res, auth, { error: "Telegram webhook ruxsati yo'q" }, req); return; }
     if (extendedBotHandler) {
       await extendedBotHandler(req, res);
       return;
@@ -2155,7 +2182,22 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         sendApiJson(res, 400, { success: false, error: "JSON formati noto'g'ri" }, req);
         return;
       }
-      const result = executeTransaction(body);
+      // Route legacy callers through the same queue, pricing, ownership, and state store.
+      if (!Array.isArray(body.items) || !body.items.length) throw new Error("Savdo mahsulotlarini kiriting");
+      const result = await withWarehouseWrite(state => {
+        const actor = { kind: "admin", role: "admin", username: readConfiguredAdminCredentials(state).username };
+        const transactions = body.items.map((item, index) => {
+          if (item.productId !== "cheese" || !Number.isFinite(Number(item.kg)) || Number(item.kg) <= 0) throw new Error("Mahsulot yoki kg noto'g'ri");
+          return recordApprovedSale(state, {
+            userId: body.customerId, amountKg: Number(item.kg),
+            priceType: body.priceType || (Number(body.payment?.transfer || 0) > 0 ? "transfer" : "cash"),
+            cashPaidAmount: index === 0 ? Number(body.payment?.cash || 0) : 0,
+            transferPaidAmount: index === 0 ? Number(body.payment?.transfer || 0) : 0,
+          }, { actor, pricing: currentWarehousePricing(state) });
+        });
+        const last = transactions.at(-1);
+        return { success: true, transaction: last.transaction, transactions: transactions.map(r => r.transaction), newDebt: last.debt };
+      });
       sendApiJson(res, 200, result, req);
     } catch (e) {
       sendApiJson(res, 400, { success: false, error: e.message }, req);
@@ -2243,6 +2285,9 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         authorizeBusinessMessage,
         authorizeTelegramWebhook,
         authenticateStaffAccessToken,
+        authenticateRequestStaff,
+        issueStaffSession,
+        recordFailedStaffAuth: () => recordFailedAuth(getClientIp(req)),
         buildDebtReply,
         buildPendingReply,
         createStaffAccessLink,
@@ -2356,7 +2401,8 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   // Admin login or staff access-link PIN verification
   if ((u.pathname === "/warehouse-register" || u.pathname === "/warehouse-login") && req.method === "POST") {
     const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
+    let bytes = 0;
+    for await (const chunk of req) { bytes += chunk.length; if (bytes > 16384) { res.writeHead(413); res.end(); return; } chunks.push(chunk); }
     const body = Buffer.concat(chunks).toString("utf8");
     const params = new URLSearchParams(body);
     const accessToken = String(params.get("access") || "").trim();
@@ -2378,11 +2424,12 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         }
         res.writeHead(302, {
           Location: safeNext,
-          "Set-Cookie": `${STAFF_LINK_COOKIE}=${accessToken}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Strict${isSecureRequest(req) ? "; Secure" : ""}`,
+          "Set-Cookie": staffSessionCookie(req, accessToken),
           "Cache-Control": "no-store",
         });
         res.end();
       } catch (error) {
+        recordFailedAuth(getClientIp(req));
         const query = new URLSearchParams({ error: "pin_invalid", access: accessToken, next: String(params.get("next") || "") });
         redirectTo(res, `/warehouse-register?${query.toString()}`);
       }
@@ -2416,7 +2463,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
 
     res.writeHead(302, {
       Location: "/warehouse/admin",
-      "Set-Cookie": `${SITE_GATE_COOKIE}=${siteGateCookieValue()}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
+      "Set-Cookie": `${SITE_GATE_COOKIE}=${siteGateCookieValue()}; Path=/; Max-Age=${SITE_GATE_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax${isSecureRequest(req) ? "; Secure" : ""}`,
       "Cache-Control": "no-store",
     });
     res.end();
@@ -2714,5 +2761,5 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`Syr AKBEL standalone → http://127.0.0.1:${PORT}/warehouse/admin`);
   console.log(`Seller page → http://127.0.0.1:${PORT}/warehouse/seller`);
   startDebtReminderScheduler();
-  startAutoReports();
+  startAutoReports(loadWarehouse);
 });

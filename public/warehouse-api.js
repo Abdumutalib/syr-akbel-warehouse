@@ -43,7 +43,9 @@ function setMemoryCachedResponse(cacheKey, data) {
 
 function invalidateGetCacheAfterMutation() {
   getRequestMemoryCache.clear();
+  inFlightGetRequests.clear();
 }
+if (typeof window.addEventListener === "function") window.addEventListener("warehouse:operator-profile-changed", invalidateGetCacheAfterMutation);
 
 async function getStaleCachedResponse(cacheKey) {
   const memoryCached = getMemoryCachedResponse(cacheKey);
@@ -73,19 +75,6 @@ window.warehouseApi = {
       ? `/warehouse/api${url.slice('/api'.length)}`
       : url;
     const requestMethod = String(options.method || 'GET').toUpperCase();
-    const cacheKey = requestMethod === 'GET' ? normalizedUrl : '';
-
-    if (cacheKey) {
-      const cached = getMemoryCachedResponse(cacheKey);
-      if (cached) {
-        return cached;
-      }
-      const pending = inFlightGetRequests.get(cacheKey);
-      if (pending) {
-        return pending.then((data) => cloneJsonValue(data));
-      }
-    }
-
     const requestHeaders = new Headers(options.headers || {});
 
     if (authHeaderValue && !requestHeaders.has('Authorization')) {
@@ -109,6 +98,24 @@ window.warehouseApi = {
     if (options.body && typeof options.body === 'string' && !requestHeaders.has('Content-Type')) {
       requestHeaders.set('Content-Type', 'application/json');
     }
+
+    const identity = requestHeaders.get('X-Warehouse-Access') || requestHeaders.get('X-Warehouse-Authorization') || requestHeaders.get('Authorization') || '';
+    let identityKey = identity;
+    let persistentCache = false;
+    if (identity && window.crypto?.subtle && typeof TextEncoder !== 'undefined') {
+      const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(identity));
+      identityKey = Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, '0')).join('');
+      persistentCache = true;
+    }
+    // Cookie-only requests have no readable identity; always authorize them on the server.
+    const cacheKey = requestMethod === 'GET' && identity && !/\/(auth-status|staff|admin-credentials)(?:\/|\?|$)/.test(normalizedUrl) ? JSON.stringify([normalizedUrl, identityKey]) : '';
+    if (cacheKey) {
+      const cached = getMemoryCachedResponse(cacheKey);
+      if (cached) return cached;
+      const pending = inFlightGetRequests.get(cacheKey);
+      if (pending) return pending.then(data => cloneJsonValue(data));
+    }
+    const staleCachedResponse = () => persistentCache ? getStaleCachedResponse(cacheKey) : Promise.resolve(null);
 
     let response;
     let retries = 0;
@@ -144,7 +151,7 @@ window.warehouseApi = {
               await new Promise((resolve) => setTimeout(resolve, 1000 * retries));
               continue;
             }
-            const cached = await getStaleCachedResponse(cacheKey);
+            const cached = await staleCachedResponse();
             if (cached) {
               setMemoryCachedResponse(cacheKey, cached);
               return cloneJsonValue(cached);
@@ -152,7 +159,7 @@ window.warehouseApi = {
           }
 
           if (requestMethod === 'GET' && !response.ok && response.status >= 500 && response.status <= 599) {
-            const cached = await getStaleCachedResponse(cacheKey);
+            const cached = await staleCachedResponse();
             if (cached) {
               setMemoryCachedResponse(cacheKey, cached);
               return cloneJsonValue(cached);
@@ -161,7 +168,7 @@ window.warehouseApi = {
           break;
         } catch (err) {
           if (requestMethod === 'GET') {
-            const cached = await getStaleCachedResponse(cacheKey);
+            const cached = await staleCachedResponse();
             if (cached) {
               setMemoryCachedResponse(cacheKey, cached);
               return cloneJsonValue(cached);
@@ -186,7 +193,7 @@ window.warehouseApi = {
 
       if (!response.ok) {
         if (requestMethod === 'GET' && response.status >= 500 && response.status <= 599) {
-          const cached = await getStaleCachedResponse(cacheKey);
+          const cached = await staleCachedResponse();
           if (cached) {
             setMemoryCachedResponse(cacheKey, cached);
             return cloneJsonValue(cached);
@@ -197,7 +204,7 @@ window.warehouseApi = {
 
       if (cacheKey) {
         setMemoryCachedResponse(cacheKey, data);
-        if (window.warehouseOfflineQueue?.setCachedGet) {
+        if (persistentCache && window.warehouseOfflineQueue?.setCachedGet) {
           window.warehouseOfflineQueue.setCachedGet(cacheKey, data).catch(() => {});
         }
       } else {
