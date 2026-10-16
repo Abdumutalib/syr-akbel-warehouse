@@ -66,6 +66,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     updateWarehousePricing,
     updateWarehouseOrder,
     deleteWarehouseOrder,
+    extractWarehouseAccessToken,
     upsertCustomer,
     verifyStaffPin,
     authenticateStaffAccessToken,
@@ -216,7 +217,9 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   const assertSellerWriteOperator = (body, message) => assertWarehouseOperator(req, res, {
     allowAdmin: true,
     realm: usesTransferFlow(body) ? 'warehouse-accountant' : 'warehouse-seller',
-    permission: usesTransferFlow(body) ? ['transfer', 'write_transfer_sale'] : 'seller',
+    permission: usesTransferFlow(body)
+      ? ['transfer', 'write_transfer_sale']
+      : ['seller', 'write_cash_sale'],
     message,
   });
   if (apiPath === "/api/telegram/webhook" && req.method === "POST") {
@@ -474,7 +477,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   if (apiPath === "/api/warehouse/customers" && req.method === "GET") {
     const operator = assertWarehouseOperator(req, res, {
       realm: "warehouse-seller",
-      permission: "seller",
+      permission: ["seller", "write_cash_sale", "write_transfer_sale"],
       message: "Mijoz qo'shish uchun sotuvchi ruxsati kerak",
     });
     if (!operator) {
@@ -530,7 +533,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: ["customers", "seller"],
+      permission: ["orders", "customers"],
       message: "Zakaz sahifasi uchun ruxsat kerak",
     });
     if (!operator) {
@@ -552,7 +555,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: ["customers", "seller"],
+      permission: "orders",
       message: "Zakazlar sahifasi uchun ruxsat kerak",
     });
     if (!operator) {
@@ -581,7 +584,7 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
     const operator = assertWarehouseOperator(req, res, {
       allowAdmin: true,
       realm: "warehouse-staff",
-      permission: "customers",
+      permission: "orders",
       message: "Zakaz yozish uchun ruxsat kerak",
     });
     if (!operator) {
@@ -863,7 +866,8 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
   }
 
   if (apiPath === "/api/warehouse/auth-status" && req.method === "GET") {
-    const token = (new URL(req.url || "/", "http://x").searchParams.get("access") || "").trim() || (req.headers["x-warehouse-access"] || "").trim();
+    const token = extractWarehouseAccessToken(req)
+      || (new URL(req.url || "/", "http://x").searchParams.get("access") || "").trim();
     if (!token) {
       sendApiJson(res, 401, { error: "Token topilmadi" });
       return true;

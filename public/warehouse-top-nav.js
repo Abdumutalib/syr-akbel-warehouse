@@ -15,55 +15,55 @@
     {
       label: "Admin panel",
       href: "/warehouse/admin",
-      isVisible(profile) { return true; },
+      permissions: ["admin_panel"],
       isActive(pathname) { return pathname === "/warehouse/admin"; },
     },
     {
       label: "Admin naqd",
       href: "/warehouse/admin/cash",
-      isVisible(profile) { return true; },
+      permissions: ["cash"],
       isActive(pathname) { return pathname === "/warehouse/admin/cash"; },
     },
     {
       label: "Admin o'tkazma",
       href: "/warehouse/admin/transfer",
-      isVisible(profile) { return true; },
+      permissions: ["transfer"],
       isActive(pathname) { return pathname === "/warehouse/admin/transfer"; },
     },
     {
       label: "Umumiy hisobot",
       href: "/warehouse/ledger",
-      isVisible(profile) { return true; },
+      permissions: ["cash"],
       isActive(pathname) { return pathname === "/warehouse/ledger"; },
     },
     {
       label: "Sotuvchi",
       href: "/warehouse/seller",
-      isVisible(profile) { return true; },
+      permissions: ["seller"],
       isActive(pathname) { return pathname === "/warehouse/seller"; },
     },
     {
       label: "Mijozlar",
       href: "/warehouse/customers",
-      isVisible(profile) { return true; },
+      permissions: ["customers"],
       isActive(pathname) { return pathname === "/warehouse/customers" || pathname.startsWith("/warehouse/customers/"); },
     },
     {
       label: "Buyurtmalar",
       href: "/warehouse/orders",
-      isVisible(profile) { return true; },
+      permissions: ["orders"],
       isActive(pathname) { return pathname === "/warehouse/orders"; },
     },
     {
       label: "Naqd savdo yozish",
       href: "/warehouse/seller/sale/cash",
-      isVisible(profile) { return true; },
+      permissions: ["write_cash_sale"],
       isActive(pathname) { return pathname === "/warehouse/seller/sale/cash"; },
     },
     {
       label: "O'tkazma savdo yozish",
       href: "/warehouse/seller/sale/transfer",
-      isVisible(profile) { return true; },
+      permissions: ["write_transfer_sale"],
       isActive(pathname) { return pathname === "/warehouse/seller/sale/transfer"; },
     },
   ];
@@ -71,32 +71,6 @@
   let customerDirectoryState = [];
   let customerDirectoryLoaded = false;
   let customerDirectoryLoading = null;
-
-  function readSearchParam(name) {
-    if (typeof window.getWarehouseSearchParam === "function") {
-      return window.getWarehouseSearchParam(name, window.location.search);
-    }
-    const source = String(window.location.search || "");
-    const query = source.charAt(0) === "?" ? source.slice(1) : source;
-    if (!query) {
-      return "";
-    }
-    const parts = query.split("&");
-    for (let index = 0; index < parts.length; index += 1) {
-      const part = parts[index];
-      if (!part) {
-        continue;
-      }
-      const separatorIndex = part.indexOf("=");
-      const rawKey = separatorIndex >= 0 ? part.slice(0, separatorIndex) : part;
-      if (decodeURIComponent(rawKey) !== name) {
-        continue;
-      }
-      const rawValue = separatorIndex >= 0 ? part.slice(separatorIndex + 1) : "";
-      return decodeURIComponent(String(rawValue).replace(/\+/g, " "));
-    }
-    return "";
-  }
 
   function getOperatorProfile() {
     if (typeof window.getWarehouseOperatorProfile === "function") {
@@ -118,11 +92,7 @@
   }
 
   function buildHref(path) {
-    const access = readSearchParam("access");
-    if (!access) {
-      return path;
-    }
-    return `${path}${path.indexOf("?") >= 0 ? "&" : "?"}access=${encodeURIComponent(access)}`;
+    return path;
   }
 
   function buildApiUrl(path) {
@@ -177,14 +147,8 @@
   }
 
   function buildCustomerDirectoryHeaders() {
-    const access = readSearchParam("access") || window.localStorage.getItem("warehouse-access-token") || "";
-    if (access) {
-      return { "X-Warehouse-Access": access };
-    }
     const credentials = readCurrentCredentials();
-    if (!credentials) {
-      return null;
-    }
+    if (!credentials) return {};
     return {
       Authorization: `Basic ${btoa(`${credentials.username}:${credentials.password}`)}`,
       "X-Warehouse-Authorization": `Basic ${btoa(`${credentials.username}:${credentials.password}`)}`,
@@ -232,12 +196,13 @@
     if (customerDirectoryLoading) {
       return customerDirectoryLoading;
     }
-    const headers = buildCustomerDirectoryHeaders();
-    if (!headers) {
+    const profile = getOperatorProfile();
+    if (!hasPermission(profile, "customers")) {
       customerDirectoryLoaded = false;
       customerDirectoryState = [];
       return [];
     }
+    const headers = buildCustomerDirectoryHeaders();
     customerDirectoryLoading = fetch(buildApiUrl(CUSTOMER_DIRECTORY_URL), { headers })
       .then(async (response) => {
         const data = await response.json().catch(() => ({}));
@@ -415,7 +380,7 @@
     list.className = "warehouse-global-nav__list";
 
     for (const item of NAV_ITEMS) {
-      if (typeof item.isVisible === "function" && !item.isVisible(profile)) {
+      if (!hasPermission(profile, item.permissions)) {
         continue;
       }
       const link = document.createElement("a");
@@ -480,6 +445,7 @@
     installWrap.appendChild(installHint);
     tools.appendChild(installWrap);
 
+    const canSearchCustomers = hasPermission(profile, "customers");
     const search = document.createElement("div");
     search.className = "warehouse-global-nav__search";
 
@@ -550,11 +516,14 @@
     search.appendChild(searchLabel);
     search.appendChild(searchRow);
     search.appendChild(datalist);
-    tools.appendChild(search);
 
     row.appendChild(list);
     row.appendChild(tools);
     nav.appendChild(row);
+
+    if (canSearchCustomers) {
+      tools.appendChild(search);
+    }
 
     const hero = shell.querySelector(".hero");
     if (hero) {
@@ -573,7 +542,11 @@
 
   window.addEventListener("warehouse:operator-profile-changed", renderNav);
   window.addEventListener("warehouse:operator-profile-changed", () => {
-    loadCustomerDirectory().then(() => renderNav());
+    loadCustomerDirectory().then(renderNav);
   });
-  loadCustomerDirectory().then(() => renderNav());
+  if (hasPermission(getOperatorProfile(), "customers")) {
+    loadCustomerDirectory().then(renderNav);
+  } else {
+    renderNav();
+  }
 })();

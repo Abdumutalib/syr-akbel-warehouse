@@ -1,13 +1,6 @@
-const CACHE_NAME = 'akbel-cache-v10003';
+const CACHE_NAME = 'akbel-cache-v10004';
 const MAX_CACHE_ITEMS = 120;
 const CORE_ASSETS = [
-  '/warehouse/admin',
-  '/warehouse/customers',
-  '/warehouse/orders',
-  '/warehouse/ledger',
-  '/warehouse/seller',
-  '/warehouse/seller/sale/cash',
-  '/warehouse/seller/sale/transfer',
   '/warehouse/assets/warehouse-api.js?v=20260908-1',
   '/warehouse/assets/warehouse-auth-pin.js',
   '/warehouse/assets/warehouse-offline.js',
@@ -65,6 +58,14 @@ self.addEventListener('fetch', event => {
 
   // API so'rovlarini keshlamaslik — doimo serverdan yangi ma'lumot olish
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/warehouse/api/')) {
+    return;
+  }
+
+  if (req.mode === 'navigate') {
+    event.respondWith(fetch(req).catch(async () => {
+      const cache = await caches.open(CACHE_NAME);
+      return (await cache.match('/__offline__')) || new Response('Oflayn', { status: 503 });
+    }));
     return;
   }
 

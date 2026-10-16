@@ -30,10 +30,8 @@
   const decoder = typeof window.TextDecoder === 'function' ? new window.TextDecoder() : null;
 
   const PERSISTENT_WAREHOUSE_KEYS = [
-    'warehouse-access-token',
     VAULT_KEY,
     LEGACY_VAULT_KEY,
-    OPERATOR_PROFILE_KEY,
   ];
 
   function isWarehouseStorageKey(key) {
@@ -123,6 +121,19 @@
   }
 
   enforceEphemeralWarehouseStorage();
+
+  const initialAccessUrl = new URL(window.location.href);
+  const initialAccessToken = initialAccessUrl.searchParams.get('access') || window.sessionStorage.getItem('warehouse-access-token') || '';
+  window.__warehouseAccessToken = initialAccessToken;
+  if (initialAccessToken) {
+    try {
+      window.sessionStorage.setItem('warehouse-access-token', initialAccessToken);
+    } catch (error) {}
+    initialAccessUrl.searchParams.delete('access');
+    window.history.replaceState(window.history.state, '', `${initialAccessUrl.pathname}${initialAccessUrl.search}${initialAccessUrl.hash}`);
+  }
+  window.localStorage.removeItem(OPERATOR_PROFILE_KEY);
+  window.sessionStorage.removeItem(OPERATOR_PROFILE_KEY);
 
   function encodeUtf8(value) {
     const normalized = String(value || '');

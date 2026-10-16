@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="АКБЕЛ">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <meta name="theme-color" content="#9f6b2f">
-  <script>(function(){var p=new URLSearchParams(location.search),a=p.get('access')||'',l=document.createElement('link');l.rel='manifest';l.href='/warehouse/manifest.json?page=customers'+(a?'&access='+encodeURIComponent(a):'');document.head.appendChild(l);if('serviceWorker' in navigator)navigator.serviceWorker.register('/warehouse/sw.js?v=20260908-1',{scope:'/warehouse/',updateViaCache:'none'});})()</script>
+  <script>(function(){var l=document.createElement('link');l.rel='manifest';l.href='/warehouse/manifest.json?page=customers';document.head.appendChild(l);if('serviceWorker' in navigator)navigator.serviceWorker.register('/warehouse/sw.js?v=20260908-1',{scope:'/warehouse/',updateViaCache:'none'});})()</script>
   <style>
     :root {
       --bg: #f6f0e8;
@@ -176,9 +176,9 @@
         <button id="openAddCustomerModal" class="button-link">+ Yangi mijoz qo'shish</button>
       </div>
       <div id="customersPageShortcuts" class="hero-links" style="margin-top: 14px; width: 100%;">
-        <a class="button-link secondary" id="sellerLink" href="/warehouse/seller">Sotuvchi sahifasi</a>
-        <a class="button-link secondary" id="saleLink" href="/warehouse/sale/cash">Savdo yozish</a>
-        <a class="button-link secondary" id="adminLink" href="/warehouse/admin">Admin sahifasi</a>
+        <a class="button-link secondary hidden" id="sellerLink" href="/warehouse/seller">Sotuvchi sahifasi</a>
+        <a class="button-link secondary hidden" id="saleLink" href="/warehouse/sale/cash">Savdo yozish</a>
+        <a class="button-link secondary hidden" id="adminLink" href="/warehouse/admin">Admin sahifasi</a>
       </div>
     </section>
 
@@ -298,15 +298,12 @@
     const statusEl = document.getElementById('status');
     const customerSearchEl = document.getElementById('customerSearch');
     const customerSearchStatusEl = document.getElementById('customerSearchStatus');
-    let accessToken = (window.getWarehouseSearchParam ? window.getWarehouseSearchParam('access', location.search) : '') || localStorage.getItem('warehouse-access-token') || '';
+    let accessToken = window.__warehouseAccessToken || sessionStorage.getItem('warehouse-access-token') || '';
     let customerCatalogState = {
       cashCustomers: [],
       transferCustomers: [],
       otherCustomers: [],
     };
-    if (accessToken) {
-      localStorage.setItem('warehouse-access-token', accessToken);
-    }
 
     function setStatus(message, isError = false) {
       statusEl.textContent = message || '';
@@ -354,10 +351,12 @@
       const currentProfile = profile || (window.getWarehouseOperatorProfile ? window.getWarehouseOperatorProfile() : null);
       const isAdmin = Boolean(currentProfile && currentProfile.role === 'admin');
       const canSeeSeller = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'seller') : false;
-      const adminLink = document.getElementById('customerCatalogAdminLink');
-      const sellerLink = document.getElementById('customerCatalogSellerLink');
-      if (adminLink) adminLink.classList.toggle('hidden', !isAdmin);
+      const adminLink = document.getElementById('adminLink');
+      const sellerLink = document.getElementById('sellerLink');
+      const saleLink = document.getElementById('saleLink');
+      if (adminLink) adminLink.classList.toggle('hidden', !(isAdmin || (window.warehouseOperatorHasPermission && window.warehouseOperatorHasPermission(currentProfile, 'admin_panel'))));
       if (sellerLink) sellerLink.classList.toggle('hidden', !canSeeSeller);
+      if (saleLink) saleLink.classList.toggle('hidden', !(window.warehouseOperatorHasPermission && window.warehouseOperatorHasPermission(currentProfile, 'write_cash_sale')));
       document.getElementById('customerManagementPanel').classList.toggle('hidden', !canSeeSeller);
       document.getElementById('mainActions').style.display = canSeeSeller ? 'flex' : 'none';
       const statsEl = document.querySelector('.stats');
@@ -607,7 +606,7 @@
       }
     }
     function withAccess(url) {
-      return accessToken ? `${url}${url.includes('?') ? '&' : '?'}access=${encodeURIComponent(accessToken)}` : url;
+      return url;
     }
     function uniqueCustomersFromCatalog(data) {
       const unique = new Map();

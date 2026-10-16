@@ -241,8 +241,8 @@
         <h1 id="pageTitle">To'lovlar sahifasi</h1>
       </div>
       <div class="actions">
-        <a class="button-link secondary" id="pendingLink" href="/warehouse/admin">⬅ Admin panel</a>
-        <a class="button-link" id="switchLink" href="/warehouse/admin/transfer">O'tkazma sahifasi</a>
+        <a class="button-link secondary hidden" id="pendingLink" href="/warehouse/admin">⬅ Admin panel</a>
+        <a class="button-link hidden" id="switchLink" href="/warehouse/admin/transfer">O'tkazma sahifasi</a>
       </div>
     </section>
 
@@ -325,10 +325,7 @@
     const clearPinButtonEl = document.getElementById('clear-pin');
     const showLoginButtonEl = document.getElementById('show-login');
     const authHintEl = document.getElementById('authHint');
-    let accessToken = (window.getWarehouseSearchParam ? window.getWarehouseSearchParam('access', location.search) : '') || localStorage.getItem('warehouse-access-token') || '';
-    if (accessToken) {
-      localStorage.setItem('warehouse-access-token', accessToken);
-    }
+    let accessToken = window.__warehouseAccessToken || sessionStorage.getItem('warehouse-access-token') || '';
 
     const labels = isCash
       ? {
@@ -400,7 +397,7 @@
       const canSeeAdmin = isAdmin || (window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'admin_panel') : false);
       const canSeeSwitch = window.warehouseOperatorHasPermission
         ? window.warehouseOperatorHasPermission(currentProfile, isCash ? 'transfer' : 'cash')
-        : true;
+        : false;
       document.getElementById('pendingLink').classList.toggle('hidden', !canSeeAdmin);
       switchLinkEl.classList.toggle('hidden', !canSeeSwitch);
     }

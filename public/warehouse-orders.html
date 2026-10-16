@@ -244,11 +244,8 @@
     const orderNoteEl = document.getElementById('orderNote');
     const warehouseStockDisplayEl = document.getElementById('warehouseStockDisplay');
     const stockAlertEl = document.getElementById('stockAlert');
-    let accessToken = (window.getWarehouseSearchParam ? window.getWarehouseSearchParam('access', location.search) : '') || localStorage.getItem('warehouse-access-token') || '';
+    let accessToken = window.__warehouseAccessToken || sessionStorage.getItem('warehouse-access-token') || '';
     let orderCustomerDirectoryState = [];
-    if (accessToken) {
-      localStorage.setItem('warehouse-access-token', accessToken);
-    }
 
     function setStatus(message, isError = false) {
       statusEl.textContent = message || '';

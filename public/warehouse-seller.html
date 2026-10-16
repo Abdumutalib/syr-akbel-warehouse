@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="АКБЕЛ">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <meta name="theme-color" content="#9f6b2f">
-  <script>(function(){var p=new URLSearchParams(location.search),a=p.get('access')||'',l=document.createElement('link');l.rel='manifest';l.href='/warehouse/manifest.json?page=seller'+(a?'&access='+encodeURIComponent(a):'');document.head.appendChild(l);if('serviceWorker' in navigator)navigator.serviceWorker.register('/warehouse/sw.js',{scope:'/warehouse/',updateViaCache:'none'});})()</script>
+  <script>(function(){var l=document.createElement('link');l.rel='manifest';l.href='/warehouse/manifest.json?page=seller';document.head.appendChild(l);if('serviceWorker' in navigator)navigator.serviceWorker.register('/warehouse/sw.js',{scope:'/warehouse/',updateViaCache:'none'});})()</script>
   <style>
     :root {
       --bg: #f8f3eb;
@@ -269,9 +269,9 @@
         <h1 id="sellerPageTitle">Sotuvchi sahifasi</h1>
       </div>
       <div id="sellerPageShortcuts" class="hero-links" style="margin-top: 14px;">
-        <a class="button-link secondary" id="saleLink" href="/warehouse/sale/cash">Savdo yozish</a>
-        <a class="button-link secondary" id="customersLink" href="/warehouse/customers">Mijozlar mundarijasi</a>
-        <a class="button-link secondary" id="adminLink" href="/warehouse/admin">Admin sahifasi</a>
+        <a class="button-link secondary hidden" id="saleLink" href="/warehouse/sale/cash">Savdo yozish</a>
+        <a class="button-link secondary hidden" id="customersLink" href="/warehouse/customers">Mijozlar mundarijasi</a>
+        <a class="button-link secondary hidden" id="adminLink" href="/warehouse/admin">Admin sahifasi</a>
       </div>
     </section>
 
@@ -386,8 +386,8 @@
           <h2>Savdo kiritish</h2>
           <p class="muted">Savdo endi иккига бўлинган: naqd savdo va o'tkazma savdo. Kalkulyator ikkala sahifada ham ishlaydi.</p>
           <div class="hero-links">
-            <a class="button-link" id="cashSalePageCardLink" href="/warehouse/seller/sale/cash">Naqd savdoni ochish</a>
-            <a class="button-link secondary" id="transferSalePageCardLink" href="/warehouse/seller/sale/transfer">O'tkazma savdoni ochish</a>
+            <a class="button-link hidden" id="cashSalePageCardLink" href="/warehouse/seller/sale/cash">Naqd savdoni ochish</a>
+            <a class="button-link secondary hidden" id="transferSalePageCardLink" href="/warehouse/seller/sale/transfer">O'tkazma savdoni ochish</a>
           </div>
         </div>
 
@@ -459,10 +459,7 @@
     const paymentCustomerEl = document.getElementById('paymentCustomer');
     const paymentDateEl = document.getElementById('paymentDate');
     const handoffDateEl = document.getElementById('handoffDate');
-    let accessToken = (window.getWarehouseSearchParam ? window.getWarehouseSearchParam('access', location.search) : '') || localStorage.getItem('warehouse-access-token') || '';
-    if (accessToken) {
-      localStorage.setItem('warehouse-access-token', accessToken);
-    }
+    const accessToken = window.__warehouseAccessToken || sessionStorage.getItem('warehouse-access-token') || '';
 
     function setStatus(message, isError = false) {
       statusEl.textContent = message || '';
@@ -528,10 +525,14 @@
       const currentProfile = profile || (window.getWarehouseOperatorProfile ? window.getWarehouseOperatorProfile() : null);
       const isAdmin = Boolean(currentProfile && currentProfile.role === 'admin');
       const isSellerProfile = Boolean(currentProfile && !isAdmin && currentProfile.username);
-      const canSeeCustomers = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'customers') : true;
-      const canSeeCashSale = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'seller') : true;
-      const canSeeTransferSale = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, ['seller', 'transfer']) : true;
-      const canSeeCashReport = window.warehouseOperatorHasPermission ? window.warehouseOperatorHasPermission(currentProfile, 'cash') : true;
+      const hasPermission = (permission) => Boolean(
+        window.warehouseOperatorHasPermission &&
+        window.warehouseOperatorHasPermission(currentProfile, permission)
+      );
+      const canSeeCustomers = hasPermission('customers');
+      const canSeeCashSale = hasPermission('write_cash_sale');
+      const canSeeTransferSale = hasPermission('write_transfer_sale');
+      const canSeeCashReport = hasPermission('cash');
 
       if (sellerPageEyebrowEl) {
         sellerPageEyebrowEl.textContent = isSellerProfile ? 'Sotuvchi sahifasi' : 'Sotuvchi oynasi';
@@ -540,21 +541,27 @@
         sellerPageTitleEl.textContent = 'Sotuvchi sahifasi';
       }
       dailySellerCardEl.classList.toggle('hidden', !isSellerProfile);
-      const adminDashboardLink = document.getElementById('adminDashboardLink');
-      const sellerCustomersLink = document.getElementById('sellerCustomersLink');
+      const sellerShortcut = document.getElementById('saleLink');
+      const customersShortcut = document.getElementById('customersLink');
+      const adminShortcut = document.getElementById('adminLink');
       const cashSalePageLink = document.getElementById('cashSalePageLink');
       const transferSalePageLink = document.getElementById('transferSalePageLink');
       const sellerCashReportLink = document.getElementById('sellerCashReportLink');
-      if (adminDashboardLink) adminDashboardLink.classList.toggle('hidden', !isAdmin);
+      if (sellerShortcut) sellerShortcut.classList.toggle('hidden', !canSeeCashSale);
+      if (customersShortcut) customersShortcut.classList.toggle('hidden', !canSeeCustomers);
+      if (adminShortcut) adminShortcut.classList.toggle('hidden', !hasPermission('admin_panel'));
       const umumiyEl = document.getElementById('umumiyKorsatkichCard');
       const mijozlarEl = document.getElementById('mijozlarQarzlarCard');
       if (umumiyEl) umumiyEl.classList.toggle('hidden', !isAdmin);
       if (mijozlarEl) mijozlarEl.classList.toggle('hidden', !isAdmin);
-      if (sellerCustomersLink) sellerCustomersLink.classList.toggle('hidden', !canSeeCustomers);
       if (cashSalePageLink) cashSalePageLink.classList.toggle('hidden', !canSeeCashSale);
-      document.getElementById('cashSalePageCardLink').classList.toggle('hidden', !canSeeCashSale);
+      const cashSalePageCardLink = document.getElementById('cashSalePageCardLink');
+      const transferSalePageCardLink = document.getElementById('transferSalePageCardLink');
+      if (cashSalePageCardLink) cashSalePageCardLink.classList.toggle('hidden', !canSeeCashSale);
       if (transferSalePageLink) transferSalePageLink.classList.toggle('hidden', !canSeeTransferSale);
-      document.getElementById('transferSalePageCardLink').classList.toggle('hidden', !canSeeTransferSale);
+      if (transferSalePageCardLink) transferSalePageCardLink.classList.toggle('hidden', !canSeeTransferSale);
+      const salesCard = cashSalePageCardLink && cashSalePageCardLink.closest('.card');
+      if (salesCard) salesCard.classList.toggle('hidden', !canSeeCashSale && !canSeeTransferSale);
       if (sellerCashReportLink) sellerCashReportLink.classList.toggle('hidden', !canSeeCashReport);
     }
 
@@ -713,7 +720,7 @@
     }
 
     function withAccess(url) {
-      return accessToken ? `${url}${url.includes('?') ? '&' : '?'}access=${encodeURIComponent(accessToken)}` : url;
+      return url;
     }
 
     function todayValue() {

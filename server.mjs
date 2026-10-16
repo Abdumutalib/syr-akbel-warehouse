@@ -676,7 +676,7 @@ function extractWarehouseAccessToken(req) {
   if (typeof headerValue === "string" && headerValue.trim()) {
     return headerValue.trim();
   }
-  return "";
+  return String(parseCookies(req)[STAFF_LINK_COOKIE] || "").trim();
 }
 
 function baseApiJsonHeaders(req = null) {
@@ -718,17 +718,24 @@ function requestOriginAllowed(req) {
 }
 
 function requiredWarehouseRoutePermissions(pathname) {
-  if (pathname === "/warehouse/seller" || pathname === "/warehouse/seller/sale/cash") {
+  if (pathname === "/warehouse/seller") {
     return ["seller"];
   }
+  if (pathname === "/warehouse/seller/sale/cash") {
+    return ["write_cash_sale"];
+  }
   if (pathname === "/warehouse/seller/sale/transfer") {
-    return ["transfer", "write_transfer_sale"];
+    return ["write_transfer_sale"];
   }
-  if (pathname === "/warehouse/customers" || pathname === "/warehouse/orders") {
-    return ["customers", "seller", "cash", "transfer"];
+  if (pathname === "/warehouse/customers" || /^\/warehouse\/customers\/\d+$/.test(pathname)) return ["customers"];
+  if (pathname === "/warehouse/orders") {
+    return ["orders"];
   }
-  if (/^\/warehouse\/customers\/\d+$/.test(pathname)) {
-    return ["customers", "seller", "cash", "transfer"];
+  if (pathname === "/warehouse/ledger") {
+    return ["cash"];
+  }
+  if (pathname === "/warehouse/admin") {
+    return ["admin_panel"];
   }
   if (pathname === "/warehouse/admin/cash") {
     return ["cash"];
@@ -754,10 +761,24 @@ function parseCookies(req) {
   return result;
 }
 
+function warehouseRedirectSearch(u) {
+  const params = new URLSearchParams(u.search || "");
+  params.delete("access");
+  const search = params.toString();
+  return search ? `?${search}` : "";
+}
+
 const SITE_GATE_COOKIE = "warehouse-site";
 const STAFF_LINK_COOKIE = "warehouse-staff-link";
 const SITE_GATE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // trusted device: 1 yil
 const STAFF_LINK_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // trusted staff device: 1 yil
+
+function isSecureRequest(req) {
+  return Boolean(
+    req?.socket?.encrypted ||
+    String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim().toLocaleLowerCase("en-US") === "https"
+  );
+}
 
 function siteGateCookieValue() {
   const base =
@@ -784,13 +805,28 @@ function getStaffLinkTokenFromRequest(req, u) {
   };
 }
 
+function authenticateStaffPageToken(state, token, permission) {
+  const operator = authenticateStaffAccessToken(state, token, permission);
+  if (!operator) return null;
+  if (operator.role === "admin") return operator;
+
+  const account = (Array.isArray(state.staffAccounts) ? state.staffAccounts : []).find((entry) =>
+    (Array.isArray(entry.accessLinks) ? entry.accessLinks : []).some((link) => link.token === token && !link.revokedAt)
+  );
+  const link = (Array.isArray(account?.accessLinks) ? account.accessLinks : []).find((entry) => entry.token === token && !entry.revokedAt);
+  const permissions = Array.isArray(operator.permissions) ? operator.permissions : [];
+  if (!permissions.includes(permission)) return null;
+  if (link && link.permission !== "all" && link.permission !== permission) return null;
+  return operator;
+}
+
 function routePermissionsForStaffLink(pathname) {
   const direct = requiredWarehouseRoutePermissions(pathname);
   if (Array.isArray(direct) && direct.length) {
     return direct;
   }
   if (pathname === "/warehouse/seller/sale") {
-    return ["seller"];
+    return ["write_cash_sale"];
   }
   return null;
 }
@@ -806,7 +842,7 @@ function authenticateStaffLinkForRoute(req, u) {
   }
   const state = loadWarehouse();
   for (const permission of routePermissions) {
-    const operator = authenticateStaffAccessToken(state, tokenInfo.token, permission);
+    const operator = authenticateStaffPageToken(state, tokenInfo.token, permission);
     if (!operator) {
       continue;
     }
@@ -856,7 +892,7 @@ function checkSiteGate(req, res, u) {
     return {
       allowed: true,
       setStaffCookie: shouldSetCookie
-        ? `${STAFF_LINK_COOKIE}=${staffLinkAuth.token}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`
+        ? `${STAFF_LINK_COOKIE}=${staffLinkAuth.token}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Strict${isSecureRequest(req) ? "; Secure" : ""}`
         : null,
     };
   }
@@ -867,7 +903,7 @@ function checkSiteGate(req, res, u) {
       redirectParams.set("access", staffLinkAuth.token);
     }
     redirectParams.set("next", `${u.pathname}${u.search}`);
-    const clearStaffCookie = `${STAFF_LINK_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`;
+    const clearStaffCookie = `${STAFF_LINK_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict${isSecureRequest(req) ? "; Secure" : ""}`;
     res.writeHead(302, {
       Location: `${destination}?${redirectParams.toString()}`,
       "Cache-Control": "no-store",
@@ -882,7 +918,7 @@ function checkSiteGate(req, res, u) {
   if (u.pathname !== destination) {
     const hasStaffToken = Boolean(getStaffLinkTokenFromRequest(req, u).token);
     const redirectLocation = hasStaffToken ? `${destination}?error=link_revoked` : destination;
-    const clearStaffCookie = `${STAFF_LINK_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`;
+    const clearStaffCookie = `${STAFF_LINK_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict${isSecureRequest(req) ? "; Secure" : ""}`;
     res.writeHead(302, {
       Location: redirectLocation,
       "Cache-Control": "no-store",
@@ -1127,14 +1163,15 @@ function hasWarehouseRouteAccess(req, u) {
   if (!requiredPermissions) {
     return true;
   }
-  const accessToken = (u.searchParams.get("access") || extractWarehouseAccessToken(req) || "").trim();
+  const accessToken = extractWarehouseAccessToken(req);
+  if (isGateAuthenticatedByCookie(req)) return true;
   if (!accessToken) {
     // Allow opening protected pages directly; actual data access is still enforced by API auth checks.
     return true;
   }
   const state = loadWarehouse();
   for (const permission of requiredPermissions) {
-    if (authenticateStaffAccessToken(state, accessToken, permission)) {
+    if (authenticateStaffPageToken(state, accessToken, permission)) {
       return true;
     }
   }
@@ -1158,8 +1195,7 @@ function staticResponseHeaders(contentType, filePath, etag = null) {
     // Frontend code must refresh immediately after a deployment.
     cacheControl = "no-store, no-cache, must-revalidate, max-age=0";
   } else if (isHtml) {
-    // HTML — always revalidate (ETag), but can serve from cache if unchanged
-    cacheControl = "no-cache";
+    cacheControl = "private, no-store";
   } else {
     cacheControl = "no-store";
   }
@@ -1168,7 +1204,7 @@ function staticResponseHeaders(contentType, filePath, etag = null) {
     "Cache-Control": cacheControl,
     "Vary": "Accept-Encoding",
     "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Referrer-Policy": isHtml ? "no-referrer" : "strict-origin-when-cross-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
     "X-Frame-Options": "SAMEORIGIN",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
@@ -2217,6 +2253,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         clearCustomerHistory,
         deleteCustomer,
         deleteStaffAccount,
+        extractWarehouseAccessToken,
         extractTelegramMessage,
         isTelegramAdmin: isConfiguredTelegramAdmin,
         getCustomerDetail,
@@ -2329,10 +2366,19 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         verifyStaffPin(loadWarehouse(), accessToken, pin);
         await saveWarehouse(loadWarehouse());
         const next = String(params.get("next") || "/warehouse/seller").trim();
-        const safeNext = next.startsWith("/warehouse/") ? next : "/warehouse/seller";
+        let safeNext = "/warehouse/seller";
+        try {
+          const parsedNext = new URL(next, "http://warehouse.local");
+          if (parsedNext.origin === "http://warehouse.local" && parsedNext.pathname.startsWith("/warehouse/") && !parsedNext.pathname.startsWith("//")) {
+            parsedNext.searchParams.delete("access");
+            safeNext = `${parsedNext.pathname}${parsedNext.search}${parsedNext.hash}`;
+          }
+        } catch {
+          safeNext = "/warehouse/seller";
+        }
         res.writeHead(302, {
           Location: safeNext,
-          "Set-Cookie": `${STAFF_LINK_COOKIE}=${accessToken}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax`,
+          "Set-Cookie": `${STAFF_LINK_COOKIE}=${accessToken}; Path=/; Max-Age=${STAFF_LINK_COOKIE_MAX_AGE}; HttpOnly; SameSite=Strict${isSecureRequest(req) ? "; Secure" : ""}`,
           "Cache-Control": "no-store",
         });
         res.end();
@@ -2511,11 +2557,11 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     "/public/warehouse-customers.html": "/warehouse/customers",
   };
   if (legacyWarehouseStaticRoutes[u.pathname] && req.method === "GET") {
-    redirectTo(res, `${legacyWarehouseStaticRoutes[u.pathname]}${u.search}`);
+    redirectTo(res, `${legacyWarehouseStaticRoutes[u.pathname]}${warehouseRedirectSearch(u)}`);
     return;
   }
   if (u.pathname === "/public/warehouse-customer.html" && req.method === "GET") {
-    redirectTo(res, `/warehouse/customers${u.search}`);
+    redirectTo(res, `/warehouse/customers${warehouseRedirectSearch(u)}`);
     return;
   }
   if (u.pathname === "/public/warehouse-auth-pin.js" && req.method === "GET") {
@@ -2528,53 +2574,53 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   }
 
   if (u.pathname === "/admin" && req.method === "GET") {
-    redirectTo(res, `/warehouse/admin${u.search}`);
+    redirectTo(res, `/warehouse/admin${warehouseRedirectSearch(u)}`);
     return;
   }
   if (u.pathname === "/seller" && req.method === "GET") {
-    redirectTo(res, `/warehouse/seller${u.search}`);
+    redirectTo(res, `/warehouse/seller${warehouseRedirectSearch(u)}`);
     return;
   }
   if (u.pathname === "/seller/sale" && req.method === "GET") {
-    redirectTo(res, `/warehouse/seller/sale/cash${u.search}`);
+    redirectTo(res, `/warehouse/seller/sale/cash${warehouseRedirectSearch(u)}`);
     return;
   }
   if (u.pathname === "/seller/sale/cash" && req.method === "GET") {
-    redirectTo(res, `/warehouse/seller/sale/cash${u.search}`);
+    redirectTo(res, `/warehouse/seller/sale/cash${warehouseRedirectSearch(u)}`);
     return;
   }
   if (u.pathname === "/seller/sale/transfer" && req.method === "GET") {
-    redirectTo(res, `/warehouse/seller/sale/transfer${u.search}`);
+    redirectTo(res, `/warehouse/seller/sale/transfer${warehouseRedirectSearch(u)}`);
     return;
   }
   if (u.pathname === "/customers" && req.method === "GET") {
-    redirectTo(res, `/warehouse/customers${u.search}`);
+    redirectTo(res, `/warehouse/customers${warehouseRedirectSearch(u)}`);
     return;
   }
   if (u.pathname === "/orders" && req.method === "GET") {
-    redirectTo(res, `/warehouse/orders${u.search}`);
+    redirectTo(res, `/warehouse/orders${warehouseRedirectSearch(u)}`);
     return;
   }
   if (u.pathname === "/ledger" && req.method === "GET") {
-    redirectTo(res, `/warehouse/ledger${u.search}`);
+    redirectTo(res, `/warehouse/ledger${warehouseRedirectSearch(u)}`);
     return;
   }
   if (/^\/customers\/\d+$/.test(u.pathname) && req.method === "GET") {
     const id = u.pathname.split("/").pop();
-    redirectTo(res, `/warehouse/customers/${id}${u.search}`);
+    redirectTo(res, `/warehouse/customers/${id}${warehouseRedirectSearch(u)}`);
     return;
   }
   if (/^\/customer\/\d+$/.test(u.pathname) && req.method === "GET") {
     const id = u.pathname.split("/").pop();
-    redirectTo(res, `/warehouse/customer/${id}${u.search}`);
+    redirectTo(res, `/warehouse/customer/${id}${warehouseRedirectSearch(u)}`);
     return;
   }
   if (u.pathname === "/admin/cash" && req.method === "GET") {
-    redirectTo(res, `/warehouse/admin/cash${u.search}`);
+    redirectTo(res, `/warehouse/admin/cash${warehouseRedirectSearch(u)}`);
     return;
   }
   if (u.pathname === "/admin/transfer" && req.method === "GET") {
-    redirectTo(res, `/warehouse/admin/transfer${u.search}`);
+    redirectTo(res, `/warehouse/admin/transfer${warehouseRedirectSearch(u)}`);
     return;
   }
 
@@ -2592,7 +2638,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
   if (u.pathname === "/warehouse/seller/sale" && req.method === "GET") {
-    redirectTo(res, `/warehouse/seller/sale/cash${u.search}`);
+    redirectTo(res, `/warehouse/seller/sale/cash${warehouseRedirectSearch(u)}`);
     return;
   }
   if ((u.pathname === "/warehouse/seller/sale/cash" || u.pathname === "/warehouse/seller/sale/transfer") && req.method === "GET") {
@@ -2613,7 +2659,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
   }
   if (/^\/warehouse\/customer\/\d+$/.test(u.pathname) && req.method === "GET") {
     const id = u.pathname.split("/").pop();
-    redirectTo(res, `/warehouse/customers/${id}${u.search}`);
+    redirectTo(res, `/warehouse/customers/${id}${warehouseRedirectSearch(u)}`);
     return;
   }
   if (/^\/warehouse\/customers\/\d+$/.test(u.pathname) && req.method === "GET") {
@@ -2670,4 +2716,3 @@ server.listen(PORT, "0.0.0.0", () => {
   startDebtReminderScheduler();
   startAutoReports();
 });
-

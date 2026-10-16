@@ -928,7 +928,10 @@
           <div>Lavozim: ${window.escapeHtml(roleLabel)}</div>
           <div style="margin-top: 6px;">Ko'ra oladigan sahifalar: ${window.escapeHtml(permissionSummary(effectivePermissions))}</div>
           <div class="tx-actions">
-            <button data-create-link="${window.escapeHtml(entry.id)}" class="secondary">Universal kirish linkini yaratish</button>
+            <select data-link-permission aria-label="Kirish havolasi uchun ruxsat" ${effectivePermissions.length ? "" : "disabled"}>
+              ${effectivePermissions.map((permission) => `<option value="${window.escapeHtml(permission)}">${window.escapeHtml(STAFF_PERMISSION_LABELS[permission] || permission)}</option>`).join("")}
+            </select>
+            <button data-create-link="${window.escapeHtml(entry.id)}" class="secondary" ${effectivePermissions.length ? "" : "disabled"}>Tanlangan sahifa uchun link yaratish</button>
           </div>
           <div class="link-list">
             ${(entry.accessLinks || []).map((link) => `
@@ -1374,12 +1377,16 @@
       if (createLinkButton) {
         try {
           const staffId = createLinkButton.getAttribute("data-create-link");
+          const permission = createLinkButton.closest("[data-staff-id]")?.querySelector("[data-link-permission]")?.value;
+          if (!permission) {
+            throw new Error("Avval link uchun sahifani tanlang.");
+          }
           const data = await apiFetch(`/api/warehouse/staff/${staffId}/access-links`, {
             method: "POST",
-            body: JSON.stringify({ permission: "all" }),
+            body: JSON.stringify({ permission }),
           });
           renderStaff(data.allStaff || []);
-          setStatus("Xodim uchun universal kirish linki yaratildi.");
+          setStatus("Tanlangan sahifa uchun cheklangan kirish linki yaratildi.");
         } catch (error) {
           setStatus(error.message, true);
         }

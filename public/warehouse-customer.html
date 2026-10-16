@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="АКБЕЛ Mijoz">
   <link rel="apple-touch-icon" href="/icon-192.png">
   <meta name="theme-color" content="#9f6b2f">
-  <script>(function(){var p=new URLSearchParams(location.search),a=p.get('access')||'',l=document.createElement('link');l.rel='manifest';l.href='/warehouse/manifest.json?page=customer'+(a?'&access='+encodeURIComponent(a):'');document.head.appendChild(l);if('serviceWorker' in navigator)navigator.serviceWorker.register('/warehouse/sw.js?v=20260908-1',{scope:'/warehouse/',updateViaCache:'none'});})()</script>
+  <script>(function(){var l=document.createElement('link');l.rel='manifest';l.href='/warehouse/manifest.json?page=customer';document.head.appendChild(l);if('serviceWorker' in navigator)navigator.serviceWorker.register('/warehouse/sw.js?v=20260908-1',{scope:'/warehouse/',updateViaCache:'none'});})()</script>
   <style>
     :root {
       --bg: #f5efe7; --panel: #fffdf9; --ink: #17130f; --muted: #6f6559; --accent: #224847; --line: #e2d6c9; --ok: #24613b; --error: #9f1239; --credit: #1d4ed8;
@@ -194,8 +194,8 @@
         <h1 id="customerTitle">Mijoz ma'lumotlari</h1>
       </div>
       <div class="links">
-        <a class="button-link secondary" id="customerCatalogLink" href="/warehouse/customers">Mundarijaga qaytish</a>
-        <a class="button-link secondary" id="customerSellerLink" href="/warehouse/seller">Sotuvchi sahifasi</a>
+        <a class="button-link secondary hidden" id="customerCatalogLink" href="/warehouse/customers">Mundarijaga qaytish</a>
+        <a class="button-link secondary hidden" id="customerSellerLink" href="/warehouse/seller">Sotuvchi sahifasi</a>
       </div>
     </section>
 
@@ -344,14 +344,11 @@
     const historyPhotoNextEl = document.getElementById('historyPhotoNext');
     const historyPhotoCloseEl = document.getElementById('historyPhotoClose');
     const customerId = window.getWarehouseLastPathSegment ? window.getWarehouseLastPathSegment(location.pathname) : location.pathname.split('/').filter(Boolean).pop();
-    let accessToken = (window.getWarehouseSearchParam ? window.getWarehouseSearchParam('access', location.search) : '') || localStorage.getItem('warehouse-access-token') || '';
+    let accessToken = window.__warehouseAccessToken || sessionStorage.getItem('warehouse-access-token') || '';
     let currentOperatorProfile = null;
     let historyState = [];
     let currentModalPhotos = [];
     let currentModalIndex = 0;
-    if (accessToken) {
-      localStorage.setItem('warehouse-access-token', accessToken);
-    }
 
     function setStatus(message, isError = false) {
       statusEl.textContent = message || '';

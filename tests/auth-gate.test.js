@@ -201,7 +201,15 @@ describe("warehouse auth gate", () => {
 
     assert.equal(success.status, 302);
     assert.equal(success.headers.get("location"), "/warehouse/admin");
-    assert.match(success.headers.get("set-cookie") || "", /warehouse-site=/);
+    const siteCookie = success.headers.get("set-cookie") || "";
+    assert.match(siteCookie, /warehouse-site=/);
+
+    const adminPage = await fetch(`http://127.0.0.1:${server.port}/warehouse/admin`, {
+      redirect: "manual",
+      headers: { Cookie: siteCookie.split(";")[0] },
+    });
+    assert.equal(adminPage.status, 200);
+    assert.match(await adminPage.text(), /Admin/);
 
     const failureBody = new URLSearchParams({ username: "admin1" });
     const failure = await fetch(`http://127.0.0.1:${server.port}/warehouse-register`, {
@@ -326,9 +334,9 @@ describe("warehouse auth gate", () => {
           password: "secret1",
           fullName: "Transfer One",
           role: "seller",
-          permissions: ["seller", "transfer"],
+          permissions: ["seller", "write_transfer_sale"],
         });
-        const link = createStaffAccessLink(state, account.id, "transfer");
+        const link = createStaffAccessLink(state, account.id, "write_transfer_sale");
         token = link.token;
       },
     });
@@ -608,6 +616,94 @@ describe("warehouse auth gate", () => {
     assert.match(staleCookieOpen.headers.get("set-cookie") || "", /warehouse-staff-link=; Path=\/; Max-Age=0/);
     assert.equal(server.getStderr(), "");
   });
+
+  test("scopes staff links to their assigned page and keeps the session token out of referers", async () => {
+    let token = "";
+    const server = await startServer({
+      seedState(state) {
+        const account = createStaffAccount(state, {
+          username: "seller-scope",
+          password: "secret1",
+          fullName: "Seller Scope",
+          role: "seller",
+          permissions: ["seller"],
+        });
+        token = createStaffAccessLink(state, account.id, "seller").token;
+      },
+    });
+
+    const pageResponse = await fetch(`http://127.0.0.1:${server.port}/warehouse/seller?access=${encodeURIComponent(token)}`, {
+      redirect: "manual",
+      headers: { "X-Forwarded-Proto": "https" },
+    });
+    const setCookie = pageResponse.headers.get("set-cookie") || "";
+    assert.equal(pageResponse.status, 200);
+    assert.match(setCookie, /HttpOnly/);
+    assert.match(setCookie, /SameSite=Strict/);
+    assert.match(setCookie, /Secure/);
+    assert.match(setCookie, /Max-Age=31536000/);
+    assert.equal(pageResponse.headers.get("referrer-policy"), "no-referrer");
+    assert.match(pageResponse.headers.get("cache-control") || "", /no-store/);
+
+    const cookie = setCookie.split(";")[0];
+    const forbiddenPage = await fetch(`http://127.0.0.1:${server.port}/warehouse/customers`, {
+      redirect: "manual",
+      headers: { Cookie: cookie },
+    });
+    assert.equal(forbiddenPage.status, 302);
+    assert.match(forbiddenPage.headers.get("location") || "", /error=link_revoked/);
+
+    const cookieAuthStatus = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/auth-status`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(cookieAuthStatus.status, 200);
+    assert.equal((await cookieAuthStatus.json()).username, "seller-scope");
+    assert.equal(server.getStderr(), "");
+  });
+
+  test("cash-sale-only links cannot open the admin cash report", async () => {
+    let token = "";
+    const server = await startServer({
+      seedState(state) {
+        const account = createStaffAccount(state, {
+          username: "cash-sale-only",
+          password: "secret1",
+          fullName: "Cash Sale Only",
+          role: "seller",
+          permissions: ["write_cash_sale"],
+        });
+        token = createStaffAccessLink(state, account.id, "write_cash_sale").token;
+      },
+    });
+
+    const salePage = await fetch(
+      `http://127.0.0.1:${server.port}/warehouse/seller/sale/cash?access=${encodeURIComponent(token)}`,
+      { redirect: "manual" },
+    );
+    assert.equal(salePage.status, 200);
+    const cookie = (salePage.headers.get("set-cookie") || "").split(";")[0];
+    assert.match(cookie, /^warehouse-staff-link=/);
+
+    const saleCustomers = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/customers`, {
+      headers: { "X-Warehouse-Access": token },
+    });
+    assert.equal(saleCustomers.status, 200);
+
+    const reportPage = await fetch(`http://127.0.0.1:${server.port}/warehouse/admin/cash`, {
+      redirect: "manual",
+      headers: { Cookie: cookie },
+    });
+    assert.equal(reportPage.status, 302);
+    assert.match(reportPage.headers.get("location") || "", /error=link_revoked/);
+
+    const reportApi = await fetch(
+      `http://127.0.0.1:${server.port}/warehouse/api/warehouse/approved?paymentType=cash`,
+      { headers: { "X-Warehouse-Access": token } },
+    );
+    assert.equal(reportApi.status, 401);
+    assert.equal(server.getStderr(), "");
+  });
+
   test("blocks route access until a staff PIN is verified", async () => {
     let token = "";
     const server = await startServer({
@@ -726,13 +822,59 @@ describe("warehouse auth gate", () => {
     });
 
     assert.equal(pinLogin.status, 302);
-    assert.equal(pinLogin.headers.get("location"), "/warehouse/seller?access=" + encodeURIComponent(token));
+    assert.equal(pinLogin.headers.get("location"), "/warehouse/seller");
     assert.match(pinLogin.headers.get("set-cookie") || "", /warehouse-staff-link=/);
 
     const sellerPage = await fetch(`http://127.0.0.1:${server.port}${pinLogin.headers.get("location")}`, {
       redirect: "manual",
+      headers: { Cookie: (pinLogin.headers.get("set-cookie") || "").split(";")[0] },
     });
     assert.equal(sellerPage.status, 200);
+    assert.equal(server.getStderr(), "");
+  });
+
+  test("admin PIN link can navigate to other admin pages", async () => {
+    let token = "";
+    const server = await startServer({
+      seedState(state) {
+        const account = createStaffAccount(state, {
+          username: "pin-admin",
+          password: "secret1",
+          fullName: "PIN Admin",
+          role: "admin",
+          permissions: ["admin_panel"],
+          pin: "1234",
+        });
+        token = createStaffAccessLink(state, account.id, "admin_panel").token;
+      },
+    });
+
+    const entry = await fetch(`http://127.0.0.1:${server.port}/warehouse/admin?access=${encodeURIComponent(token)}`, {
+      redirect: "manual",
+    });
+    const entryUrl = new URL(`http://127.0.0.1:${server.port}${entry.headers.get("location")}`);
+    assert.equal(entry.status, 302);
+    assert.equal(entryUrl.searchParams.get("error"), "pin_required");
+
+    const pinLogin = await fetch(`http://127.0.0.1:${server.port}/warehouse-register`, {
+      method: "POST",
+      redirect: "manual",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        access: token,
+        pin: "1234",
+        next: "/warehouse/admin?access=" + encodeURIComponent(token),
+      }),
+    });
+    assert.equal(pinLogin.status, 302);
+    assert.equal(pinLogin.headers.get("location"), "/warehouse/admin");
+
+    const adminCashPage = await fetch(`http://127.0.0.1:${server.port}/warehouse/admin/cash`, {
+      redirect: "manual",
+      headers: { Cookie: (pinLogin.headers.get("set-cookie") || "").split(";")[0] },
+    });
+    assert.equal(adminCashPage.status, 200);
+    assert.match(await adminCashPage.text(), /Naqd/);
     assert.equal(server.getStderr(), "");
   });
 
@@ -762,7 +904,7 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 
-  test("opens PIN-protected transfer sale links for sellers with transfer permission", async () => {
+  test("opens PIN-protected transfer sale links for sellers with transfer-sale permission", async () => {
     let token = "";
     const server = await startServer({
       seedState(state) {
@@ -771,10 +913,10 @@ describe("warehouse auth gate", () => {
           password: "secret1",
           fullName: "Transfer PIN Seller",
           role: "seller",
-          permissions: ["seller", "transfer"],
+          permissions: ["seller", "write_transfer_sale"],
           pin: "1234",
         });
-        token = createStaffAccessLink(state, account.id, "transfer").token;
+        token = createStaffAccessLink(state, account.id, "write_transfer_sale").token;
       },
     });
 
@@ -799,10 +941,11 @@ describe("warehouse auth gate", () => {
       }),
     });
     assert.equal(pinLogin.status, 302);
-    assert.equal(pinLogin.headers.get("location"), `/warehouse/seller/sale/transfer?access=${token}`);
+    assert.equal(pinLogin.headers.get("location"), "/warehouse/seller/sale/transfer");
 
     const transferPage = await fetch(`http://127.0.0.1:${server.port}${pinLogin.headers.get("location")}`, {
       redirect: "manual",
+      headers: { Cookie: (pinLogin.headers.get("set-cookie") || "").split(";")[0] },
     });
     assert.equal(transferPage.status, 200);
     assert.match(await transferPage.text(), /Перечисление/);
@@ -823,7 +966,7 @@ describe("warehouse auth gate", () => {
           role: "seller",
           permissions: ["seller", "write_transfer_sale"],
         });
-        token = createStaffAccessLink(state, account.id, "transfer").token;
+        token = createStaffAccessLink(state, account.id, "write_transfer_sale").token;
       },
     });
 
