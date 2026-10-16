@@ -224,6 +224,46 @@ describe("warehouse auth gate", () => {
     assert.equal(server.getStderr(), "");
   });
 
+  test("cash sale customer response returns the authenticated operator profile", async () => {
+    const server = await startServer({
+      seedState(state) {
+        createStaffAccount(state, {
+          username: "sale-seller",
+          password: "sellerpass1",
+          fullName: "Sale Seller",
+          role: "seller",
+          permissions: ["write_cash_sale"],
+        });
+      },
+    });
+
+    async function fetchCustomerProfile(username, password) {
+      const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+      const response = await fetch(`http://127.0.0.1:${server.port}/warehouse/api/warehouse/customers`, {
+        headers: {
+          Authorization: authorization,
+          "X-Warehouse-Authorization": authorization,
+        },
+      });
+      assert.equal(response.status, 200);
+      return (await response.json()).operator;
+    }
+
+    assert.deepEqual(await fetchCustomerProfile("admin1", "adminpass1"), {
+      role: "admin",
+      username: "admin1",
+      fullName: "Admin",
+      permissions: [],
+    });
+    assert.deepEqual(await fetchCustomerProfile("sale-seller", "sellerpass1"), {
+      role: "seller",
+      username: "sale-seller",
+      fullName: "Sale Seller",
+      permissions: ["write_cash_sale"],
+    });
+    assert.equal(server.getStderr(), "");
+  });
+
   test("allows same-host browser origin even when allowed origin is configured for another domain", async () => {
     const server = await startServer({
       allowedOrigin: "https://akbelim.com",

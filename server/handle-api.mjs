@@ -498,6 +498,12 @@ export async function handleWarehouseApiRoute(req, res, u, apiPath, deps) {
       summary: summarizeCustomers(customers),
       stockKg,
       pricing,
+      operator: {
+        role: operator.role,
+        username: operator.username,
+        fullName: operator.fullName,
+        permissions: Array.isArray(operator.permissions) ? operator.permissions : [],
+      },
     });
     return true;
   }
