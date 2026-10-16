@@ -1041,6 +1041,16 @@
     async function loadPending() {
       setStatus("Kutilayotgan yozuvlar yuklanmoqda...");
       const data = await apiFetch("/api/warehouse/pending");
+      const credentials = pinAuth.getAuthCredentials ? pinAuth.getAuthCredentials() : null;
+      if (window.setWarehouseOperatorProfile) {
+        window.setWarehouseOperatorProfile({
+          kind: "admin",
+          role: "admin",
+          username: credentials?.username || usernameEl.value.trim(),
+          fullName: "Admin",
+          permissions: [],
+        });
+      }
       pendingCountEl.textContent = String(data.pending.length);
       stockValueEl.textContent = String(data.stockKg);
       renderPricing(data.pricing || {});
