@@ -91,6 +91,15 @@
 <script>
   let refreshTimer = null;
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   async function fetchDashboardData() {
     try {
       const [todayRes, trendRes, debtorsRes, stockRes] = await Promise.all([
@@ -124,7 +133,7 @@
         debtorList.innerHTML = '<li style="color:#94a3b8">Qarzdor yo\'q</li>';
       } else {
         debtorList.innerHTML = debtors
-          .map(d => `<li><span>${d.name}</span><span class="badge">${Number(d.debt).toLocaleString('uz-UZ')} so'm</span></li>`)
+          .map(d => `<li><span>${escapeHtml(d.name)}</span><span class="badge">${Number(d.debt).toLocaleString('uz-UZ')} so'm</span></li>`)
           .join('');
       }
 
@@ -161,7 +170,7 @@
       `<circle cx="${toX(i)}" cy="${toY(d.total_sales)}" r="5" fill="#10b981" stroke="white" stroke-width="2"/>`
     ).join('');
     const labels = data.map((d, i) =>
-      `<text x="${toX(i)}" y="${H + 14}" text-anchor="middle" font-size="11" fill="#64748b">${d.date ? d.date.slice(5) : ''}</text>`
+      `<text x="${toX(i)}" y="${H + 14}" text-anchor="middle" font-size="11" fill="#64748b">${escapeHtml(d.date ? d.date.slice(5) : '')}</text>`
     ).join('');
 
     svg.setAttribute('viewBox', `0 0 ${W} ${H + 20}`);
