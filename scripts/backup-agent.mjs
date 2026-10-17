@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { pullBackup, restoreBackup, atomicWrite, unseal, validateSnapshot, safeHash } from '../lib/disaster-recovery.mjs';
+import { acquireBackupProcessLock } from '../lib/backup-process-lock.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const directory = path.resolve(process.env.AKBEL_BACKUP_DIRECTORY || '');
@@ -20,9 +21,7 @@ if (restoreIndex !== -1) {
 }
 if (!process.env.AKBEL_BACKUP_USERNAME || !process.env.AKBEL_BACKUP_PASSWORD) throw new Error('Admin credentials are required; use start-local-backup.ps1');
 await fs.mkdir(directory, { recursive: true, mode: 0o700 });
-const lockPath = path.join(directory, 'agent.lock');
-const lock = await fs.open(lockPath, 'wx').catch(() => { throw new Error('Another backup agent may be running. Check agent.lock before restarting.'); });
-await lock.writeFile(String(process.pid));
+const releaseLock = await acquireBackupProcessLock(directory);
 let stopping = false;
 let standby = null;
 let activeRevision = '';
@@ -97,6 +96,5 @@ try {
   } while (!stopping);
 } finally {
   standby?.kill();
-  await lock.close();
-  await fs.rm(lockPath, { force: true });
+  await releaseLock();
 }

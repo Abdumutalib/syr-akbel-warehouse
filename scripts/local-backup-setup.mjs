@@ -13,7 +13,7 @@ const settingsPath = path.join(directory, 'settings.dpapi');
 let agent;
 function powershell(code, input = '') {
   return new Promise((resolve, reject) => {
-    const loadSecurity = "Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop; ";
+    const loadSecurity = "[Console]::InputEncoding=[System.Text.UTF8Encoding]::new($false); [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop; ";
     const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', loadSecurity + code], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     const output = []; let size = 0;
     child.stdout.on('data', chunk => { size += chunk.length; if (size > 100000) child.kill(); else output.push(chunk); });
@@ -39,7 +39,17 @@ async function launch(settings) {
   agent.stderr.on('data', chunk => process.stderr.write(chunk));
   agent.on('error', () => console.error('Backup process could not start'));
 }
+const noncePath = path.join(directory, 'setup-nonce');
+let nonce;
+try { nonce = (await fs.readFile(noncePath, 'utf8')).trim(); }
+catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+  nonce = crypto.randomBytes(24).toString('hex');
+  await atomicWrite(noncePath, nonce);
+}
+if (!/^[a-f0-9]{48}$/.test(nonce)) throw new Error('Invalid private setup URL');
 const ui = createLocalBackupSetup({
+  nonce,
   async configure({ username, password }) {
     const response = await fetch('https://akbelim.com/warehouse/api/warehouse/disaster-recovery/snapshot', {
       headers: { Authorization: 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64') }, redirect: 'error', signal: AbortSignal.timeout(30000),
