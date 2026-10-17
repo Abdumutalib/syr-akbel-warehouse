@@ -10,39 +10,20 @@
 
 ## Ўрнатиш
 
-1. Репозиторийни ZIP қилиб юклаб олинг ва масалан \`C:\\AKBEL\\syr-akbel-warehouse\` папкасига очинг.
-2. \`.env.example\` файлини нусхалаб, нусхасини \`.env\` деб номланг.
-3. \`.env\` да локал созламаларни киритинг:
+1. Репозиторийни ZIP қилиб юклаб олинг ва масалан `C:\AKBEL\syr-akbel-warehouse` папкасига очинг.
+2. Node.js ўрнатилганини текширинг.
+3. PowerShell ёки CMD очиб, лойиҳа папкасига киринг:
 
-\`\`\`dotenv
-PORT=8787
-WAREHOUSE_BIND_HOST=127.0.0.1
-WAREHOUSE_COMPANY_NAME=Сыр АКБЕЛ
-WAREHOUSE_ADMIN_USERNAME=akbeladmin
-WAREHOUSE_ADMIN_PASSWORD=SET_A_STRONG_UNIQUE_PASSWORD
-WAREHOUSE_STATE_FILE=data/warehouse.json
-WAREHOUSE_ALLOWED_ORIGIN=http://127.0.0.1:8787,http://localhost:8787
-WAREHOUSE_DB_URL=
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHANNEL_ID=
-TELEGRAM_WEBHOOK_SECRET=
-TELEGRAM_ADMIN_USER_ID=
-WAREHOUSE_BUSINESS_MESSAGE_TOKEN=
-\`\`\`
+```powershell
+cd C:\AKBEL\syr-akbel-warehouse
+npm run start:local
+```
 
-\`SET_A_STRONG_UNIQUE_PASSWORD\` ўрнига ўзингизга хос кучли парол қўйинг. \`.env\` файлини ҳеч қачон GitHub'га юкламанг.
+Локал ишга тушириш скрипти биринчи ишга туширишда керакли npm пакетларини ўрнатади, username ва кучли паролни сўрайди, `.env` файлини юкламайди, ташқи база/Telegram/Яндекс.Диск созламаларини бўшатади ва фон ҳисобот scheduler'ларини ўчиради.
 
-4. PowerShell ёки CMD очиб, папкага киринг:
+4. Браузерда `http://127.0.0.1:8787/warehouse/admin` ни очинг.
 
-\`\`\`powershell
-cd C:\\AKBEL\\syr-akbel-warehouse
-npm ci
-npm start
-\`\`\`
-
-5. Браузерда \`http://127.0.0.1:8787/warehouse/admin\` ни очинг.
-
-Серверни тўхтатиш учун терминалда \`Ctrl+C\` босинг.
+Серверни тўхтатиш учун терминалда `Ctrl+C` босинг.
 
 ## Интернетсиз ишлаш
 
