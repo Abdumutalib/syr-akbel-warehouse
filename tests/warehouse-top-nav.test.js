@@ -90,3 +90,9 @@ test("admin sees all navigation links on sale pages", async () => {
   assert.ok(links.some((link) => link.href === "/warehouse/seller/sale/cash"));
   assert.ok(links.some((link) => link.href === "/warehouse/seller/sale/transfer"));
 });
+
+test('navigation starts closed and exposes only the seller account permissions', async () => {
+  assert.deepEqual(await renderTopNav(null, '/warehouse/seller'), []);
+  const links = await renderTopNav({ role: 'seller', permissions: ['seller', 'write_cash_sale'] }, '/warehouse/seller');
+  assert.deepEqual(links.map(link => link.href), ['/warehouse/seller', '/warehouse/seller/sale/cash']);
+});

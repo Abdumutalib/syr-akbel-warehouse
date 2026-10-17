@@ -1,4 +1,4 @@
-const CACHE_NAME = 'akbel-cache-audit-20261016';
+const CACHE_NAME = 'akbel-cache-login-permissions-20261017';
 const MAX_CACHE_ITEMS = 120;
 const CORE_ASSETS = [
   '/warehouse/assets/warehouse-api.js?v=audit-fixes',

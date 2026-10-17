@@ -165,3 +165,24 @@ test('legacy sales use configured state and roll back an invalid batch', () => f
 test('the extended Telegram route fails closed before processing a forged update', () => fixture(async ({ request }) => {
   assert.equal((await request('/telegram/webhook-extended', { method: 'POST', body: { message: { text: '/debt' } } })).status, 401);
 }));
+
+test('explicit seller login overrides an old admin cookie and cannot use admin APIs', () => fixture(async ({ request, base, links }) => {
+  const login = await fetch(base + '/warehouse-login', { method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ username: 'security-admin', password: 'AdminPassword123!' }) });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const headers = { 'X-Warehouse-Authorization': 'Basic ' + Buffer.from('pin-user:PinPassword123').toString('base64') };
+  const seller = await request(api + 'customers', { cookie, headers });
+  assert.equal(seller.status, 200);
+  assert.equal(seller.data.operator.role, 'seller');
+  assert.equal(seller.data.operator.username, 'pin-user');
+  assert.deepEqual(seller.data.operator.permissions, ['seller']);
+  for (const url of [api + 'staff', api + 'approved?paymentType=cash', '/api/analytics/today']) {
+    assert.equal((await request(url, { cookie, headers })).status, 401, url);
+  }
+  assert.equal((await request(api + 'customers', { token: links.cash.token, headers })).data.operator.username, 'pin-user');
+  assert.equal((await request(api + 'staff', { cookie, token: links.seller.token })).status, 401);
+  assert.equal((await request(api + 'staff', { cookie, token: 'invalid-token' })).status, 401);
+  const invalid = { Authorization: 'Basic ' + Buffer.from('pin-user:wrong-password').toString('base64') };
+  assert.equal((await request(api + 'customers', { cookie, headers: invalid })).status, 401);
+  assert.equal((await request(api + 'staff', { cookie, headers: invalid })).status, 401);
+  assert.equal((await request(api + 'staff', { cookie })).status, 200);
+}));

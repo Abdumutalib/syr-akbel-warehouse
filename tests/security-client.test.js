@@ -91,3 +91,23 @@ test('extended bot uses the active state summary and restricts replies to the cu
     if (originalToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN; else process.env.TELEGRAM_BOT_TOKEN = originalToken;
   }
 });
+
+test('a persisted admin profile never grants permissions on a new page', () => {
+  const source = fs.readFileSync(new URL('../public/warehouse-auth-pin.js', import.meta.url), 'utf8');
+  const start = source.indexOf('  function normalizeOperatorProfile(');
+  const end = source.indexOf('  function createWarehouseStaffSelector(', start);
+  const storage = new Map([['warehouse-operator-profile-v1', JSON.stringify({ role: 'admin' })]]);
+  const context = vm.createContext({
+    STAFF_PERMISSION_KEYS: ['seller', 'write_cash_sale'], OPERATOR_PROFILE_KEY: 'warehouse-operator-profile-v1',
+    localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
+    window: { dispatchEvent() {} }, CustomEvent: class {},
+  });
+  vm.runInContext(source.slice(start, end), context);
+  assert.equal(vm.runInContext('readOperatorProfile()', context), null);
+  assert.equal(vm.runInContext("warehouseOperatorHasPermission(null, 'admin_panel')", context), false);
+  vm.runInContext("writeOperatorProfile({role:'seller', username:'seller', permissions:['seller']})", context);
+  assert.equal(vm.runInContext("warehouseOperatorHasPermission(null, 'seller')", context), true);
+  assert.equal(vm.runInContext("warehouseOperatorHasPermission(null, 'admin_panel')", context), false);
+  vm.runInContext('clearOperatorProfile()', context);
+  assert.equal(vm.runInContext('readOperatorProfile()', context), null);
+});

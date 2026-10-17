@@ -1368,12 +1368,8 @@ function assertWarehouseAdmin(req, res) {
     });
     return false;
   }
-  const staffAdmin = authenticateRequestStaff(req, extractWarehouseAccessToken(req));
-  if (isGateAuthenticatedByCookie(req) || (staffAdmin?.role === "admin" && staffAdmin.isUnlocked)) {
-    return true;
-  }
-  const auth = parseBasicAuthHeader(extractWarehouseBasicAuthHeader(req));
-  if (!auth || auth.username !== expectedUser || auth.password !== expectedPassword) {
+  const operator = authenticateWarehouseOperator(req, { roles: ["admin"] });
+  if (!operator || operator.role !== "admin") {
     const ip = getClientIp(req);
     recordFailedAuth(ip);
     res.writeHead(401, baseApiJsonHeaders(req));
@@ -1416,7 +1412,12 @@ function isConfiguredTelegramAdmin(payload) {
 
 function authenticateWarehouseOperator(req, options = {}) {
   const state = loadWarehouse();
-  const accessToken = extractWarehouseAccessToken(req);
+  // Explicit credentials select the account; ambient cookies/tokens must not
+  // promote a seller to an admin left logged in on this browser.
+  const basicHeader = extractWarehouseBasicAuthHeader(req);
+  const hasExplicitBasic = Boolean(basicHeader);
+  const auth = parseBasicAuthHeader(basicHeader);
+  const accessToken = hasExplicitBasic ? "" : extractWarehouseAccessToken(req);
   const permissions = Array.isArray(options.permission)
     ? options.permission.map((entry) => String(entry || "").trim().toLocaleLowerCase("en-US")).filter(Boolean)
     : options.permission
@@ -1445,11 +1446,12 @@ function authenticateWarehouseOperator(req, options = {}) {
         return byToken;
       }
     }
+    // An explicit link is also authoritative; never fall back to an admin cookie.
+    return null;
   }
-  const auth = parseBasicAuthHeader(extractWarehouseBasicAuthHeader(req));
   const allowAdmin = options.allowAdmin !== false;
   const { username: expectedUser, password: expectedPassword } = readConfiguredAdminCredentials(state);
-  if (allowAdmin && isGateAuthenticatedByCookie(req) && expectedUser) {
+  if (!hasExplicitBasic && allowAdmin && isGateAuthenticatedByCookie(req) && expectedUser) {
     return {
       kind: "admin",
       role: "admin",

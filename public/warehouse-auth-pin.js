@@ -708,13 +708,11 @@
     };
   }
 
+  // A stored profile is display data, never proof of the current login.
+  // Start with no permissions until this page receives a server response.
+  let currentOperatorProfile = null;
   function readOperatorProfile() {
-    try {
-      const raw = localStorage.getItem(OPERATOR_PROFILE_KEY);
-      return raw ? normalizeOperatorProfile(JSON.parse(raw)) : null;
-    } catch (error) {
-      return null;
-    }
+    return currentOperatorProfile;
   }
 
   function dispatchOperatorProfile(profile) {
@@ -725,6 +723,7 @@
 
   function writeOperatorProfile(profile) {
     const normalized = normalizeOperatorProfile(profile);
+    currentOperatorProfile = normalized;
     if (!normalized) {
       localStorage.removeItem(OPERATOR_PROFILE_KEY);
       dispatchOperatorProfile(null);
@@ -736,6 +735,7 @@
   }
 
   function clearOperatorProfile() {
+    currentOperatorProfile = null;
     localStorage.removeItem(OPERATOR_PROFILE_KEY);
     dispatchOperatorProfile(null);
   }
