@@ -6,18 +6,19 @@ param(
   [string]$RestoreTo
 )
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop
 $appRoot = Split-Path $PSScriptRoot -Parent
 $backupRoot = [System.IO.Path]::GetFullPath($DataDirectory)
 if ($backupRoot.StartsWith('\\')) { throw 'Use a local NTFS disk, not a network share.' }
 New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
 # NTFS permissions protect restored plaintext data. DPAPI protects credentials/key.
 $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-$acl = Get-Acl -LiteralPath $backupRoot
-$acl.SetAccessRuleProtection($true, $false)
-foreach ($existingRule in @($acl.Access)) { [void]$acl.RemoveAccessRuleSpecific($existingRule) }
-$rule = New-Object System.Security.AccessControl.FileSystemAccessRule($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
-$acl.SetAccessRule($rule)
-Set-Acl -LiteralPath $backupRoot -AclObject $acl
+& icacls.exe $backupRoot '/inheritance:r' '/grant:r' ('*' + $identity.Value + ':(OI)(CI)F') | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Backup directory permissions could not be set.' }
+$allowed = @($identity.Value, 'S-1-5-18', 'S-1-5-32-544')
+foreach ($rule in (Get-Acl -LiteralPath $backupRoot).Access) {
+  if ($rule.AccessControlType -eq 'Allow' -and $rule.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -notin $allowed) { throw 'Backup directory grants access to another user. Choose a new private directory.' }
+}
 $secretPath = Join-Path $backupRoot 'credentials.clixml'
 if ($Setup -or !(Test-Path -LiteralPath $secretPath)) {
   if (Test-Path -LiteralPath $secretPath) { throw 'Existing key must be preserved. Do not overwrite credentials.clixml.' }
