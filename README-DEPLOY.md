@@ -1,6 +1,10 @@
 AKBEL deploy quick notes
 ========================
 
+Local encrypted backups and read-only standby:
+  See DISASTER-RECOVERY.md and scripts/start-local-backup.ps1.
+  This is not automatic public failover or synchronous replication.
+
 Domain:
   akbelim.com
 

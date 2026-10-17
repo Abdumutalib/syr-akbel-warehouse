@@ -13,7 +13,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const api = '/warehouse/api/warehouse/';
 const basic = 'Basic ' + Buffer.from('security-admin:AdminPassword123!').toString('base64');
 
-async function fixture(run) {
+async function fixture(run, extraEnv = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'warehouse-security-'));
   const statePath = path.join(dir, 'warehouse.json');
   const state = loadWarehouseState(statePath);
@@ -31,7 +31,7 @@ async function fixture(run) {
   const pinLink = createStaffAccessLink(state, pinAccount.id, 'seller');
   saveWarehouseState(statePath, state);
   const port = await new Promise(resolve => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); }); });
-  const child = spawn(process.execPath, ['server.mjs'], { cwd: root, env: { ...process.env, PORT: String(port), WAREHOUSE_STATE_FILE: statePath, WAREHOUSE_DB_URL: '', DATABASE_URL: '', WAREHOUSE_ADMIN_USERNAME: '', WAREHOUSE_ADMIN_PASSWORD: '', WAREHOUSE_SITE_TOKEN: '', WAREHOUSE_ALLOWED_ORIGIN: '', TELEGRAM_BOT_TOKEN: 'fake-local-test-token', TELEGRAM_WEBHOOK_SECRET: 'test-webhook-secret' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['server.mjs'], { cwd: root, env: { ...process.env, PORT: String(port), WAREHOUSE_STATE_FILE: statePath, WAREHOUSE_DB_URL: '', DATABASE_URL: '', WAREHOUSE_ADMIN_USERNAME: '', WAREHOUSE_ADMIN_PASSWORD: '', WAREHOUSE_SITE_TOKEN: '', WAREHOUSE_ALLOWED_ORIGIN: '', TELEGRAM_BOT_TOKEN: 'fake-local-test-token', TELEGRAM_WEBHOOK_SECRET: 'test-webhook-secret', ...extraEnv }, stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = ''; child.stderr.on('data', chunk => { stderr += chunk; });
   const base = `http://127.0.0.1:${port}`;
   async function request(url, { token, cookie, admin = false, method = 'GET', body, headers = {} } = {}) {
@@ -186,3 +186,32 @@ test('explicit seller login overrides an old admin cookie and cannot use admin A
   assert.equal((await request(api + 'staff', { cookie, headers: invalid })).status, 401);
   assert.equal((await request(api + 'staff', { cookie })).status, 200);
 }));
+
+
+test('full recovery snapshots and photos require admin authentication', () => fixture(async ({ request, links, statePath }) => {
+  const route = api + 'disaster-recovery/';
+  assert.equal((await request(route + 'snapshot')).status, 401);
+  assert.equal((await request(route + 'snapshot', { token: links.seller.token })).status, 401);
+  const photoDirectory = path.join(path.dirname(statePath), 'transaction-photos');
+  fs.mkdirSync(photoDirectory);
+  fs.writeFileSync(path.join(photoDirectory, 'receipt.jpg'), 'test photo');
+  const result = await request(route + 'snapshot', { admin: true });
+  assert.equal(result.status, 200);
+  assert.match(result.response.headers.get('cache-control'), /no-store/);
+  assert.equal(result.data.format, 'akbel-backup-v1');
+  assert.ok(result.data.state.users.length >= 2);
+  assert.equal(result.data.photos[0].name, 'receipt.jpg');
+  assert.equal((await request(route + 'photos/receipt.jpg')).status, 401);
+  assert.equal((await request(route + 'photos/receipt.jpg', { admin: true })).data.text, 'test photo');
+}));
+
+test('standby refuses writes and is never healthy for automatic write failover', () => fixture(async ({ request, statePath }) => {
+  const before = fs.readFileSync(statePath, 'utf8');
+  assert.equal((await request('/healthz')).data.readOnly, true);
+  assert.equal((await request('/readyz')).status, 503);
+  assert.equal((await request(api + 'customers', { admin: true })).status, 200);
+  assert.equal((await request(api + 'customers', { admin: true, method: 'POST', body: { fullName: 'Must not exist' } })).status, 503);
+  assert.equal((await request('/telegram/webhook-extended', { method: 'POST', body: {} })).status, 503);
+  assert.equal((await request('/api/sales', { admin: true, method: 'POST', body: {} })).status, 503);
+  assert.equal(fs.readFileSync(statePath, 'utf8'), before);
+}, { WAREHOUSE_STANDBY: '1', WAREHOUSE_LOAD_ENV_FILE: 'false' }));

@@ -55,6 +55,7 @@ import { getClientIp, rateLimiter, recordFailedAuth, securityHeaders } from "./l
 import { startAutoReports } from "./scripts/auto-reports.mjs";
 import { setupExtendedBot } from "./app/telegram-bot-extended.mjs";
 import { createWarehouseSessions } from "./lib/warehouse-sessions.mjs";
+import { createSnapshot, readPhoto, safePhotoName } from "./lib/disaster-recovery.mjs";
 import { forecaster } from "./lib/ai-forecaster.mjs";
 import { resolveAllowedOrigins, getAllowedOriginHeaderValue } from "./lib/deployment-config.mjs";
 import {
@@ -69,7 +70,7 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 // .env faylini yuklash
 try {
   const envPath = path.join(ROOT, ".env");
-  if (fs.existsSync(envPath)) {
+  if (process.env.WAREHOUSE_LOAD_ENV_FILE !== "false" && fs.existsSync(envPath)) {
     const content = fs.readFileSync(envPath, "utf8");
     for (const line of content.split(/\r?\n/)) {
       const trimmed = line.trim();
@@ -92,6 +93,8 @@ try {
 }
 
 const PORT = Number(process.env.PORT) || 8787;
+const STANDBY = process.env.WAREHOUSE_STANDBY === "1";
+const BIND_HOST = process.env.WAREHOUSE_BIND_HOST || (STANDBY ? "127.0.0.1" : "0.0.0.0");
 const APP_VERSION = resolveAppVersion();
 const APP_BUILD = resolveAppBuild();
 const WAREHOUSE_COMPANY_NAME = process.env.WAREHOUSE_COMPANY_NAME?.trim() || "Сыр АКБЕЛ";
@@ -136,6 +139,9 @@ function saveSchedulerState(state) {
 // In-memory holat (server restart da fayldan tiklanadi)
 let schedulerState = loadSchedulerState();
 
+if (STANDBY && (!fs.existsSync(WAREHOUSE_STATE_PATH) || process.env.WAREHOUSE_DB_URL || process.env.DATABASE_URL)) {
+  throw new Error("Standby requires a restored local state file and no external database connection");
+}
 const warehouseFileSeedState = loadWarehouseState(WAREHOUSE_STATE_PATH);
 const warehousePostgresStore = await createWarehousePostgresStore();
 let warehouseStateCache = warehousePostgresStore
@@ -574,6 +580,7 @@ async function persistWarehouseStateToPostgres(state, options = {}) {
 }
 
 async function saveWarehouse(state, options = {}) {
+  if (STANDBY) throw new Error("Standby is read-only; writes require a fenced failover");
   await persistWarehouseStateToPostgres(state, options);
   if (warehousePostgresStore) {
     try { saveWarehouseState(WAREHOUSE_STATE_PATH, state); }
@@ -594,6 +601,7 @@ function withWarehouseRead(handler) {
 }
 
 function withWarehouseWrite(handler) {
+  if (STANDBY) return Promise.reject(new Error("Standby is read-only"));
   const task = warehouseWriteQueue.then(async () => {
     const draft = structuredClone(warehouseStateCache);
     const result = await handler(draft);
@@ -2163,6 +2171,42 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     return;
   }
 
+  const recoveryPath = u.pathname.replace(/^\/warehouse\/api\//, "/api/");
+  if (recoveryPath.startsWith("/api/warehouse/disaster-recovery/")) {
+    res.setHeader("Cache-Control", "no-store, private");
+    res.setHeader("Pragma", "no-cache");
+    if (!requestOriginAllowed(req)) { sendApiJson(res, 403, { error: "Origin not allowed" }, req); return; }
+    if (!assertWarehouseAdmin(req, res)) return;
+    if (req.method !== "GET") { sendApiJson(res, 405, { error: "GET required" }, req); return; }
+    if (STANDBY) { sendApiJson(res, 503, { error: "Back up the primary, not a standby" }, req); return; }
+    if (recoveryPath === "/api/warehouse/disaster-recovery/snapshot") {
+      const state = structuredClone(loadWarehouse());
+      // Environment-configured admin credentials must survive recovery too.
+      const credentials = readConfiguredAdminCredentials(state);
+      state.adminCredentials = { username: credentials.username, password: credentials.password };
+      const snapshot = await createSnapshot({ state, photoDirectory: WAREHOUSE_TRANSACTION_PHOTO_DIR, scheduler: structuredClone(schedulerState), build: APP_BUILD || null });
+      sendApiJson(res, 200, snapshot, req);
+      return;
+    }
+    const name = recoveryPath.slice("/api/warehouse/disaster-recovery/photos/".length);
+    if (recoveryPath.startsWith("/api/warehouse/disaster-recovery/photos/") && safePhotoName(name)) {
+      try {
+        const bytes = await readPhoto(WAREHOUSE_TRANSACTION_PHOTO_DIR, name);
+        res.writeHead(200, { "Content-Type": "application/octet-stream", "Cache-Control": "no-store", "Content-Length": bytes.length });
+        res.end(bytes);
+      } catch { sendApiJson(res, 404, { error: "Photo not found" }, req); }
+      return;
+    }
+    sendApiJson(res, 404, { error: "Backup route not found" }, req);
+    return;
+  }
+
+  if (STANDBY && !["GET", "HEAD", "OPTIONS"].includes(req.method)
+      && !["/warehouse-login", "/warehouse-register"].includes(u.pathname)) {
+    sendApiJson(res, 503, { error: "Zaxira server faqat o'qish rejimida. Asosiy server ajratilmaguncha savdo yozilmaydi.", readOnly: true }, req);
+    return;
+  }
+
   if (u.pathname === "/telegram/webhook-extended" && req.method === "POST") {
     const auth = authorizeTelegramWebhook(req);
     if (auth !== true) { sendApiJson(res, auth, { error: "Telegram webhook ruxsati yo'q" }, req); return; }
@@ -2220,6 +2264,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
         uptimeSec: Math.round(process.uptime()),
         now: new Date().toISOString(),
         allowedOrigins: WAREHOUSE_ALLOWED_ORIGINS,
+        readOnly: STANDBY,
       },
       req
     );
@@ -2230,10 +2275,11 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     res.setHeader("X-App-Version", APP_BUILD ? `${APP_VERSION}+${APP_BUILD.slice(0, 7)}` : APP_VERSION);
     sendApiJson(
       res,
-      200,
+      STANDBY ? 503 : 200,
       {
-        ok: true,
-        ready: true,
+        ok: !STANDBY,
+        ready: !STANDBY,
+        readOnly: STANDBY,
         version: APP_VERSION,
         build: APP_BUILD || null,
       },
@@ -2412,7 +2458,7 @@ const server = http.createServer(withSafeRequestHandling(async (req, res) => {
     if (accessToken && pin) {
       try {
         verifyStaffPin(loadWarehouse(), accessToken, pin);
-        await saveWarehouse(loadWarehouse());
+        if (!STANDBY) await saveWarehouse(loadWarehouse());
         const next = String(params.get("next") || "/warehouse/seller").trim();
         let safeNext = "/warehouse/seller";
         try {
@@ -2759,9 +2805,11 @@ process.on("SIGINT",  () => gracefulShutdown("SIGINT"));
 server.keepAliveTimeout = 65000;
 server.headersTimeout = 70000;
 
-server.listen(PORT, "0.0.0.0", () => {
+server.listen(PORT, BIND_HOST, () => {
   console.log(`Syr AKBEL standalone → http://127.0.0.1:${PORT}/warehouse/admin`);
   console.log(`Seller page → http://127.0.0.1:${PORT}/warehouse/seller`);
-  startDebtReminderScheduler();
-  startAutoReports(loadWarehouse);
+  if (!STANDBY) {
+    startDebtReminderScheduler();
+    startAutoReports(loadWarehouse);
+  }
 });
