@@ -12,7 +12,7 @@
 
 1. Репозиторийни ZIP қилиб юклаб олинг ва масалан `C:\AKBEL\syr-akbel-warehouse` папкасига очинг.
 2. Node.js ўрнатилганини текширинг.
-3. PowerShell ёки CMD очиб, лойиҳа папкасига киринг:
+3. Лойиҳа папкасидаги `Start-AKBEL-Local.cmd` файлини икки марта босинг. Ёки PowerShell/CMD очиб, қуйидагини ишга туширинг:
 
 ```powershell
 cd C:\AKBEL\syr-akbel-warehouse
