@@ -10,7 +10,8 @@
     "smoke:warehouse": "node scripts/smoke-warehouse.mjs",
     "migrate:postgres": "node scripts/migrate-state-to-postgres.mjs",
     "verify:deploy": "node scripts/verify-deploy.mjs",
-    "verify:release": "node scripts/verify-release.mjs"
+    "verify:release": "node scripts/verify-release.mjs",
+    "start:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-local.ps1"
   },
   "engines": {
     "node": ">=18.18.0"

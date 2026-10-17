@@ -93,6 +93,7 @@ try {
 }
 
 const PORT = Number(process.env.PORT) || 8787;
+const LOCAL_MODE = process.env.WAREHOUSE_LOCAL_MODE === "1";
 const STANDBY = process.env.WAREHOUSE_STANDBY === "1";
 const BIND_HOST = process.env.WAREHOUSE_BIND_HOST || (STANDBY ? "127.0.0.1" : "0.0.0.0");
 const APP_VERSION = resolveAppVersion();
@@ -2808,8 +2809,10 @@ server.headersTimeout = 70000;
 server.listen(PORT, BIND_HOST, () => {
   console.log(`Syr AKBEL standalone → http://127.0.0.1:${PORT}/warehouse/admin`);
   console.log(`Seller page → http://127.0.0.1:${PORT}/warehouse/seller`);
-  if (!STANDBY) {
+  if (!STANDBY && !LOCAL_MODE) {
     startDebtReminderScheduler();
     startAutoReports(loadWarehouse);
+  } else if (LOCAL_MODE) {
+    console.log("[LOCAL MODE] External reminder/report schedulers are disabled.");
   }
 });
