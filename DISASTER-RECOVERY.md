@@ -30,6 +30,43 @@ Keep an independent PostgreSQL backup and infrastructure configuration backup to
 
 ## First Windows start
 
+The portable Windows package includes Node and production dependencies. Extract
+it to a permanent folder and double-click `START-AKBEL.cmd`. Its launcher runs in
+the owner's normal Windows session, starts the private setup page in the default
+browser, and registers only `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+value `AKBELBackup` for the current user's next sign-in (hidden VBScript launcher).
+This does not run while Windows is signed out. Keep the extracted folder in place.
+Data/settings are stored separately under `%LOCALAPPDATA%\AKBEL-Backup`.
+`startup-status.json` records whether startup registration succeeded. If Windows
+policy blocks the launcher, run `START-AKBEL.cmd` manually after signing in.
+
+The setup URL's nonce is persisted in the private backup directory, so the local
+URL remains valid after a restart. A loopback OS lock serializes agents and permits
+safe cleanup of crash-left lock files only when the recorded process is gone.
+
+For a local browser form instead of a Windows credential prompt, run:
+
+```powershell
+node scripts/local-backup-setup.mjs
+```
+
+Open the random `SETUP_URL` printed by that process. It binds only to
+`127.0.0.1:8794`, rejects other Host/Origin headers and oversized input, and accepts
+the administrator credentials only once per setup. It validates them against the
+fixed HTTPS source `https://akbelim.com`, protects the folder DACL with `icacls`,
+and saves credentials plus the backup key in Windows DPAPI-protected
+`settings.dpapi`. Credentials never appear in URLs, logs or process arguments.
+The setup page and supervisor must stay running. It starts the backup agent and
+shows its latest result; it does not install a service or startup task. On a later
+run, the saved settings automatically restart the agent. Use the same data folder
+and preserve its key. If you previously used `credentials.clixml`, continue using
+the PowerShell launcher below instead of creating a different encryption key.
+
+The default browser-setup data directory is `C:\workspace\AKBEL-Backup`; set
+`AKBEL_BACKUP_DIRECTORY` before startup to choose a different directory. The page
+is a local setup UI, not a public internet endpoint, and never changes Cloudflare
+or enables failover. Its status page reports failures without exposing credentials.
+
 Install the repository's dependencies with `npm ci`, then run in PowerShell:
 
 ```powershell
